@@ -82,7 +82,7 @@ export function useDashboardStats() {
 
       const totalCalls = todayCalls?.length || 0;
       const emergencyCalls = todayCalls?.filter(c => c.is_emergency).length || 0;
-      const dispatchedCalls = todayCalls?.filter(c => c.outcome === 'dispatched').length || 0;
+      const bookedCalls = todayCalls?.filter(c => c.outcome === 'booked').length || 0;
       const avgDuration = totalCalls > 0 
         ? Math.round((todayCalls?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0) / totalCalls)
         : 0;
@@ -92,10 +92,10 @@ export function useDashboardStats() {
         total_calls_week: weekCalls?.length || 0,
         emergency_calls_today: emergencyCalls,
         appointments_booked_today: todayAppointments?.length || 0,
-        technicians_dispatched_today: dispatchedCalls,
+        technicians_dispatched_today: bookedCalls,
         average_call_duration: avgDuration,
         answer_rate: 98, // This would come from actual call data
-        revenue_captured_estimate: dispatchedCalls * 250, // Rough estimate per dispatch
+        revenue_captured_estimate: bookedCalls * 250, // Rough estimate per booking
       };
     },
     enabled: !!user?.organization_id,

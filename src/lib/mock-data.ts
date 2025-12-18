@@ -199,7 +199,7 @@ export const mockCalls: Call[] = [
     caller_phone: '+15559991111',
     caller_name: 'David Johnson',
     status: 'completed',
-    outcome: 'dispatched',
+    outcome: 'booked',
     is_emergency: true,
     duration_seconds: 245,
     recording_url: 'https://api.twilio.com/recordings/RE123',
@@ -235,7 +235,7 @@ export const mockCalls: Call[] = [
     caller_phone: '+15557773333',
     caller_name: null,
     status: 'completed',
-    outcome: 'message_taken',
+    outcome: 'callback_requested',
     is_emergency: false,
     duration_seconds: 95,
     recording_url: 'https://api.twilio.com/recordings/RE125',
@@ -253,7 +253,7 @@ export const mockCalls: Call[] = [
     caller_phone: '+15556664444',
     caller_name: 'Mark Stevens',
     status: 'completed',
-    outcome: 'dispatched',
+    outcome: 'booked',
     is_emergency: true,
     duration_seconds: 312,
     recording_url: 'https://api.twilio.com/recordings/RE126',
@@ -534,9 +534,8 @@ export const mockCallsByHour: CallsByHour[] = [
 ];
 
 export const mockCallsByOutcome: CallsByOutcome[] = [
-  { outcome: 'booked', count: 24, percentage: 51 },
-  { outcome: 'dispatched', count: 12, percentage: 26 },
-  { outcome: 'message_taken', count: 8, percentage: 17 },
+  { outcome: 'booked', count: 36, percentage: 77 },
+  { outcome: 'callback_requested', count: 8, percentage: 17 },
   { outcome: 'escalated', count: 2, percentage: 4 },
   { outcome: 'no_action', count: 1, percentage: 2 },
 ];

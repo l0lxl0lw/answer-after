@@ -7,19 +7,19 @@ export type UserRole = 'owner' | 'admin' | 'staff';
 
 // Database call_status enum
 export type CallStatus = 
-  | 'in_progress'
+  | 'active'
   | 'completed'
   | 'failed'
   | 'voicemail';
 
 // Database call_outcome enum
 export type CallOutcome = 
-  | 'dispatched'
   | 'booked'
-  | 'message_taken'
-  | 'resolved'
+  | 'callback_requested'
+  | 'information_provided'
   | 'escalated'
-  | 'no_action';
+  | 'no_action'
+  | 'voicemail';
 
 // Database appointment_status enum
 export type AppointmentStatus = 
