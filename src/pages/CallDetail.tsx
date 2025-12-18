@@ -286,7 +286,7 @@ export default function CallDetail() {
                 </Badge>
               )}
               <Badge
-                variant={call.outcome === "dispatched" || call.outcome === "booked" ? "default" : "secondary"}
+                variant={call.outcome === "booked" ? "default" : "secondary"}
                 className="text-sm py-1 px-3 capitalize"
               >
                 {call.outcome?.replace("_", " ") || "Pending"}

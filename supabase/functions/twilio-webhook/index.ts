@@ -216,11 +216,11 @@ serve(async (req) => {
           if (fullConvo.includes('appointment') || fullConvo.includes('schedule') || fullConvo.includes('book')) {
             outcome = 'booked';
           } else if (existingCall.is_emergency) {
-            outcome = 'dispatched';
+            outcome = 'escalated';
           } else if (fullConvo.includes('message') || fullConvo.includes('call back')) {
-            outcome = 'message_taken';
+            outcome = 'callback_requested';
           } else {
-            outcome = 'resolved';
+            outcome = 'information_provided';
           }
         }
 
@@ -288,7 +288,7 @@ serve(async (req) => {
             phone_number_id: phoneData.id,
             twilio_call_sid: callSid,
             caller_phone: callerPhone,
-            status: 'in_progress',
+            status: 'active',
             is_emergency: false,
             started_at: new Date().toISOString(),
           })
@@ -443,7 +443,7 @@ serve(async (req) => {
           .update({ 
             status: 'completed',
             ended_at: new Date().toISOString(),
-            outcome: 'resolved',
+            outcome: 'information_provided',
           })
           .eq('id', callId);
       }

@@ -518,21 +518,18 @@ export type Database = {
       }
       user_roles: {
         Row: {
-          created_at: string
           id: string
-          role: Database["public"]["Enums"]["user_role"]
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
-          created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["user_role"]
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
-          created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["user_role"]
+          role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
         Relationships: []
@@ -542,16 +539,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_user_organization_id: { Args: { user_uuid: string }; Returns: string }
+      get_user_organization_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
-          check_role: Database["public"]["Enums"]["user_role"]
-          user_uuid: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
         }
         Returns: boolean
       }
     }
     Enums: {
+      app_role: "owner" | "admin" | "staff"
       appointment_status:
         | "scheduled"
         | "confirmed"
@@ -560,14 +558,13 @@ export type Database = {
         | "cancelled"
         | "no_show"
       call_outcome:
-        | "dispatched"
         | "booked"
-        | "message_taken"
-        | "resolved"
+        | "callback_requested"
+        | "information_provided"
         | "escalated"
         | "no_action"
-      call_status: "in_progress" | "completed" | "failed" | "voicemail"
-      user_role: "owner" | "admin" | "staff"
+        | "voicemail"
+      call_status: "active" | "completed" | "failed" | "voicemail"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -695,6 +692,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["owner", "admin", "staff"],
       appointment_status: [
         "scheduled",
         "confirmed",
@@ -704,15 +702,14 @@ export const Constants = {
         "no_show",
       ],
       call_outcome: [
-        "dispatched",
         "booked",
-        "message_taken",
-        "resolved",
+        "callback_requested",
+        "information_provided",
         "escalated",
         "no_action",
+        "voicemail",
       ],
-      call_status: ["in_progress", "completed", "failed", "voicemail"],
-      user_role: ["owner", "admin", "staff"],
+      call_status: ["active", "completed", "failed", "voicemail"],
     },
   },
 } as const
