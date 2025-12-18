@@ -61,12 +61,22 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
-    // Create checkout session with 30-day trial
+    // Create checkout session with 30-day trial using inline price
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
         {
-          price: "price_1Sfnr0Py7pkTyf4kG9M28vU8", // AnswerAfter Starter - $99/month
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'AnswerAfter Starter',
+              description: 'AI-powered after-hours call handling for service businesses',
+            },
+            unit_amount: 9900, // $99.00 in cents
+            recurring: {
+              interval: 'month',
+            },
+          },
           quantity: 1,
         },
       ],
