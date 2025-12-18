@@ -24,14 +24,25 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useOrganization, usePhoneNumbers, useSubscription } from '@/hooks/use-api';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Settings() {
+  const { user } = useAuth();
   const { data: organization, isLoading: orgLoading } = useOrganization();
-  const { data: phoneNumbers, isLoading: phonesLoading } = usePhoneNumbers();
+  const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
+
+  const [isAddingPhone, setIsAddingPhone] = useState(false);
+  const [addPhoneOpen, setAddPhoneOpen] = useState(false);
+  const [newPhone, setNewPhone] = useState({
+    phone_number: '',
+    friendly_name: '',
+    is_after_hours_only: true,
+  });
 
   const [orgForm, setOrgForm] = useState({
     name: '',
@@ -92,6 +103,84 @@ export default function Settings() {
       ...orgForm,
       emergency_keywords: orgForm.emergency_keywords.filter(k => k !== keyword),
     });
+  };
+
+  const handleAddPhoneNumber = async () => {
+    if (!user?.organization_id) {
+      toast({
+        title: 'No organization',
+        description: 'You need to be part of an organization to add phone numbers.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!newPhone.phone_number) {
+      toast({
+        title: 'Phone number required',
+        description: 'Please enter a phone number.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsAddingPhone(true);
+    try {
+      const { error } = await supabase
+        .from('phone_numbers')
+        .insert({
+          organization_id: user.organization_id,
+          phone_number: newPhone.phone_number,
+          friendly_name: newPhone.friendly_name || newPhone.phone_number,
+          is_after_hours_only: newPhone.is_after_hours_only,
+          is_active: true,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Phone number added',
+        description: 'The phone number has been added successfully.',
+      });
+
+      setNewPhone({ phone_number: '', friendly_name: '', is_after_hours_only: true });
+      setAddPhoneOpen(false);
+      refetchPhones();
+    } catch (error: any) {
+      console.error('Error adding phone number:', error);
+      toast({
+        title: 'Error adding phone number',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAddingPhone(false);
+    }
+  };
+
+  const handleDeletePhoneNumber = async (phoneId: string) => {
+    try {
+      const { error } = await supabase
+        .from('phone_numbers')
+        .delete()
+        .eq('id', phoneId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Phone number deleted',
+        description: 'The phone number has been removed.',
+      });
+
+      refetchPhones();
+    } catch (error: any) {
+      console.error('Error deleting phone number:', error);
+      toast({
+        title: 'Error deleting phone number',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const [isManagingBilling, setIsManagingBilling] = useState(false);
@@ -416,10 +505,62 @@ export default function Settings() {
                       Manage your after-hours phone numbers
                     </CardDescription>
                   </div>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Number
-                  </Button>
+                  <Dialog open={addPhoneOpen} onOpenChange={setAddPhoneOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Number
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add Phone Number</DialogTitle>
+                        <DialogDescription>
+                          Add a new phone number for after-hours call handling.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="phone-number">Phone Number</Label>
+                          <Input
+                            id="phone-number"
+                            placeholder="+15551234567"
+                            value={newPhone.phone_number}
+                            onChange={(e) => setNewPhone({ ...newPhone, phone_number: e.target.value })}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Enter the phone number in E.164 format (e.g., +15551234567)
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="friendly-name">Friendly Name</Label>
+                          <Input
+                            id="friendly-name"
+                            placeholder="Main Line"
+                            value={newPhone.friendly_name}
+                            onChange={(e) => setNewPhone({ ...newPhone, friendly_name: e.target.value })}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="after-hours">After Hours Only</Label>
+                          <Switch
+                            id="after-hours"
+                            checked={newPhone.is_after_hours_only}
+                            onCheckedChange={(checked) => setNewPhone({ ...newPhone, is_after_hours_only: checked })}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setAddPhoneOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleAddPhoneNumber} disabled={isAddingPhone}>
+                          {isAddingPhone && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Add Number
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </CardHeader>
                 <CardContent>
                   {phonesLoading ? (
@@ -451,7 +592,11 @@ export default function Settings() {
                                 {phone.is_active ? 'Active' : 'Inactive'}
                               </Badge>
                             </div>
-                            <Button variant="ghost" size="icon">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleDeletePhoneNumber(phone.id)}
+                            >
                               <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                             </Button>
                           </div>
