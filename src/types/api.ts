@@ -1,0 +1,389 @@
+// AnswerAfter API Contract Types
+// Request/Response schemas for Express API
+
+import type {
+  Organization,
+  User,
+  UserRole,
+  PhoneNumber,
+  Call,
+  CallWithDetails,
+  CallEvent,
+  Appointment,
+  Technician,
+  TechnicianWithSchedule,
+  OnCallSchedule,
+  Subscription,
+  SubscriptionPlan,
+  DashboardStats,
+  CallsByHour,
+  CallsByOutcome,
+  AuditLog,
+} from './database';
+
+// ============= Common Types =============
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: ApiError;
+  meta?: PaginationMeta;
+}
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, string[]>;
+}
+
+export interface PaginationMeta {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface PaginationParams {
+  page?: number;
+  per_page?: number;
+}
+
+export interface DateRangeParams {
+  start_date?: string;
+  end_date?: string;
+}
+
+// ============= Auth Endpoints =============
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  user: User;
+  role: UserRole;
+  organization: Organization;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  full_name: string;
+  organization_name: string;
+  phone?: string;
+}
+
+export interface RefreshTokenRequest {
+  refresh_token: string;
+}
+
+export interface RefreshTokenResponse {
+  access_token: string;
+  expires_at: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+// ============= Organization Endpoints =============
+
+export interface UpdateOrganizationRequest {
+  name?: string;
+  timezone?: string;
+  business_hours_start?: string;
+  business_hours_end?: string;
+  emergency_keywords?: string[];
+  notification_email?: string;
+  notification_phone?: string;
+}
+
+// ============= User Endpoints =============
+
+export interface CreateUserRequest {
+  email: string;
+  full_name: string;
+  role: UserRole;
+  phone?: string;
+}
+
+export interface UpdateUserRequest {
+  full_name?: string;
+  phone?: string;
+  avatar_url?: string;
+  is_active?: boolean;
+}
+
+export interface UpdateUserRoleRequest {
+  role: UserRole;
+}
+
+// ============= Phone Number Endpoints =============
+
+export interface CreatePhoneNumberRequest {
+  area_code: string;
+  friendly_name: string;
+  is_after_hours_only?: boolean;
+}
+
+export interface UpdatePhoneNumberRequest {
+  friendly_name?: string;
+  is_active?: boolean;
+  is_after_hours_only?: boolean;
+}
+
+export interface AvailablePhoneNumber {
+  phone_number: string;
+  friendly_name: string;
+  locality: string;
+  region: string;
+}
+
+// ============= Call Endpoints =============
+
+export interface CallListParams extends PaginationParams, DateRangeParams {
+  status?: string;
+  outcome?: string;
+  is_emergency?: boolean;
+  phone_number_id?: string;
+  search?: string;
+}
+
+export interface CallListResponse {
+  calls: Call[];
+  meta: PaginationMeta;
+}
+
+// Twilio webhook payloads
+export interface TwilioVoiceWebhook {
+  CallSid: string;
+  AccountSid: string;
+  From: string;
+  To: string;
+  CallStatus: string;
+  Direction: string;
+  CallerName?: string;
+}
+
+export interface TwilioStatusCallback {
+  CallSid: string;
+  CallStatus: string;
+  CallDuration?: string;
+  RecordingUrl?: string;
+  RecordingSid?: string;
+}
+
+// ============= Appointment Endpoints =============
+
+export interface CreateAppointmentRequest {
+  call_id?: string;
+  technician_id?: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_address?: string;
+  issue_description: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  is_emergency?: boolean;
+  notes?: string;
+}
+
+export interface UpdateAppointmentRequest {
+  technician_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_address?: string;
+  issue_description?: string;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  status?: 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  notes?: string;
+}
+
+export interface AppointmentListParams extends PaginationParams, DateRangeParams {
+  technician_id?: string;
+  status?: string;
+}
+
+// ============= Technician Endpoints =============
+
+export interface CreateTechnicianRequest {
+  full_name: string;
+  phone: string;
+  email?: string;
+  specializations?: string[];
+  user_id?: string;
+}
+
+export interface UpdateTechnicianRequest {
+  full_name?: string;
+  phone?: string;
+  email?: string;
+  specializations?: string[];
+  is_active?: boolean;
+}
+
+// ============= Schedule Endpoints =============
+
+export interface CreateScheduleRequest {
+  technician_id: string;
+  start_datetime: string;
+  end_datetime: string;
+  is_primary?: boolean;
+  notes?: string;
+}
+
+export interface UpdateScheduleRequest {
+  start_datetime?: string;
+  end_datetime?: string;
+  is_primary?: boolean;
+  notes?: string;
+}
+
+export interface ScheduleListParams extends DateRangeParams {
+  technician_id?: string;
+}
+
+// ============= Subscription Endpoints =============
+
+export interface CreateCheckoutSessionRequest {
+  plan: SubscriptionPlan;
+  success_url: string;
+  cancel_url: string;
+}
+
+export interface CreateCheckoutSessionResponse {
+  checkout_url: string;
+  session_id: string;
+}
+
+export interface CreatePortalSessionRequest {
+  return_url: string;
+}
+
+export interface CreatePortalSessionResponse {
+  portal_url: string;
+}
+
+// Stripe webhook payloads
+export interface StripeWebhookEvent {
+  id: string;
+  type: string;
+  data: {
+    object: Record<string, unknown>;
+  };
+}
+
+// ============= Reports Endpoints =============
+
+export interface DailyReportParams {
+  date?: string; // YYYY-MM-DD, defaults to today
+}
+
+export interface DailyReportResponse {
+  date: string;
+  stats: DashboardStats;
+  calls_by_hour: CallsByHour[];
+  calls_by_outcome: CallsByOutcome[];
+  top_issues: { issue: string; count: number }[];
+  notable_calls: Call[];
+}
+
+export interface WeeklyReportParams {
+  week_start?: string; // YYYY-MM-DD
+}
+
+export interface MonthlyReportParams {
+  year: number;
+  month: number;
+}
+
+// ============= Audit Log Endpoints =============
+
+export interface AuditLogListParams extends PaginationParams, DateRangeParams {
+  action?: string;
+  user_id?: string;
+  resource_type?: string;
+}
+
+// ============= API Endpoint Definitions =============
+
+export interface ApiEndpoints {
+  // Auth
+  'POST /auth/login': { request: LoginRequest; response: LoginResponse };
+  'POST /auth/register': { request: RegisterRequest; response: LoginResponse };
+  'POST /auth/refresh': { request: RefreshTokenRequest; response: RefreshTokenResponse };
+  'POST /auth/forgot-password': { request: ForgotPasswordRequest; response: void };
+  'POST /auth/reset-password': { request: ResetPasswordRequest; response: void };
+  'POST /auth/logout': { request: void; response: void };
+  
+  // Organization
+  'GET /organizations/:id': { request: void; response: Organization };
+  'PATCH /organizations/:id': { request: UpdateOrganizationRequest; response: Organization };
+  
+  // Users
+  'GET /users': { request: PaginationParams; response: { users: User[]; meta: PaginationMeta } };
+  'GET /users/:id': { request: void; response: User };
+  'POST /users': { request: CreateUserRequest; response: User };
+  'PATCH /users/:id': { request: UpdateUserRequest; response: User };
+  'DELETE /users/:id': { request: void; response: void };
+  'PATCH /users/:id/role': { request: UpdateUserRoleRequest; response: void };
+  
+  // Phone Numbers
+  'GET /phone-numbers': { request: void; response: PhoneNumber[] };
+  'GET /phone-numbers/available': { request: { area_code: string }; response: AvailablePhoneNumber[] };
+  'POST /phone-numbers': { request: CreatePhoneNumberRequest; response: PhoneNumber };
+  'PATCH /phone-numbers/:id': { request: UpdatePhoneNumberRequest; response: PhoneNumber };
+  'DELETE /phone-numbers/:id': { request: void; response: void };
+  
+  // Calls
+  'GET /calls': { request: CallListParams; response: CallListResponse };
+  'GET /calls/:id': { request: void; response: CallWithDetails };
+  'POST /calls/webhook/twilio': { request: TwilioVoiceWebhook; response: string }; // TwiML
+  'POST /calls/webhook/twilio/status': { request: TwilioStatusCallback; response: void };
+  
+  // Appointments
+  'GET /appointments': { request: AppointmentListParams; response: { appointments: Appointment[]; meta: PaginationMeta } };
+  'GET /appointments/:id': { request: void; response: Appointment };
+  'POST /appointments': { request: CreateAppointmentRequest; response: Appointment };
+  'PATCH /appointments/:id': { request: UpdateAppointmentRequest; response: Appointment };
+  'DELETE /appointments/:id': { request: void; response: void };
+  
+  // Technicians
+  'GET /technicians': { request: void; response: TechnicianWithSchedule[] };
+  'GET /technicians/:id': { request: void; response: TechnicianWithSchedule };
+  'POST /technicians': { request: CreateTechnicianRequest; response: Technician };
+  'PATCH /technicians/:id': { request: UpdateTechnicianRequest; response: Technician };
+  'DELETE /technicians/:id': { request: void; response: void };
+  
+  // Schedules
+  'GET /schedules': { request: ScheduleListParams; response: OnCallSchedule[] };
+  'POST /schedules': { request: CreateScheduleRequest; response: OnCallSchedule };
+  'PATCH /schedules/:id': { request: UpdateScheduleRequest; response: OnCallSchedule };
+  'DELETE /schedules/:id': { request: void; response: void };
+  'GET /schedules/current': { request: void; response: { primary: TechnicianWithSchedule | null; backup: TechnicianWithSchedule | null } };
+  
+  // Subscription
+  'GET /subscription': { request: void; response: Subscription | null };
+  'POST /subscription/checkout': { request: CreateCheckoutSessionRequest; response: CreateCheckoutSessionResponse };
+  'POST /subscription/portal': { request: CreatePortalSessionRequest; response: CreatePortalSessionResponse };
+  'POST /subscription/webhook/stripe': { request: StripeWebhookEvent; response: void };
+  
+  // Reports
+  'GET /reports/dashboard': { request: void; response: DashboardStats };
+  'GET /reports/daily': { request: DailyReportParams; response: DailyReportResponse };
+  'GET /reports/weekly': { request: WeeklyReportParams; response: DailyReportResponse };
+  'GET /reports/monthly': { request: MonthlyReportParams; response: DailyReportResponse };
+  
+  // Audit Logs
+  'GET /audit-logs': { request: AuditLogListParams; response: { logs: AuditLog[]; meta: PaginationMeta } };
+}

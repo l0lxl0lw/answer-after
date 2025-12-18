@@ -1,0 +1,631 @@
+// React Query hooks for AnswerAfter data fetching
+// Uses Supabase for real backend data
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import type { 
+  CallListParams,
+  CreateAppointmentRequest,
+  UpdateAppointmentRequest,
+  CreateTechnicianRequest,
+  UpdateTechnicianRequest,
+  CreateScheduleRequest,
+  UpdateScheduleRequest,
+} from '@/types/api';
+
+// ============= Organization Hooks =============
+
+export function useOrganization() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['organization', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return null;
+      
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', user.organization_id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+// ============= Dashboard Hooks =============
+
+export function useDashboardStats() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['dashboard', 'stats', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return null;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayIso = today.toISOString();
+      
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const weekAgoIso = weekAgo.toISOString();
+
+      // Get calls for today
+      const { data: todayCalls, error: todayError } = await supabase
+        .from('calls')
+        .select('id, is_emergency, outcome, duration_seconds')
+        .eq('organization_id', user.organization_id)
+        .gte('started_at', todayIso);
+      
+      if (todayError) throw todayError;
+
+      // Get calls for this week
+      const { data: weekCalls, error: weekError } = await supabase
+        .from('calls')
+        .select('id')
+        .eq('organization_id', user.organization_id)
+        .gte('started_at', weekAgoIso);
+      
+      if (weekError) throw weekError;
+
+      // Get appointments booked today
+      const { data: todayAppointments } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('organization_id', user.organization_id)
+        .gte('created_at', todayIso);
+
+      const totalCalls = todayCalls?.length || 0;
+      const emergencyCalls = todayCalls?.filter(c => c.is_emergency).length || 0;
+      const dispatchedCalls = todayCalls?.filter(c => c.outcome === 'dispatched').length || 0;
+      const avgDuration = totalCalls > 0 
+        ? Math.round((todayCalls?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0) / totalCalls)
+        : 0;
+
+      return {
+        total_calls_today: totalCalls,
+        total_calls_week: weekCalls?.length || 0,
+        emergency_calls_today: emergencyCalls,
+        appointments_booked_today: todayAppointments?.length || 0,
+        technicians_dispatched_today: dispatchedCalls,
+        average_call_duration: avgDuration,
+        answer_rate: 98, // This would come from actual call data
+        revenue_captured_estimate: dispatchedCalls * 250, // Rough estimate per dispatch
+      };
+    },
+    enabled: !!user?.organization_id,
+    refetchInterval: 30000,
+  });
+}
+
+// ============= Call Hooks =============
+
+export function useCalls(params?: CallListParams) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['calls', user?.organization_id, params],
+    queryFn: async () => {
+      if (!user?.organization_id) return { calls: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
+      
+      let query = supabase
+        .from('calls')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', user.organization_id)
+        .order('started_at', { ascending: false });
+      
+      if (params?.is_emergency !== undefined) {
+        query = query.eq('is_emergency', params.is_emergency);
+      }
+      if (params?.outcome) {
+        query = query.eq('outcome', params.outcome as any);
+      }
+      if (params?.search) {
+        query = query.or(`caller_name.ilike.%${params.search}%,caller_phone.ilike.%${params.search}%,summary.ilike.%${params.search}%`);
+      }
+      if (params?.start_date) {
+        query = query.gte('started_at', params.start_date);
+      }
+      if (params?.end_date) {
+        query = query.lte('started_at', params.end_date);
+      }
+      
+      const page = params?.page || 1;
+      const perPage = params?.per_page || 10;
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+      
+      query = query.range(from, to);
+      
+      const { data, error, count } = await query;
+      
+      if (error) throw error;
+      
+      return {
+        calls: data || [],
+        meta: {
+          page,
+          per_page: perPage,
+          total: count || 0,
+          total_pages: Math.ceil((count || 0) / perPage),
+        },
+      };
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+export function useCall(id: string) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['calls', id],
+    queryFn: async () => {
+      const { data: call, error: callError } = await supabase
+        .from('calls')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      
+      if (callError) throw callError;
+      if (!call) throw new Error('Call not found');
+      
+      // Fetch related data
+      const [eventsResult, transcriptsResult, phoneResult] = await Promise.all([
+        supabase.from('call_events').select('*').eq('call_id', id).order('created_at'),
+        supabase.from('call_transcripts').select('*').eq('call_id', id).order('timestamp_ms'),
+        call.phone_number_id 
+          ? supabase.from('phone_numbers').select('*').eq('id', call.phone_number_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      
+      return {
+        ...call,
+        events: eventsResult.data || [],
+        transcripts: transcriptsResult.data || [],
+        phone_number: phoneResult.data,
+      };
+    },
+    enabled: !!id && !!user?.organization_id,
+  });
+}
+
+export function useRecentCalls(limit = 5) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['calls', 'recent', user?.organization_id, limit],
+    queryFn: async () => {
+      if (!user?.organization_id) return [];
+      
+      const { data, error } = await supabase
+        .from('calls')
+        .select('*')
+        .eq('organization_id', user.organization_id)
+        .order('started_at', { ascending: false })
+        .limit(limit);
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.organization_id,
+    refetchInterval: 15000,
+  });
+}
+
+// ============= Appointment Hooks =============
+
+export function useAppointments(page = 1, perPage = 10) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['appointments', user?.organization_id, page, perPage],
+    queryFn: async () => {
+      if (!user?.organization_id) return { appointments: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
+      
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+      
+      const { data, error, count } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', user.organization_id)
+        .order('scheduled_start', { ascending: true })
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      return {
+        appointments: data || [],
+        meta: {
+          page,
+          per_page: perPage,
+          total: count || 0,
+          total_pages: Math.ceil((count || 0) / perPage),
+        },
+      };
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+export function useAppointment(id: string) {
+  return useQuery({
+    queryKey: ['appointments', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateAppointment() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async (data: CreateAppointmentRequest) => {
+      if (!user?.organization_id) throw new Error('No organization');
+      
+      const { data: appointment, error } = await supabase
+        .from('appointments')
+        .insert({
+          organization_id: user.organization_id,
+          call_id: data.call_id || null,
+          technician_id: data.technician_id || null,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone,
+          customer_address: data.customer_address || null,
+          issue_description: data.issue_description,
+          scheduled_start: data.scheduled_start,
+          scheduled_end: data.scheduled_end,
+          is_emergency: data.is_emergency || false,
+          notes: data.notes || null,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return appointment;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    },
+  });
+}
+
+export function useUpdateAppointment() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateAppointmentRequest }) => {
+      const { data: appointment, error } = await supabase
+        .from('appointments')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return appointment;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointments', id] });
+    },
+  });
+}
+
+// ============= Technician Hooks =============
+
+export function useTechnicians() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['technicians', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return [];
+      
+      const { data: technicians, error } = await supabase
+        .from('technicians')
+        .select('*')
+        .eq('organization_id', user.organization_id)
+        .eq('is_active', true)
+        .order('full_name');
+      
+      if (error) throw error;
+      
+      // Fetch schedules for each technician
+      const techIds = technicians?.map(t => t.id) || [];
+      const { data: schedules } = await supabase
+        .from('on_call_schedules')
+        .select('*')
+        .in('technician_id', techIds);
+      
+      return technicians?.map(tech => ({
+        ...tech,
+        schedules: schedules?.filter(s => s.technician_id === tech.id) || [],
+      })) || [];
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+export function useTechnician(id: string) {
+  return useQuery({
+    queryKey: ['technicians', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('technicians')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      // Fetch schedules
+      const { data: schedules } = await supabase
+        .from('on_call_schedules')
+        .select('*')
+        .eq('technician_id', id);
+      
+      return { ...data, schedules: schedules || [] };
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateTechnician() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async (data: CreateTechnicianRequest) => {
+      if (!user?.organization_id) throw new Error('No organization');
+      
+      const { data: technician, error } = await supabase
+        .from('technicians')
+        .insert({
+          organization_id: user.organization_id,
+          user_id: data.user_id || null,
+          full_name: data.full_name,
+          phone: data.phone,
+          email: data.email || null,
+          specializations: data.specializations || [],
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return technician;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['technicians'] });
+    },
+  });
+}
+
+export function useUpdateTechnician() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateTechnicianRequest }) => {
+      const { data: technician, error } = await supabase
+        .from('technicians')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return technician;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['technicians'] });
+      queryClient.invalidateQueries({ queryKey: ['technicians', id] });
+    },
+  });
+}
+
+// ============= Schedule Hooks =============
+
+export function useSchedules() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['schedules', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return [];
+      
+      const { data, error } = await supabase
+        .from('on_call_schedules')
+        .select('*')
+        .eq('organization_id', user.organization_id)
+        .order('start_datetime', { ascending: true });
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+export function useCurrentOnCall() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['schedules', 'current', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return { primary: null, backup: null };
+      
+      const now = new Date().toISOString();
+      
+      const { data: schedules, error } = await supabase
+        .from('on_call_schedules')
+        .select(`
+          *,
+          technician:technicians(*)
+        `)
+        .eq('organization_id', user.organization_id)
+        .lte('start_datetime', now)
+        .gte('end_datetime', now);
+      
+      if (error) throw error;
+      
+      const primarySchedule = schedules?.find(s => s.is_primary);
+      const backupSchedule = schedules?.find(s => !s.is_primary);
+      
+      return {
+        primary: primarySchedule?.technician || null,
+        backup: backupSchedule?.technician || null,
+      };
+    },
+    enabled: !!user?.organization_id,
+    refetchInterval: 60000,
+  });
+}
+
+export function useCreateSchedule() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async (data: CreateScheduleRequest) => {
+      if (!user?.organization_id) throw new Error('No organization');
+      
+      const { data: schedule, error } = await supabase
+        .from('on_call_schedules')
+        .insert({
+          organization_id: user.organization_id,
+          technician_id: data.technician_id,
+          start_datetime: data.start_datetime,
+          end_datetime: data.end_datetime,
+          is_primary: data.is_primary || false,
+          notes: data.notes || null,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return schedule;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+    },
+  });
+}
+
+export function useUpdateSchedule() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateScheduleRequest }) => {
+      const { data: schedule, error } = await supabase
+        .from('on_call_schedules')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return schedule;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      queryClient.invalidateQueries({ queryKey: ['schedules', id] });
+    },
+  });
+}
+
+// ============= Phone Number Hooks =============
+
+export function usePhoneNumbers() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['phoneNumbers', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return [];
+      
+      const { data, error } = await supabase
+        .from('phone_numbers')
+        .select('*')
+        .eq('organization_id', user.organization_id)
+        .order('created_at');
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+// ============= Subscription Hooks =============
+
+export function useSubscription() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['subscription', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return null;
+      
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('organization_id', user.organization_id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+// ============= Users Hooks =============
+
+export function useUsers(page = 1, perPage = 10) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['users', user?.organization_id, page, perPage],
+    queryFn: async () => {
+      if (!user?.organization_id) return { users: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
+      
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+      
+      const { data, error, count } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', user.organization_id)
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      return {
+        users: data || [],
+        meta: {
+          page,
+          per_page: perPage,
+          total: count || 0,
+          total_pages: Math.ceil((count || 0) / perPage),
+        },
+      };
+    },
+    enabled: !!user?.organization_id,
+  });
+}
