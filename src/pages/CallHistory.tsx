@@ -50,18 +50,20 @@ function getOutcomeBadge(outcome: string | null, isEmergency: boolean) {
     return { variant: "destructive" as const, label: "Emergency" };
   }
   switch (outcome) {
-    case "dispatched":
-      return { variant: "default" as const, label: "Dispatched" };
     case "booked":
       return { variant: "default" as const, label: "Booked" };
-    case "message_taken":
-      return { variant: "secondary" as const, label: "Message" };
-    case "resolved":
-      return { variant: "secondary" as const, label: "Resolved" };
+    case "callback_requested":
+      return { variant: "secondary" as const, label: "Callback" };
+    case "information_provided":
+      return { variant: "secondary" as const, label: "Info Provided" };
     case "escalated":
       return { variant: "destructive" as const, label: "Escalated" };
+    case "no_action":
+      return { variant: "outline" as const, label: "No Action" };
+    case "voicemail":
+      return { variant: "outline" as const, label: "Voicemail" };
     default:
-      return { variant: "outline" as const, label: "Pending" };
+      return { variant: "outline" as const, label: "Active" };
   }
 }
 
