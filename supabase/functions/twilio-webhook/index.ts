@@ -221,10 +221,9 @@ serve(async (req) => {
       }
     }
 
-    // If no agent ID, create one or use fallback
+    // If no agent ID, use fallback
     if (!agentId) {
       console.log('No ElevenLabs agent found, using fallback TTS');
-      // Fallback to simple greeting for now
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna-Neural">Hi! Thanks for calling AnswerAfter. Please hold while we connect you to our AI assistant.</Say>
@@ -239,17 +238,56 @@ serve(async (req) => {
       });
     }
 
-    // Use Twilio Streams to connect to ElevenLabs agent
-    const wsUrl = `${supabaseUrl}/functions/v1/elevenlabs-agent/websocket?callSid=${callSid}&agentId=${agentId}`;
+    // Get signed WebSocket URL from ElevenLabs for the agent
+    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    if (!ELEVENLABS_API_KEY) {
+      console.error('ELEVENLABS_API_KEY not configured');
+      const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural">We're experiencing technical difficulties. Please try again later.</Say>
+    <Hangup/>
+</Response>`;
+      return new Response(errorTwiml, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
+      });
+    }
+
+    console.log(`Getting signed URL for ElevenLabs agent: ${agentId}`);
     
+    const signedUrlResponse = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
+      {
+        method: 'GET',
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY,
+        },
+      }
+    );
+
+    if (!signedUrlResponse.ok) {
+      const errorText = await signedUrlResponse.text();
+      console.error('Failed to get ElevenLabs signed URL:', signedUrlResponse.status, errorText);
+      const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural">We're having trouble connecting to our AI assistant. Please try again later.</Say>
+    <Hangup/>
+</Response>`;
+      return new Response(errorTwiml, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
+      });
+    }
+
+    const signedUrlData = await signedUrlResponse.json();
+    const wsUrl = signedUrlData.signed_url;
+    
+    console.log('Got ElevenLabs signed URL, returning Streams TwiML');
+
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
         <Stream url="${wsUrl}" />
     </Connect>
 </Response>`;
-
-    console.log('Returning Streams TwiML with agent ID:', agentId);
 
     return new Response(twiml, {
       headers: {
