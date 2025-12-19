@@ -13,7 +13,8 @@ import {
   Check,
   Calendar,
   Loader2,
-  Clock
+  Clock,
+  Bot
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,6 +67,32 @@ export default function Settings() {
 
   const [newKeyword, setNewKeyword] = useState('');
 
+  // Organization Agent Context state
+  const [agentContext, setAgentContext] = useState('');
+  const [isSavingContext, setIsSavingContext] = useState(false);
+  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
+  const [agentData, setAgentData] = useState<{ elevenlabs_agent_id: string | null; context: string | null } | null>(null);
+
+  // Fetch organization agent data
+  useEffect(() => {
+    const fetchAgentData = async () => {
+      if (!user?.organization_id) return;
+      
+      const { data, error } = await supabase
+        .from('organization_agents')
+        .select('elevenlabs_agent_id, context')
+        .eq('organization_id', user.organization_id)
+        .maybeSingle();
+      
+      if (!error && data) {
+        setAgentData(data);
+        setAgentContext(data.context || '');
+      }
+    };
+    
+    fetchAgentData();
+  }, [user?.organization_id]);
+
   // Initialize form with organization data
   useState(() => {
     if (organization) {
@@ -86,6 +113,95 @@ export default function Settings() {
       title: 'Settings saved',
       description: 'Your organization settings have been updated.',
     });
+  };
+
+  const handleSaveAgentContext = async () => {
+    if (!user?.organization_id) return;
+    
+    // Validate word count (max 2000 words)
+    const wordCount = agentContext.trim().split(/\s+/).filter(Boolean).length;
+    if (wordCount > 2000) {
+      toast({
+        title: 'Context too long',
+        description: `Your context has ${wordCount} words. Maximum is 2000 words.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setIsSavingContext(true);
+    try {
+      const { error } = await supabase
+        .from('organization_agents')
+        .update({ context: agentContext })
+        .eq('organization_id', user.organization_id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Context saved',
+        description: 'Your AI agent context has been updated.',
+      });
+      
+      setAgentData(prev => prev ? { ...prev, context: agentContext } : null);
+    } catch (error: any) {
+      console.error('Error saving context:', error);
+      toast({
+        title: 'Error saving context',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingContext(false);
+    }
+  };
+
+  const handleCreateAgent = async () => {
+    if (!user?.organization_id) return;
+    
+    setIsCreatingAgent(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('elevenlabs-agent', {
+        body: { 
+          action: 'create-agent',
+          organizationId: user.organization_id,
+          context: agentContext 
+        },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.agent_id) {
+        toast({
+          title: 'Agent created',
+          description: 'Your AI voice agent has been created successfully.',
+        });
+        
+        setAgentData(prev => prev ? { ...prev, elevenlabs_agent_id: data.agent_id } : { elevenlabs_agent_id: data.agent_id, context: agentContext });
+      }
+    } catch (error: any) {
+      console.error('Error creating agent:', error);
+      toast({
+        title: 'Error creating agent',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreatingAgent(false);
+    }
   };
 
   const handleAddKeyword = () => {
@@ -477,6 +593,85 @@ export default function Settings() {
                         </button>
                       </Badge>
                     ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Organization Context for AI Agent */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bot className="h-5 w-5" />
+                    Organization Context
+                  </CardTitle>
+                  <CardDescription>
+                    Provide context for your AI voice agent. This information helps the agent understand your business and respond appropriately to callers. (Max 2000 words)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <textarea
+                      className="w-full min-h-[200px] p-3 rounded-md border bg-background text-foreground resize-y"
+                      placeholder="Describe your business, services, pricing, common questions, special instructions for the AI agent...
+
+Example:
+We are ABC Plumbing & HVAC, serving the Dallas-Fort Worth area since 1985. 
+
+Services we offer:
+- Emergency plumbing repairs (24/7)
+- Water heater installation and repair
+- AC and heating maintenance
+- Drain cleaning
+
+Pricing:
+- Service call fee: $89
+- Emergency after-hours: $149 minimum
+
+Special instructions:
+- Always ask if they've tried turning off the main water valve for leak emergencies
+- For AC issues, ask if they've checked the thermostat batteries
+- Senior citizens get 10% discount"
+                      value={agentContext}
+                      onChange={(e) => setAgentContext(e.target.value)}
+                    />
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>
+                        {agentContext.trim().split(/\s+/).filter(Boolean).length} / 2000 words
+                      </span>
+                      {agentData?.elevenlabs_agent_id && (
+                        <Badge variant="outline" className="text-green-600">
+                          <Check className="h-3 w-3 mr-1" />
+                          Agent Active
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button 
+                      variant="outline"
+                      onClick={handleSaveAgentContext}
+                      disabled={isSavingContext}
+                    >
+                      {isSavingContext ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Context
+                    </Button>
+                    {!agentData?.elevenlabs_agent_id && (
+                      <Button 
+                        onClick={handleCreateAgent}
+                        disabled={isCreatingAgent || !agentContext.trim()}
+                      >
+                        {isCreatingAgent ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Bot className="h-4 w-4 mr-2" />
+                        )}
+                        Create AI Agent
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
