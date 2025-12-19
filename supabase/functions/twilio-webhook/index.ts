@@ -238,49 +238,12 @@ serve(async (req) => {
       });
     }
 
-    // Get signed WebSocket URL from ElevenLabs for the agent
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    if (!ELEVENLABS_API_KEY) {
-      console.error('ELEVENLABS_API_KEY not configured');
-      const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Joanna-Neural">We're experiencing technical difficulties. Please try again later.</Say>
-    <Hangup/>
-</Response>`;
-      return new Response(errorTwiml, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
-      });
-    }
-
-    console.log(`Getting signed URL for ElevenLabs agent: ${agentId}`);
+    // Build WebSocket URL to our edge function that bridges Twilio <-> ElevenLabs
+    // Twilio Streams require wss:// protocol
+    const wsHost = supabaseUrl.replace('https://', 'wss://').replace('.supabase.co', '.functions.supabase.co');
+    const wsUrl = `${wsHost}/elevenlabs-agent?agentId=${agentId}&callSid=${callSid}`;
     
-    const signedUrlResponse = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
-      {
-        method: 'GET',
-        headers: {
-          'xi-api-key': ELEVENLABS_API_KEY,
-        },
-      }
-    );
-
-    if (!signedUrlResponse.ok) {
-      const errorText = await signedUrlResponse.text();
-      console.error('Failed to get ElevenLabs signed URL:', signedUrlResponse.status, errorText);
-      const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Joanna-Neural">We're having trouble connecting to our AI assistant. Please try again later.</Say>
-    <Hangup/>
-</Response>`;
-      return new Response(errorTwiml, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
-      });
-    }
-
-    const signedUrlData = await signedUrlResponse.json();
-    const wsUrl = signedUrlData.signed_url;
-    
-    console.log('Got ElevenLabs signed URL, returning Streams TwiML');
+    console.log(`Returning Streams TwiML with WebSocket URL: ${wsUrl}`);
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
