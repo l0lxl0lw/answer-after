@@ -55,6 +55,8 @@ export default function Settings() {
     emergency_keywords: [] as string[],
   });
 
+  const [isSavingOrg, setIsSavingOrg] = useState(false);
+
   const [notifications, setNotifications] = useState({
     email_new_calls: true,
     email_emergencies: true,
@@ -94,25 +96,54 @@ export default function Settings() {
   }, [user?.organization_id]);
 
   // Initialize form with organization data
-  useState(() => {
+  useEffect(() => {
     if (organization) {
       setOrgForm({
         name: organization.name,
         timezone: organization.timezone,
-        business_hours_start: organization.business_hours_start,
-        business_hours_end: organization.business_hours_end,
+        business_hours_start: organization.business_hours_start || '08:00',
+        business_hours_end: organization.business_hours_end || '17:00',
         notification_email: organization.notification_email || '',
         notification_phone: organization.notification_phone || '',
         emergency_keywords: organization.emergency_keywords || [],
       });
     }
-  });
+  }, [organization]);
 
-  const handleSaveOrganization = () => {
-    toast({
-      title: 'Settings saved',
-      description: 'Your organization settings have been updated.',
-    });
+  const handleSaveOrganization = async () => {
+    if (!user?.organization_id) return;
+    
+    setIsSavingOrg(true);
+    try {
+      const { error } = await supabase
+        .from('organizations')
+        .update({
+          name: orgForm.name,
+          timezone: orgForm.timezone,
+          business_hours_start: orgForm.business_hours_start,
+          business_hours_end: orgForm.business_hours_end,
+          notification_email: orgForm.notification_email || null,
+          notification_phone: orgForm.notification_phone || null,
+          emergency_keywords: orgForm.emergency_keywords,
+        })
+        .eq('id', user.organization_id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Settings saved',
+        description: 'Your organization settings have been updated.',
+      });
+    } catch (error: any) {
+      console.error('Error saving organization:', error);
+      toast({
+        title: 'Error saving settings',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingOrg(false);
+    }
   };
 
   const handleSaveAgentContext = async () => {
@@ -486,7 +517,7 @@ export default function Settings() {
                       <Label htmlFor="org-name">Business Name</Label>
                       <Input
                         id="org-name"
-                        value={organization?.name || orgForm.name}
+                        value={orgForm.name}
                         onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })}
                         placeholder="Your Business Name"
                       />
@@ -495,7 +526,7 @@ export default function Settings() {
                       <Label htmlFor="timezone">Timezone</Label>
                       <Input
                         id="timezone"
-                        value={organization?.timezone || orgForm.timezone}
+                        value={orgForm.timezone}
                         onChange={(e) => setOrgForm({ ...orgForm, timezone: e.target.value })}
                         placeholder="America/Chicago"
                       />
@@ -510,7 +541,7 @@ export default function Settings() {
                       <Input
                         id="hours-start"
                         type="time"
-                        value={organization?.business_hours_start || orgForm.business_hours_start}
+                        value={orgForm.business_hours_start}
                         onChange={(e) => setOrgForm({ ...orgForm, business_hours_start: e.target.value })}
                       />
                     </div>
@@ -519,7 +550,7 @@ export default function Settings() {
                       <Input
                         id="hours-end"
                         type="time"
-                        value={organization?.business_hours_end || orgForm.business_hours_end}
+                        value={orgForm.business_hours_end}
                         onChange={(e) => setOrgForm({ ...orgForm, business_hours_end: e.target.value })}
                       />
                     </div>
@@ -542,7 +573,7 @@ export default function Settings() {
                       <Input
                         id="notify-email"
                         type="email"
-                        value={organization?.notification_email || orgForm.notification_email}
+                        value={orgForm.notification_email}
                         onChange={(e) => setOrgForm({ ...orgForm, notification_email: e.target.value })}
                         placeholder="owner@example.com"
                       />
@@ -552,7 +583,7 @@ export default function Settings() {
                       <Input
                         id="notify-phone"
                         type="tel"
-                        value={organization?.notification_phone || orgForm.notification_phone}
+                        value={orgForm.notification_phone}
                         onChange={(e) => setOrgForm({ ...orgForm, notification_phone: e.target.value })}
                         placeholder="+15551234567"
                       />
@@ -582,7 +613,7 @@ export default function Settings() {
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(organization?.emergency_keywords || orgForm.emergency_keywords).map((keyword) => (
+                    {orgForm.emergency_keywords.map((keyword) => (
                       <Badge key={keyword} variant="secondary" className="flex items-center gap-1 px-3 py-1">
                         {keyword}
                         <button
@@ -677,8 +708,12 @@ Special instructions:
               </Card>
 
               <div className="flex justify-end">
-                <Button onClick={handleSaveOrganization}>
-                  <Save className="h-4 w-4 mr-2" />
+                <Button onClick={handleSaveOrganization} disabled={isSavingOrg}>
+                  {isSavingOrg ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
                   Save Changes
                 </Button>
               </div>
