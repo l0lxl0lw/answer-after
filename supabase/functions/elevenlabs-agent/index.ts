@@ -13,12 +13,27 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    console.log('ElevenLabs Agent WebSocket handler:', req.method, url.pathname);
+    console.log('ElevenLabs Agent handler:', req.method, url.pathname);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Handle POST requests for agent creation
+    if (req.method === 'POST') {
+      const body = await req.json();
+      
+      // Handle action-based routing
+      if (body.action === 'create-agent') {
+        return await handleCreateAgent(supabase, body.organizationId, body.context);
+      }
+      
+      // Legacy route handling
+      if (url.pathname === '/create-agent') {
+        return await handleCreateAgent(supabase, body.organizationId, body.systemPrompt || body.context);
+      }
+    }
 
     if (url.pathname === '/websocket') {
       // Handle WebSocket upgrade for ElevenLabs agent connection
@@ -151,29 +166,157 @@ serve(async (req) => {
       return response;
     }
 
-    // Handle agent creation/management endpoints
-    if (url.pathname === '/create-agent') {
-      const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-      
-      if (!ELEVENLABS_API_KEY) {
-        return new Response('ElevenLabs API key not configured', { status: 500 });
+    return new Response('Not found', { status: 404 });
+
+  } catch (error) {
+    console.error('Error in elevenlabs-agent function:', error);
+    return new Response('Internal server error', { 
+      status: 500,
+      headers: corsHeaders 
+    });
+  }
+});
+
+async function handleCreateAgent(
+  supabase: any,
+  organizationId: string,
+  context?: string
+) {
+  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+  
+  if (!ELEVENLABS_API_KEY) {
+    return new Response(JSON.stringify({ error: 'ElevenLabs API key not configured' }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  if (!organizationId) {
+    return new Response(JSON.stringify({ error: 'Organization ID is required' }), { 
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  console.log(`Creating ElevenLabs agent for organization: ${organizationId}`);
+
+  // Get organization details for agent customization
+  const { data: orgData, error: orgError } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('id', organizationId)
+    .single();
+
+  if (orgError) {
+    console.error('Error fetching organization:', orgError);
+    return new Response(JSON.stringify({ error: 'Organization not found' }), { 
+      status: 404,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Get or create organization_agents record
+  let { data: agentRecord, error: agentError } = await supabase
+    .from('organization_agents')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  if (!agentRecord) {
+    // Create the record if it doesn't exist
+    const { data: newRecord, error: insertError } = await supabase
+      .from('organization_agents')
+      .insert({ organization_id: organizationId, context: context || null })
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('Error creating organization_agents record:', insertError);
+    } else {
+      agentRecord = newRecord;
+    }
+  }
+
+  // Use context from the request or from the database
+  const agentContext = context || agentRecord?.context || '';
+
+  // Build the system prompt incorporating the context
+  const systemPrompt = buildAgentPrompt(orgData, agentContext);
+
+  const agentConfig = {
+    name: `${orgData.name} - ${organizationId}`,
+    conversation_config: {
+      agent: {
+        prompt: {
+          prompt: systemPrompt
+        }
       }
+    },
+    platform_settings: {
+      widget: {
+        avatar: {
+          type: "orb"
+        }
+      }
+    }
+  };
 
-      const { organizationId, systemPrompt } = await req.json();
+  try {
+    console.log('Creating ElevenLabs agent with config:', JSON.stringify(agentConfig, null, 2));
 
-      // Get organization details for agent customization
-      const { data: orgData } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', organizationId)
-        .single();
+    const response = await fetch('https://api.elevenlabs.io/v1/convai/agents', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(agentConfig),
+    });
 
-      const agentConfig = {
-        name: `${orgData?.name || 'AnswerAfter'} AI Assistant`,
-        conversation_config: {
-          agent: {
-            prompt: {
-              prompt: systemPrompt || `You are a friendly AI receptionist for ${orgData?.name || 'AnswerAfter'}, a professional HVAC and plumbing service company.
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ElevenLabs agent creation error:', response.status, errorText);
+      return new Response(JSON.stringify({ error: `Failed to create agent: ${errorText}` }), { 
+        status: response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const agentData = await response.json();
+    console.log('ElevenLabs agent created:', agentData);
+    
+    // Store agent ID in organization_agents table
+    const { error: updateError } = await supabase
+      .from('organization_agents')
+      .update({ 
+        elevenlabs_agent_id: agentData.agent_id,
+        context: agentContext || null
+      })
+      .eq('organization_id', organizationId);
+
+    if (updateError) {
+      console.error('Error updating organization_agents:', updateError);
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      agent_id: agentData.agent_id,
+      message: 'Agent created successfully'
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error creating ElevenLabs agent:', error);
+    return new Response(JSON.stringify({ error: 'Failed to create agent' }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+function buildAgentPrompt(orgData: any, context: string): string {
+  const basePrompt = `You are a friendly AI receptionist for ${orgData.name}, a professional service company.
 
 Your responsibilities:
 1. Greet callers warmly
@@ -188,69 +331,16 @@ Be warm, professional, and helpful.
 
 If the caller describes an emergency (gas leak, flooding, no heat in freezing weather, no cooling in extreme heat), acknowledge the urgency and assure them help is on the way.
 
-Business hours: ${orgData?.business_hours_start || '8:00 AM'} to ${orgData?.business_hours_end || '5:00 PM'}
+Business hours: ${orgData.business_hours_start || '8:00 AM'} to ${orgData.business_hours_end || '5:00 PM'}
 
-When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`
-            }
-          }
-        },
-        platform_settings: {
-          widget: {
-            avatar: {
-              type: "orb"
-            }
-          }
-        }
-      };
+When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`;
 
-      try {
-        const response = await fetch('https://api.elevenlabs.io/v1/convai/agents', {
-          method: 'POST',
-          headers: {
-            'xi-api-key': ELEVENLABS_API_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(agentConfig),
-        });
+  if (context && context.trim()) {
+    return `${basePrompt}
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('ElevenLabs agent creation error:', response.status, errorText);
-          return new Response(`Failed to create agent: ${errorText}`, { status: response.status });
-        }
-
-        const agentData = await response.json();
-        
-        // Store agent ID in organization record
-        await supabase
-          .from('organizations')
-          .update({ 
-            elevenlabs_agent_id: agentData.agent_id,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', organizationId);
-
-        return new Response(JSON.stringify({
-          success: true,
-          agent_id: agentData.agent_id,
-          message: 'Agent created successfully'
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-
-      } catch (error) {
-        console.error('Error creating ElevenLabs agent:', error);
-        return new Response('Failed to create agent', { status: 500 });
-      }
-    }
-
-    return new Response('Not found', { status: 404 });
-
-  } catch (error) {
-    console.error('Error in elevenlabs-agent function:', error);
-    return new Response('Internal server error', { 
-      status: 500,
-      headers: corsHeaders 
-    });
+ADDITIONAL BUSINESS CONTEXT:
+${context}`;
   }
-});
+
+  return basePrompt;
+}
