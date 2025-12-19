@@ -189,14 +189,15 @@ serve(async (req) => {
     let agentId = null;
 
     if (phoneData) {
-      // Get organization info including ElevenLabs agent ID
-      const { data: orgData } = await supabase
-        .from('organizations')
+      // Get ElevenLabs agent ID from organization_agents table
+      const { data: agentData } = await supabase
+        .from('organization_agents')
         .select('elevenlabs_agent_id')
-        .eq('id', phoneData.organization_id)
-        .single();
+        .eq('organization_id', phoneData.organization_id)
+        .maybeSingle();
       
-      agentId = orgData?.elevenlabs_agent_id;
+      agentId = agentData?.elevenlabs_agent_id;
+      console.log(`Found agent for organization ${phoneData.organization_id}:`, agentId);
 
       // Create or find call record
       const { data: existingCall } = await supabase
