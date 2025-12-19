@@ -239,9 +239,8 @@ serve(async (req) => {
     }
 
     // Build WebSocket URL to our edge function that bridges Twilio <-> ElevenLabs
-    // Twilio Streams require wss:// protocol
-    const wsHost = supabaseUrl.replace('https://', 'wss://').replace('.supabase.co', '.functions.supabase.co');
-    const wsUrl = `${wsHost}/elevenlabs-agent?agentId=${agentId}&callSid=${callSid}`;
+    // Supabase edge functions WebSocket URL format: wss://PROJECT_ID.supabase.co/functions/v1/FUNCTION_NAME
+    const wsUrl = `${supabaseUrl.replace('https://', 'wss://')}/functions/v1/elevenlabs-agent?agentId=${agentId}&callSid=${callSid}`;
     
     console.log(`Returning Streams TwiML with WebSocket URL: ${wsUrl}`);
 
