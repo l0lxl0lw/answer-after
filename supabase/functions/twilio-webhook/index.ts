@@ -160,12 +160,10 @@ serve(async (req) => {
     const callSid = formData['CallSid'];
     const callerPhone = formData['From'] || 'unknown';
     const calledNumber = formData['To'] || '';
-    const speechResult = formData['SpeechResult'] || '';
-    const digits = formData['Digits'] || '';
     const callStatus = formData['CallStatus'] || '';
     const callDuration = formData['CallDuration'] ? parseInt(formData['CallDuration'], 10) : null;
 
-    console.log(`Call SID: ${callSid}, Status: ${callStatus}, Speech: "${speechResult}", Duration: ${callDuration}`);
+    console.log(`Call SID: ${callSid}, Status: ${callStatus}, Duration: ${callDuration}`);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -258,30 +256,27 @@ serve(async (req) => {
       .eq('is_active', true)
       .maybeSingle();
 
-    let organizationContext = null;
-    let callId = null;
+    let agentId = null;
 
     if (phoneData) {
-      // Get organization info
+      // Get organization info including ElevenLabs agent ID
       const { data: orgData } = await supabase
         .from('organizations')
-        .select('*')
+        .select('elevenlabs_agent_id')
         .eq('id', phoneData.organization_id)
         .single();
       
-      organizationContext = orgData;
+      agentId = orgData?.elevenlabs_agent_id;
 
-      // Find or create call record
+      // Create or find call record
       const { data: existingCall } = await supabase
         .from('calls')
         .select('id')
         .eq('twilio_call_sid', callSid)
         .maybeSingle();
 
-      if (existingCall) {
-        callId = existingCall.id;
-      } else {
-        const { data: newCall } = await supabase
+      if (!existingCall) {
+        await supabase
           .from('calls')
           .insert({
             organization_id: phoneData.organization_id,
@@ -291,168 +286,39 @@ serve(async (req) => {
             status: 'active',
             is_emergency: false,
             started_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-        
-        if (newCall) {
-          callId = newCall.id;
-        }
-      }
-    }
-
-    // Get conversation history from call events
-    let conversationHistory: Array<{role: string, content: string}> = [];
-    
-    if (callId) {
-      const { data: events } = await supabase
-        .from('call_events')
-        .select('event_type, ai_prompt, ai_response')
-        .eq('call_id', callId)
-        .order('created_at', { ascending: true });
-
-      if (events) {
-        for (const event of events) {
-          if (event.ai_prompt) {
-            conversationHistory.push({ role: 'user', content: event.ai_prompt });
-          }
-          if (event.ai_response) {
-            conversationHistory.push({ role: 'assistant', content: event.ai_response });
-          }
-        }
-      }
-    }
-
-    let aiResponse: string;
-
-    // Determine response based on conversation state
-    if (!speechResult && conversationHistory.length === 0) {
-      // Initial greeting
-      aiResponse = "Hi! Thanks for calling AnswerAfter. I'm here to help you with any HVAC or plumbing needs. How can I assist you today?";
-    } else if (speechResult) {
-      // Add user's speech to history
-      conversationHistory.push({ role: 'user', content: speechResult });
-      
-      // Get AI response
-      aiResponse = await getAIResponse(conversationHistory, organizationContext);
-
-      // Check for emergency keywords
-      const emergencyKeywords = organizationContext?.emergency_keywords || ['no heat', 'no cooling', 'gas leak', 'flooding'];
-      const isEmergency = emergencyKeywords.some((keyword: string) => 
-        speechResult.toLowerCase().includes(keyword.toLowerCase())
-      );
-
-      if (isEmergency && callId) {
-        await supabase
-          .from('calls')
-          .update({ is_emergency: true })
-          .eq('id', callId);
-      }
-
-      // Store the conversation exchange
-      if (callId) {
-        await supabase
-          .from('call_events')
-          .insert({
-            call_id: callId,
-            event_type: 'conversation',
-            ai_prompt: speechResult,
-            ai_response: aiResponse,
-            event_data: { 
-              is_emergency: isEmergency,
-              conversation_turn: conversationHistory.length 
-            },
           });
-
-        // Update call summary
-        await supabase
-          .from('calls')
-          .update({ 
-            summary: `Conversation with ${conversationHistory.length} exchanges. Last: "${speechResult.substring(0, 100)}"`,
-          })
-          .eq('id', callId);
       }
-    } else {
-      // No speech detected, prompt again
-      aiResponse = "I'm sorry, I didn't catch that. Could you please tell me how I can help you today?";
     }
 
-    // Check if conversation seems complete (booking confirmed or caller says goodbye)
-    const goodbyePatterns = ['goodbye', 'bye', 'thank you', 'thanks', 'that\'s all', 'have a good'];
-    const isEnding = goodbyePatterns.some(pattern => 
-      speechResult.toLowerCase().includes(pattern)
-    );
+    // If no agent ID, create one or use fallback
+    if (!agentId) {
+      console.log('No ElevenLabs agent found, using fallback TTS');
+      // Fallback to simple greeting for now
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural">Hi! Thanks for calling AnswerAfter. Please hold while we connect you to our AI assistant.</Say>
+    <Hangup/>
+</Response>`;
 
-    console.log('AI Response:', aiResponse);
-
-    // Build TwiML response - try ElevenLabs first, fall back to Polly
-    let twiml: string;
-    
-    // Helper function to build TwiML with audio
-    const buildTwimlWithAudio = async (text: string, includeGather: boolean): Promise<string> => {
-      const audioUrl = await generateElevenLabsAudio(text, supabase);
-      
-      if (audioUrl) {
-        if (includeGather) {
-          return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather input="speech" timeout="5" speechTimeout="auto" action="${supabaseUrl}/functions/v1/twilio-webhook">
-        <Play>${audioUrl}</Play>
-    </Gather>
-    <Say voice="Polly.Joanna-Neural">I'm sorry, I didn't hear anything. Let me transfer you to our team.</Say>
-    <Hangup/>
-</Response>`;
-        } else {
-          return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Play>${audioUrl}</Play>
-    <Hangup/>
-</Response>`;
-        }
-      } else {
-        // Fallback to Polly if ElevenLabs fails
-        console.log('Falling back to Polly TTS');
-        if (includeGather) {
-          return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather input="speech" timeout="5" speechTimeout="auto" action="${supabaseUrl}/functions/v1/twilio-webhook">
-        <Say voice="Polly.Joanna-Neural">${escapeXml(text)}</Say>
-    </Gather>
-    <Say voice="Polly.Joanna-Neural">I'm sorry, I didn't hear anything. Let me transfer you to our team.</Say>
-    <Hangup/>
-</Response>`;
-        } else {
-          return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Joanna-Neural">${escapeXml(text)}</Say>
-    <Hangup/>
-</Response>`;
-        }
-      }
-    };
-    
-    if (isEnding) {
-      // End the call gracefully
-      const endingMessage = `${aiResponse} Have a great day! Goodbye.`;
-      twiml = await buildTwimlWithAudio(endingMessage, false);
-
-      // Mark call as completed
-      if (callId) {
-        await supabase
-          .from('calls')
-          .update({ 
-            status: 'completed',
-            ended_at: new Date().toISOString(),
-            outcome: 'information_provided',
-          })
-          .eq('id', callId);
-      }
-    } else {
-      // Continue conversation - gather more speech
-      twiml = await buildTwimlWithAudio(aiResponse, true);
+      return new Response(twiml, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/xml',
+        },
+      });
     }
 
-    console.log('Returning TwiML');
+    // Use Twilio Streams to connect to ElevenLabs agent
+    const wsUrl = `${supabaseUrl}/functions/v1/elevenlabs-agent/websocket?callSid=${callSid}&agentId=${agentId}`;
+    
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Connect>
+        <Stream url="${wsUrl}" />
+    </Connect>
+</Response>`;
+
+    console.log('Returning Streams TwiML with agent ID:', agentId);
 
     return new Response(twiml, {
       headers: {
