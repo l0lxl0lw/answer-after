@@ -264,7 +264,7 @@ async function handleCreateAgent(
   try {
     console.log('Creating ElevenLabs agent with config:', JSON.stringify(agentConfig, null, 2));
 
-    const response = await fetch('https://api.elevenlabs.io/v1/convai/agents', {
+    const response = await fetch('https://api.elevenlabs.io/v1/convai/agents/create', {
       method: 'POST',
       headers: {
         'xi-api-key': ELEVENLABS_API_KEY,
