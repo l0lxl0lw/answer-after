@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useOrganization, useSubscription } from "@/hooks/use-api";
-import { useAuth } from "@/contexts/AuthContext";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useOrganization } from "@/hooks/use-api";
+import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,14 +10,13 @@ import {
   PhoneCall,
   Settings,
   Wrench,
-  Bell,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  User,
   Menu,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CreditsIndicator } from "./CreditsIndicator";
 
 const sidebarLinks = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -128,14 +126,6 @@ interface SidebarContentProps {
 
 function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps) {
   const { data: organization } = useOrganization();
-  const { data: subscription } = useSubscription();
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/');
-  };
   
   return (
     <>
@@ -182,34 +172,33 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
         })}
       </nav>
 
-      {/* User Section */}
+      {/* Upgrade Button & User Section */}
       <div className={cn(
-        "pt-4 border-t border-sidebar-border mt-4",
+        "pt-4 border-t border-sidebar-border mt-4 space-y-3",
         collapsed && "flex flex-col items-center"
       )}>
-        <div className={cn(
-          "flex items-center gap-3 mb-3",
-          collapsed && "flex-col"
-        )}>
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <User className="w-5 h-5 text-primary" />
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{organization?.name || 'My Organization'}</p>
-              <p className="text-xs text-muted-foreground truncate capitalize">{subscription?.plan || 'Starter'} Plan</p>
-            </div>
-          )}
-        </div>
+        {/* Upgrade Button */}
         <Button
-          variant="ghost"
+          variant="outline"
           size={collapsed ? "icon" : "sm"}
-          className={cn("w-full justify-start gap-2", collapsed && "w-10 justify-center")}
-          onClick={handleLogout}
+          className={cn(
+            "w-full gap-2",
+            collapsed && "w-10"
+          )}
+          asChild
         >
-          <LogOut className="w-4 h-4" />
-          {!collapsed && <span>Log Out</span>}
+          <Link to="/#pricing" onClick={onClose}>
+            <Sparkles className="w-4 h-4" />
+            {!collapsed && <span>Upgrade</span>}
+          </Link>
         </Button>
+
+        {/* Credits Indicator with Menu */}
+        <CreditsIndicator 
+          collapsed={collapsed} 
+          organizationName={organization?.name}
+          onClose={onClose}
+        />
       </div>
     </>
   );
