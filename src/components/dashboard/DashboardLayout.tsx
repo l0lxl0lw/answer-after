@@ -187,7 +187,7 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
           )}
           asChild
         >
-          <Link to="/dashboard/settings" onClick={onClose}>
+          <Link to="/dashboard/subscriptions" onClick={onClose}>
             <Sparkles className="w-4 h-4" />
             {!collapsed && <span>Upgrade</span>}
           </Link>
