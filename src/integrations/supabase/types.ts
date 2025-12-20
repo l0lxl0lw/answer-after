@@ -464,6 +464,7 @@ export type Database = {
           features: Json
           has_api_access: boolean
           has_call_recordings: boolean
+          has_custom_agent: boolean
           has_custom_ai_training: boolean
           has_hipaa_compliance: boolean
           has_priority_support: boolean
@@ -488,6 +489,7 @@ export type Database = {
           features?: Json
           has_api_access?: boolean
           has_call_recordings?: boolean
+          has_custom_agent?: boolean
           has_custom_ai_training?: boolean
           has_hipaa_compliance?: boolean
           has_priority_support?: boolean
@@ -512,6 +514,7 @@ export type Database = {
           features?: Json
           has_api_access?: boolean
           has_call_recordings?: boolean
+          has_custom_agent?: boolean
           has_custom_ai_training?: boolean
           has_hipaa_compliance?: boolean
           has_priority_support?: boolean
