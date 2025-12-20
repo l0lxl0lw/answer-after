@@ -466,7 +466,9 @@ export type Database = {
           status: string
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
+          total_credits: number
           updated_at: string
+          used_credits: number
         }
         Insert: {
           cancel_at_period_end?: boolean
@@ -479,7 +481,9 @@ export type Database = {
           status?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          total_credits?: number
           updated_at?: string
+          used_credits?: number
         }
         Update: {
           cancel_at_period_end?: boolean
@@ -492,7 +496,9 @@ export type Database = {
           status?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          total_credits?: number
           updated_at?: string
+          used_credits?: number
         }
         Relationships: [
           {
