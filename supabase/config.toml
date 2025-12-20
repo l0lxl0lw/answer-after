@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.elevenlabs-agent]
 verify_jwt = false
+
+[functions.get-twilio-calls]
+verify_jwt = true

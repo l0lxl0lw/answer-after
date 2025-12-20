@@ -109,51 +109,47 @@ export function useCalls(params?: CallListParams) {
   const { user } = useAuth();
   
   return useQuery({
-    queryKey: ['calls', user?.organization_id, params],
+    queryKey: ['calls', 'twilio', user?.organization_id, params],
     queryFn: async () => {
-      if (!user?.organization_id) return { calls: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
+      if (!user?.organization_id) return { calls: [], meta: { page: 1, per_page: 20, total: 0, total_pages: 0 } };
       
-      let query = supabase
-        .from('calls')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', user.organization_id)
-        .order('started_at', { ascending: false });
+      // Build query params for edge function
+      const queryParams = new URLSearchParams();
+      if (params?.search) queryParams.set('search', params.search);
+      if (params?.page) queryParams.set('page', params.page.toString());
+      if (params?.per_page) queryParams.set('per_page', params.per_page.toString());
+      
+      const { data, error } = await supabase.functions.invoke('get-twilio-calls', {
+        body: null,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (error) {
+        console.error('Error fetching Twilio calls:', error);
+        throw error;
+      }
+      
+      // Apply client-side filtering for emergency and outcome since Twilio doesn't have these
+      let calls = data?.calls || [];
       
       if (params?.is_emergency !== undefined) {
-        query = query.eq('is_emergency', params.is_emergency);
+        calls = calls.filter((c: any) => c.is_emergency === params.is_emergency);
       }
       if (params?.outcome) {
-        query = query.eq('outcome', params.outcome as any);
-      }
-      if (params?.search) {
-        query = query.or(`caller_name.ilike.%${params.search}%,caller_phone.ilike.%${params.search}%,summary.ilike.%${params.search}%`);
+        calls = calls.filter((c: any) => c.outcome === params.outcome);
       }
       if (params?.start_date) {
-        query = query.gte('started_at', params.start_date);
+        calls = calls.filter((c: any) => new Date(c.started_at) >= new Date(params.start_date!));
       }
       if (params?.end_date) {
-        query = query.lte('started_at', params.end_date);
+        calls = calls.filter((c: any) => new Date(c.started_at) <= new Date(params.end_date!));
       }
       
-      const page = params?.page || 1;
-      const perPage = params?.per_page || 10;
-      const from = (page - 1) * perPage;
-      const to = from + perPage - 1;
-      
-      query = query.range(from, to);
-      
-      const { data, error, count } = await query;
-      
-      if (error) throw error;
-      
       return {
-        calls: data || [],
-        meta: {
-          page,
-          per_page: perPage,
-          total: count || 0,
-          total_pages: Math.ceil((count || 0) / perPage),
-        },
+        calls,
+        meta: data?.meta || { page: 1, per_page: 20, total: 0, total_pages: 0 },
       };
     },
     enabled: !!user?.organization_id,
@@ -199,19 +195,24 @@ export function useRecentCalls(limit = 5) {
   const { user } = useAuth();
   
   return useQuery({
-    queryKey: ['calls', 'recent', user?.organization_id, limit],
+    queryKey: ['calls', 'twilio', 'recent', user?.organization_id, limit],
     queryFn: async () => {
       if (!user?.organization_id) return [];
       
-      const { data, error } = await supabase
-        .from('calls')
-        .select('*')
-        .eq('organization_id', user.organization_id)
-        .order('started_at', { ascending: false })
-        .limit(limit);
+      const { data, error } = await supabase.functions.invoke('get-twilio-calls', {
+        body: null,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       
-      if (error) throw error;
-      return data || [];
+      if (error) {
+        console.error('Error fetching recent Twilio calls:', error);
+        throw error;
+      }
+      
+      // Return only the first 'limit' calls
+      return (data?.calls || []).slice(0, limit);
     },
     enabled: !!user?.organization_id,
     refetchInterval: 15000,
