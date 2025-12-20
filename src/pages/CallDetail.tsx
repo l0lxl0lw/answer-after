@@ -344,7 +344,7 @@ export default function CallDetail() {
               <div>
                 <p className="text-xs text-muted-foreground">Phone Line</p>
                 <p className="font-medium text-sm">
-                  {call.phone_number.friendly_name}
+                  {call.phone_number?.friendly_name || call.phone_number?.phone_number || "Unknown"}
                 </p>
               </div>
             </CardContent>
