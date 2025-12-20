@@ -142,7 +142,7 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
               <span className="font-medium">Balance</span>
             </div>
             <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
-              <Link to="/#pricing" onClick={handleMenuItemClick}>
+              <Link to="/dashboard/settings" onClick={handleMenuItemClick}>
                 Upgrade
               </Link>
             </Button>
@@ -173,7 +173,7 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
             className="flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
           >
             <CreditCard className="w-4 h-4" />
-            Pricing
+            View Pricing
           </Link>
         </div>
 
