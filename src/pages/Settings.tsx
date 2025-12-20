@@ -79,31 +79,16 @@ export default function Settings() {
 
   const [newKeyword, setNewKeyword] = useState('');
 
-  // Generate US Timezones from browser
-  const getUSTimezones = () => {
-    const timezoneLabels = {
-      'America/New_York': 'Eastern Time (ET - EST/EDT)',
-      'America/Chicago': 'Central Time (CT - CST/CDT)', 
-      'America/Denver': 'Mountain Time (MT - MST/MDT)',
-      'America/Phoenix': 'Mountain Standard Time (MST - no DST)',
-      'America/Los_Angeles': 'Pacific Time (PT - PST/PDT)',
-      'America/Anchorage': 'Alaska Time (AKST/AKDT)',
-      'Pacific/Honolulu': 'Hawaii Time (HST - no DST)',
-    };
-
-    // Get all supported timezones from browser if available
-    if (Intl.supportedValuesOf) {
-      const allTimezones = Intl.supportedValuesOf('timeZone');
-      return Object.keys(timezoneLabels)
-        .filter(tz => allTimezones.includes(tz))
-        .map(tz => ({ value: tz, label: timezoneLabels[tz] }));
-    }
-
-    // Fallback to hardcoded list
-    return Object.entries(timezoneLabels).map(([value, label]) => ({ value, label }));
-  };
-
-  const usTimezones = getUSTimezones();
+  // US Timezones list
+  const usTimezones = [
+    { value: 'America/New_York', label: 'Eastern Time (ET - EST/EDT)' },
+    { value: 'America/Chicago', label: 'Central Time (CT - CST/CDT)' },
+    { value: 'America/Denver', label: 'Mountain Time (MT - MST/MDT)' },
+    { value: 'America/Phoenix', label: 'Mountain Standard Time (MST - no DST)' },
+    { value: 'America/Los_Angeles', label: 'Pacific Time (PT - PST/PDT)' },
+    { value: 'America/Anchorage', label: 'Alaska Time (AKST/AKDT)' },
+    { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST - no DST)' },
+  ];
 
   // Organization Agent Context state
   const [agentContext, setAgentContext] = useState('');
