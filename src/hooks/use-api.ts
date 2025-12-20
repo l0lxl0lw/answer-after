@@ -160,32 +160,34 @@ export function useCall(id: string) {
   const { user } = useAuth();
   
   return useQuery({
-    queryKey: ['calls', id],
+    queryKey: ['calls', 'twilio', id],
     queryFn: async () => {
-      const { data: call, error: callError } = await supabase
-        .from('calls')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+      // Fetch call details from Twilio via edge function
+      const { data, error } = await supabase.functions.invoke('get-twilio-call', {
+        body: null,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       
-      if (callError) throw callError;
-      if (!call) throw new Error('Call not found');
+      // The edge function uses query params, so we need to call it differently
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-twilio-call?call_sid=${id}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
       
-      // Fetch related data
-      const [eventsResult, transcriptsResult, phoneResult] = await Promise.all([
-        supabase.from('call_events').select('*').eq('call_id', id).order('created_at'),
-        supabase.from('call_transcripts').select('*').eq('call_id', id).order('timestamp_ms'),
-        call.phone_number_id 
-          ? supabase.from('phone_numbers').select('*').eq('id', call.phone_number_id).maybeSingle()
-          : Promise.resolve({ data: null }),
-      ]);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch call details');
+      }
       
-      return {
-        ...call,
-        events: eventsResult.data || [],
-        transcripts: transcriptsResult.data || [],
-        phone_number: phoneResult.data,
-      };
+      const callData = await response.json();
+      return callData;
     },
     enabled: !!id && !!user?.organization_id,
   });

@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.get-twilio-calls]
 verify_jwt = true
+
+[functions.get-twilio-call]
+verify_jwt = true
