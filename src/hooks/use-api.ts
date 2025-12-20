@@ -632,3 +632,48 @@ export function useUsers(page = 1, perPage = 10) {
     enabled: !!user?.organization_id,
   });
 }
+
+// ============= Subscription Tiers Hooks =============
+
+export interface SubscriptionTier {
+  id: string;
+  plan_id: string;
+  name: string;
+  price_cents: number;
+  period: string;
+  description: string;
+  credits: number;
+  credits_cost_per_thousand: number | null;
+  phone_lines: number;
+  has_custom_ai_training: boolean;
+  has_call_recordings: boolean;
+  has_api_access: boolean;
+  has_priority_support: boolean;
+  has_hipaa_compliance: boolean;
+  has_sla_guarantee: boolean;
+  support_level: string;
+  is_popular: boolean;
+  display_order: number;
+  features: string[];
+}
+
+export function useSubscriptionTiers() {
+  return useQuery({
+    queryKey: ['subscription-tiers'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subscription_tiers')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+      
+      if (error) throw error;
+      
+      return (data || []).map(tier => ({
+        ...tier,
+        features: Array.isArray(tier.features) ? tier.features : [],
+      })) as SubscriptionTier[];
+    },
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+}

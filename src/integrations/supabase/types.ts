@@ -454,6 +454,81 @@ export type Database = {
           },
         ]
       }
+      subscription_tiers: {
+        Row: {
+          created_at: string
+          credits: number
+          credits_cost_per_thousand: number | null
+          description: string
+          display_order: number
+          features: Json
+          has_api_access: boolean
+          has_call_recordings: boolean
+          has_custom_ai_training: boolean
+          has_hipaa_compliance: boolean
+          has_priority_support: boolean
+          has_sla_guarantee: boolean
+          id: string
+          is_active: boolean
+          is_popular: boolean
+          name: string
+          period: string
+          phone_lines: number
+          plan_id: string
+          price_cents: number
+          support_level: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credits?: number
+          credits_cost_per_thousand?: number | null
+          description: string
+          display_order?: number
+          features?: Json
+          has_api_access?: boolean
+          has_call_recordings?: boolean
+          has_custom_ai_training?: boolean
+          has_hipaa_compliance?: boolean
+          has_priority_support?: boolean
+          has_sla_guarantee?: boolean
+          id?: string
+          is_active?: boolean
+          is_popular?: boolean
+          name: string
+          period?: string
+          phone_lines?: number
+          plan_id: string
+          price_cents?: number
+          support_level?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          credits_cost_per_thousand?: number | null
+          description?: string
+          display_order?: number
+          features?: Json
+          has_api_access?: boolean
+          has_call_recordings?: boolean
+          has_custom_ai_training?: boolean
+          has_hipaa_compliance?: boolean
+          has_priority_support?: boolean
+          has_sla_guarantee?: boolean
+          id?: string
+          is_active?: boolean
+          is_popular?: boolean
+          name?: string
+          period?: string
+          phone_lines?: number
+          plan_id?: string
+          price_cents?: number
+          support_level?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           cancel_at_period_end: boolean
