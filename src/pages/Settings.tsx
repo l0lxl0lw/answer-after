@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrganization, usePhoneNumbers, useSubscription } from '@/hooks/use-api';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,7 +48,16 @@ export default function Settings() {
 
   const [orgForm, setOrgForm] = useState({
     name: '',
-    timezone: 'America/Chicago',
+    timezone: (() => {
+      try {
+        const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        // Check if detected timezone is in our US list
+        const usTimezoneValues = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
+        return usTimezoneValues.includes(detected) ? detected : 'America/Chicago';
+      } catch {
+        return 'America/Chicago';
+      }
+    })(),
     business_hours_start: '08:00',
     business_hours_end: '17:00',
     notification_email: '',
@@ -68,6 +78,32 @@ export default function Settings() {
   });
 
   const [newKeyword, setNewKeyword] = useState('');
+
+  // Generate US Timezones from browser
+  const getUSTimezones = () => {
+    const timezoneLabels = {
+      'America/New_York': 'Eastern Time (ET - EST/EDT)',
+      'America/Chicago': 'Central Time (CT - CST/CDT)', 
+      'America/Denver': 'Mountain Time (MT - MST/MDT)',
+      'America/Phoenix': 'Mountain Standard Time (MST - no DST)',
+      'America/Los_Angeles': 'Pacific Time (PT - PST/PDT)',
+      'America/Anchorage': 'Alaska Time (AKST/AKDT)',
+      'Pacific/Honolulu': 'Hawaii Time (HST - no DST)',
+    };
+
+    // Get all supported timezones from browser if available
+    if (Intl.supportedValuesOf) {
+      const allTimezones = Intl.supportedValuesOf('timeZone');
+      return Object.keys(timezoneLabels)
+        .filter(tz => allTimezones.includes(tz))
+        .map(tz => ({ value: tz, label: timezoneLabels[tz] }));
+    }
+
+    // Fallback to hardcoded list
+    return Object.entries(timezoneLabels).map(([value, label]) => ({ value, label }));
+  };
+
+  const usTimezones = getUSTimezones();
 
   // Organization Agent Context state
   const [agentContext, setAgentContext] = useState('');
@@ -524,12 +560,18 @@ export default function Settings() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="timezone">Timezone</Label>
-                      <Input
-                        id="timezone"
-                        value={orgForm.timezone}
-                        onChange={(e) => setOrgForm({ ...orgForm, timezone: e.target.value })}
-                        placeholder="America/Chicago"
-                      />
+                      <Select value={orgForm.timezone} onValueChange={(value) => setOrgForm({ ...orgForm, timezone: value })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select timezone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {usTimezones.map((tz) => (
+                            <SelectItem key={tz.value} value={tz.value}>
+                              {tz.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
