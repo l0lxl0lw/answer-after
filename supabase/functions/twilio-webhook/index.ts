@@ -107,7 +107,7 @@ serve(async (req) => {
       // Find the call record
       const { data: existingCall } = await supabase
         .from('calls')
-        .select('id, is_emergency')
+        .select('id, is_emergency, organization_id')
         .eq('twilio_call_sid', callSid)
         .maybeSingle();
 
@@ -170,6 +170,29 @@ serve(async (req) => {
           .eq('id', existingCall.id);
 
         console.log(`Updated call ${existingCall.id}: status=${dbStatus}, outcome=${outcome}, duration=${callDuration}s`);
+
+        // Deduct credits based on call duration (1 credit per second)
+        if (callDuration && callDuration > 0 && existingCall.organization_id) {
+          const { data: subscription } = await supabase
+            .from('subscriptions')
+            .select('id, used_credits, total_credits')
+            .eq('organization_id', existingCall.organization_id)
+            .maybeSingle();
+
+          if (subscription) {
+            const newUsedCredits = Math.min(
+              subscription.used_credits + callDuration,
+              subscription.total_credits
+            );
+            
+            await supabase
+              .from('subscriptions')
+              .update({ used_credits: newUsedCredits })
+              .eq('id', subscription.id);
+
+            console.log(`Deducted ${callDuration} credits for org ${existingCall.organization_id}. New used: ${newUsedCredits}/${subscription.total_credits}`);
+          }
+        }
       }
 
       // Return empty TwiML for status callback
