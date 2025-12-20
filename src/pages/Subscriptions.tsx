@@ -267,11 +267,153 @@ export default function Subscriptions() {
           })}
         </div>
 
-        {/* Credit Explanation */}
+        {/* Tier Breakdown Table */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.5 }}
+          className="mt-12"
+        >
+          <h3 className="font-display text-xl font-semibold text-center mb-6">Plan Comparison</h3>
+          <div className="rounded-2xl border border-border overflow-hidden bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left p-4 font-semibold">Feature</th>
+                    {plans.map((plan) => (
+                      <th 
+                        key={plan.id} 
+                        className={cn(
+                          "text-center p-4 font-semibold min-w-[120px]",
+                          plan.id === currentPlan && "bg-primary/10"
+                        )}
+                      >
+                        {plan.name}
+                        {plan.id === currentPlan && (
+                          <span className="block text-xs font-normal text-primary mt-1">Current</span>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Monthly Price</td>
+                    {plans.map((plan) => (
+                      <td 
+                        key={plan.id} 
+                        className={cn(
+                          "text-center p-4",
+                          plan.id === currentPlan && "bg-primary/5"
+                        )}
+                      >
+                        {plan.price}{plan.period}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Credits Included</td>
+                    {plans.map((plan) => (
+                      <td 
+                        key={plan.id} 
+                        className={cn(
+                          "text-center p-4",
+                          plan.id === currentPlan && "bg-primary/5"
+                        )}
+                      >
+                        {plan.credits}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Approx. Call Time</td>
+                    {plans.map((plan) => (
+                      <td 
+                        key={plan.id} 
+                        className={cn(
+                          "text-center p-4",
+                          plan.id === currentPlan && "bg-primary/5"
+                        )}
+                      >
+                        {plan.id === "enterprise" ? "Unlimited" : `~${Math.round(plan.totalCredits / 60)} min`}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Additional Credit Cost</td>
+                    {plans.map((plan) => (
+                      <td 
+                        key={plan.id} 
+                        className={cn(
+                          "text-center p-4",
+                          plan.id === currentPlan && "bg-primary/5"
+                        )}
+                      >
+                        {plan.creditsCost || "—"}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Phone Lines</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>1</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>2</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}>5</td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}>Unlimited</td>
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Custom AI Training</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Call Recordings</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">API Access</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">Priority Support</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}>24/7 Dedicated</td>
+                  </tr>
+                  <tr className="border-b border-border">
+                    <td className="p-4 font-medium">HIPAA Compliance</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                  </tr>
+                  <tr>
+                    <td className="p-4 font-medium">SLA Guarantee</td>
+                    <td className={cn("text-center p-4", currentPlan === "free" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "starter" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "professional" && "bg-primary/5")}>—</td>
+                    <td className={cn("text-center p-4", currentPlan === "enterprise" && "bg-primary/5")}><Check className="w-4 h-4 text-success mx-auto" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Credit Explanation */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
           className="mt-12 text-center max-w-2xl mx-auto"
         >
           <div className="p-6 rounded-2xl bg-card border border-border">
