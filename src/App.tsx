@@ -14,6 +14,7 @@ import Appointments from "./pages/Appointments";
 import Settings from "./pages/Settings";
 import Services from "./pages/Services";
 import Subscriptions from "./pages/Subscriptions";
+import MyAgent from "./pages/MyAgent";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/dashboard/schedules" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
             <Route path="/dashboard/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
             <Route path="/dashboard/services" element={<ProtectedRoute><Services /></ProtectedRoute>} />
+            <Route path="/dashboard/my-agent" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
             <Route path="/dashboard/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/dashboard/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

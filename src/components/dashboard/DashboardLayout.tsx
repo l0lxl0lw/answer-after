@@ -18,11 +18,14 @@ import {
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
 
+import { Bot } from "lucide-react";
+
 const sidebarLinks = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
   { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
   { name: "Schedules", href: "/dashboard/schedules", icon: Wrench },
+  { name: "My Agent", href: "/dashboard/my-agent", icon: Bot },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
