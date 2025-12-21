@@ -28,6 +28,10 @@ serve(async (req) => {
       if (body.action === 'create-agent') {
         return await handleCreateAgent(supabase, body.organizationId, body.context);
       }
+      
+      if (body.action === 'update-agent') {
+        return await handleUpdateAgent(supabase, body.organizationId, body.context);
+      }
     }
 
     // Handle WebSocket upgrade for Twilio <-> ElevenLabs bridge
@@ -367,7 +371,21 @@ async function handleCreateAgent(
 }
 
 function buildAgentPrompt(orgData: any, context: string): string {
+  let greeting = '';
+  let content = '';
+  
+  // Try to parse structured context
+  try {
+    const parsed = JSON.parse(context);
+    greeting = parsed.greeting || '';
+    content = parsed.content || '';
+  } catch {
+    content = context;
+  }
+
   const basePrompt = `You are a friendly AI receptionist for ${orgData.name}, a professional service company.
+
+${greeting ? `INITIAL GREETING (use this when answering):\n${greeting}\n` : ''}
 
 Your responsibilities:
 1. Greet callers warmly
@@ -386,12 +404,122 @@ Business hours: ${orgData.business_hours_start || '8:00 AM'} to ${orgData.busine
 
 When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`;
 
-  if (context && context.trim()) {
+  if (content && content.trim()) {
     return `${basePrompt}
 
 ADDITIONAL BUSINESS CONTEXT:
-${context}`;
+${content}`;
   }
 
   return basePrompt;
+}
+
+async function handleUpdateAgent(
+  supabase: any,
+  organizationId: string,
+  context?: string
+) {
+  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+  
+  if (!ELEVENLABS_API_KEY) {
+    return new Response(JSON.stringify({ error: 'ElevenLabs API key not configured' }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  if (!organizationId) {
+    return new Response(JSON.stringify({ error: 'Organization ID is required' }), { 
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  console.log(`Updating ElevenLabs agent for organization: ${organizationId}`);
+
+  // Get organization details
+  const { data: orgData, error: orgError } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('id', organizationId)
+    .single();
+
+  if (orgError) {
+    console.error('Error fetching organization:', orgError);
+    return new Response(JSON.stringify({ error: 'Organization not found' }), { 
+      status: 404,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Get existing agent record
+  const { data: agentRecord, error: agentError } = await supabase
+    .from('organization_agents')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  if (!agentRecord?.elevenlabs_agent_id) {
+    console.log('No existing agent found, creating new one');
+    return handleCreateAgent(supabase, organizationId, context);
+  }
+
+  const agentContext = context || agentRecord?.context || '';
+  const systemPrompt = buildAgentPrompt(orgData, agentContext);
+
+  const updateConfig = {
+    conversation_config: {
+      agent: {
+        prompt: {
+          prompt: systemPrompt
+        }
+      }
+    }
+  };
+
+  try {
+    console.log('Updating ElevenLabs agent:', agentRecord.elevenlabs_agent_id);
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentRecord.elevenlabs_agent_id}`, {
+      method: 'PATCH',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateConfig),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ElevenLabs agent update error:', response.status, errorText);
+      return new Response(JSON.stringify({ error: `Failed to update agent: ${errorText}` }), { 
+        status: response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const agentData = await response.json();
+    console.log('ElevenLabs agent updated:', agentData);
+    
+    // Update context in database
+    await supabase
+      .from('organization_agents')
+      .update({ context: agentContext || null })
+      .eq('organization_id', organizationId);
+
+    return new Response(JSON.stringify({
+      success: true,
+      agent_id: agentRecord.elevenlabs_agent_id,
+      message: 'Agent updated successfully'
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error updating ElevenLabs agent:', error);
+    return new Response(JSON.stringify({ error: 'Failed to update agent' }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 }

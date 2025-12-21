@@ -83,7 +83,7 @@ export default function MyAgent() {
 
     const { data: existingAgent } = await supabase
       .from('organization_agents')
-      .select('id')
+      .select('id, elevenlabs_agent_id')
       .eq('organization_id', user.organization_id)
       .maybeSingle();
 
@@ -98,6 +98,23 @@ export default function MyAgent() {
         .from('organization_agents')
         .insert({ organization_id: user.organization_id, context: contextData });
       if (error) throw error;
+    }
+
+    // Update ElevenLabs agent if one exists
+    if (existingAgent?.elevenlabs_agent_id) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        await supabase.functions.invoke('elevenlabs-agent', {
+          body: { 
+            action: 'update-agent',
+            organizationId: user.organization_id,
+            context: contextData 
+          },
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+        });
+      }
     }
   };
 
