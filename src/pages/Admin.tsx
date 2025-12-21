@@ -57,68 +57,15 @@ const TABLES = [
   "on_call_schedules",
   "organization_agents",
   "user_roles",
+  "prompt_templates",
 ];
 
-// The prompt building logic from elevenlabs-agent function
-const PROMPT_LOGIC = `
-// This is the prompt conversion logic from supabase/functions/elevenlabs-agent/index.ts
-
-function buildAgentPrompt(orgData: any, context: string): { prompt: string; firstMessage: string } {
-  let greeting = '';
-  let content = '';
-  
-  // Try to parse structured context from My Agent page input
-  // The My Agent page saves: { greeting: \\"...\\", content: \\"...\\" }
-  try {
-    const parsed = JSON.parse(context);
-    greeting = parsed.greeting || '';  // Custom greeting message
-    content = parsed.content || '';    // Business context/instructions
-  } catch {
-    content = context;  // If not JSON, treat entire input as content
-  }
-
-  // Default first message if no custom greeting provided
-  const firstMessage = greeting || \`Hello! Thanks for calling \${orgData.name}. How can I help you today?\`;
-
-  // Base system prompt for the AI agent
-  const basePrompt = \`You are a friendly AI receptionist for \${orgData.name}, a professional service company.
-
-Your responsibilities:
-1. Greet callers warmly
-2. Ask how you can help them today
-3. Gather information about their issue (what's wrong, urgency level)
-4. Collect their contact information (name, phone, address)
-5. Help schedule appointments if needed
-6. Handle emergencies by noting them as urgent
-
-Keep your responses SHORT and conversational - this is a phone call. 2-3 sentences max.
-Be warm, professional, and helpful.
-
-If the caller describes an emergency (gas leak, flooding, no heat in freezing weather, no cooling in extreme heat), acknowledge the urgency and assure them help is on the way.
-
-Business hours: \${orgData.business_hours_start || '8:00 AM'} to \${orgData.business_hours_end || '5:00 PM'}
-
-When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.\`;
-
-  // Append business context if provided
-  let fullPrompt = basePrompt;
-  if (content && content.trim()) {
-    fullPrompt = \`\${basePrompt}
-
-ADDITIONAL BUSINESS CONTEXT:
-\${content}\`;
-  }
-
-  return { prompt: fullPrompt, firstMessage };
-}
-
-// This function is called when:
-// 1. Creating a new agent (handleCreateAgent)
-// 2. Updating an existing agent (handleUpdateAgent)
-
-// The context parameter comes from:
-// - organization_agents.context column in the database
-// - Which is set from the My Agent page when user saves their greeting/content
+// Placeholder info for prompt templates
+const PLACEHOLDER_INFO = `
+Available Placeholders:
+- {{orgName}} - Organization name
+- {{businessHoursStart}} - Business hours start time
+- {{businessHoursEnd}} - Business hours end time
 `;
 
 export default function Admin() {
@@ -529,78 +476,195 @@ export default function Admin() {
             )}
           </TabsContent>
 
-          {/* Prompt Logic Tab */}
-          <TabsContent value="prompts" className="mt-6">
+          {/* Prompt Templates Tab */}
+          <TabsContent value="prompts" className="mt-6 space-y-6">
+            {/* Info Card */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Code className="w-5 h-5" />
-                  Agent Prompt Conversion Logic
+                  Prompt Templates
                 </CardTitle>
                 <CardDescription>
-                  This shows how user input from the "My Agent" page is transformed into the ElevenLabs agent prompt
+                  Edit the AI agent prompt templates. Changes are stored in the database and used when creating/updating agents.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {/* Flow Diagram */}
-                  <div className="bg-muted/50 rounded-xl p-6">
-                    <h3 className="font-semibold mb-4">Data Flow</h3>
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <Badge variant="outline" className="py-2 px-3">
-                        My Agent Page Input
+                  <div className="bg-muted/50 rounded-xl p-4">
+                    <h4 className="font-medium mb-3 text-sm">Data Flow</h4>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Badge variant="outline" className="py-1 px-2">
+                        My Agent Page
                       </Badge>
                       <span className="text-muted-foreground">→</span>
-                      <Badge variant="outline" className="py-2 px-3">
+                      <Badge variant="outline" className="py-1 px-2">
                         organization_agents.context
                       </Badge>
                       <span className="text-muted-foreground">→</span>
-                      <Badge variant="outline" className="py-2 px-3">
-                        buildAgentPrompt()
+                      <Badge variant="outline" className="py-1 px-2">
+                        prompt_templates (DB)
                       </Badge>
                       <span className="text-muted-foreground">→</span>
-                      <Badge variant="default" className="py-2 px-3">
-                        ElevenLabs Agent Config
+                      <Badge variant="default" className="py-1 px-2">
+                        ElevenLabs Agent
                       </Badge>
                     </div>
                   </div>
 
-                  {/* Context Structure */}
-                  <div className="bg-muted/50 rounded-xl p-6">
-                    <h3 className="font-semibold mb-4">Context JSON Structure</h3>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      The My Agent page saves data in this format to the organization_agents.context column:
-                    </p>
-                    <pre className="bg-background border rounded-lg p-4 text-xs font-mono overflow-x-auto">
-{`{
-  "greeting": "Hello! Thanks for calling ABC Plumbing...",
-  "content": "We specialize in emergency repairs, drain cleaning..."
-}`}
-                    </pre>
+                  {/* Placeholder Info */}
+                  <div className="bg-info/10 border border-info/20 rounded-lg p-4">
+                    <h4 className="font-medium text-info text-sm mb-2">Available Placeholders</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                      <code className="bg-background px-2 py-1 rounded">{"{{orgName}}"}</code>
+                      <code className="bg-background px-2 py-1 rounded">{"{{businessHoursStart}}"}</code>
+                      <code className="bg-background px-2 py-1 rounded">{"{{businessHoursEnd}}"}</code>
+                    </div>
                   </div>
-
-                  {/* Code */}
-                  <div className="bg-muted/50 rounded-xl p-6">
-                    <h3 className="font-semibold mb-4">Source Code</h3>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      From: supabase/functions/elevenlabs-agent/index.ts
-                    </p>
-                    <ScrollArea className="h-[500px]">
-                      <pre className="bg-background border rounded-lg p-4 text-xs font-mono whitespace-pre-wrap">
-                        {PROMPT_LOGIC}
-                      </pre>
-                    </ScrollArea>
-                  </div>
-
-                  {/* Live Agent Data */}
-                  <LiveAgentDataViewer />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Prompt Template Editor */}
+            <PromptTemplateEditor />
+
+            {/* Live Agent Data */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Live Organization Agents</CardTitle>
+                <CardDescription>
+                  View current agent configurations and their context data
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LiveAgentDataViewer />
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Component to edit prompt templates
+function PromptTemplateEditor() {
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState<string | null>(null);
+  const [editedTemplates, setEditedTemplates] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+
+  async function fetchTemplates() {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("prompt_templates")
+      .select("*")
+      .order("name");
+
+    if (!error && data) {
+      setTemplates(data);
+      // Initialize edited templates
+      const edited: Record<string, string> = {};
+      data.forEach((t) => {
+        edited[t.id] = t.template;
+      });
+      setEditedTemplates(edited);
+    }
+    setIsLoading(false);
+  }
+
+  async function handleSave(template: any) {
+    setIsSaving(template.id);
+    
+    const { error } = await supabase
+      .from("prompt_templates")
+      .update({ 
+        template: editedTemplates[template.id],
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", template.id);
+
+    if (error) {
+      toast.error(`Failed to save: ${error.message}`);
+    } else {
+      toast.success(`Template "${template.name}" saved successfully`);
+      fetchTemplates();
+    }
+    setIsSaving(null);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-48 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {templates.map((template) => (
+        <Card key={template.id}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-mono">{template.name}</CardTitle>
+                <CardDescription className="text-xs mt-1">
+                  {template.description}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={template.is_active ? "default" : "secondary"}>
+                  {template.is_active ? "Active" : "Inactive"}
+                </Badge>
+                <Button
+                  size="sm"
+                  onClick={() => handleSave(template)}
+                  disabled={isSaving === template.id || editedTemplates[template.id] === template.template}
+                >
+                  {isSaving === template.id ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span className="ml-2">Save</span>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              value={editedTemplates[template.id] || ""}
+              onChange={(e) =>
+                setEditedTemplates((prev) => ({
+                  ...prev,
+                  [template.id]: e.target.value,
+                }))
+              }
+              className="font-mono text-xs min-h-[200px]"
+              placeholder="Enter template content..."
+            />
+            <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+              <span>
+                Last updated: {new Date(template.updated_at).toLocaleString()}
+              </span>
+              {editedTemplates[template.id] !== template.template && (
+                <Badge variant="outline" className="text-warning">
+                  Unsaved changes
+                </Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -631,45 +695,44 @@ function LiveAgentDataViewer() {
     return <Skeleton className="h-48 w-full" />;
   }
 
+  if (agents.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-4">No agents configured</p>
+    );
+  }
+
   return (
-    <div className="bg-muted/50 rounded-xl p-6">
-      <h3 className="font-semibold mb-4">Live Organization Agents</h3>
-      {agents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No agents configured</p>
-      ) : (
-        <div className="space-y-4">
-          {agents.map((agent) => (
-            <div
-              key={agent.id}
-              className="bg-background border rounded-lg p-4 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium">
-                  {agent.organizations?.name || "Unknown Org"}
-                </h4>
-                <Badge variant="outline" className="font-mono text-xs">
-                  {agent.elevenlabs_agent_id || "No agent ID"}
-                </Badge>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Organization ID: {agent.organization_id}
-              </div>
-              {agent.context && (
-                <div className="mt-2">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">
-                    Context:
-                  </p>
-                  <pre className="text-xs bg-muted rounded p-2 overflow-x-auto max-h-32">
-                    {typeof agent.context === "string"
-                      ? agent.context
-                      : JSON.stringify(agent.context, null, 2)}
-                  </pre>
-                </div>
-              )}
+    <div className="space-y-4">
+      {agents.map((agent) => (
+        <div
+          key={agent.id}
+          className="bg-muted/50 border rounded-lg p-4 space-y-2"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium">
+              {agent.organizations?.name || "Unknown Org"}
+            </h4>
+            <Badge variant="outline" className="font-mono text-xs">
+              {agent.elevenlabs_agent_id || "No agent ID"}
+            </Badge>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Organization ID: {agent.organization_id}
+          </div>
+          {agent.context && (
+            <div className="mt-2">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Context:
+              </p>
+              <pre className="text-xs bg-background rounded p-2 overflow-x-auto max-h-32 border">
+                {typeof agent.context === "string"
+                  ? agent.context
+                  : JSON.stringify(agent.context, null, 2)}
+              </pre>
             </div>
-          ))}
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
