@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOrganization } from "@/hooks/use-api";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Phone,
   LayoutDashboard,
@@ -14,6 +16,7 @@ import {
   ChevronRight,
   Menu,
   Sparkles,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -129,6 +132,33 @@ interface SidebarContentProps {
 
 function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps) {
   const { data: organization } = useOrganization();
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Check if user is admin
+  useEffect(() => {
+    async function checkAdminRole() {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+
+      if (error) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const roles = data?.map((r) => r.role) || [];
+      setIsAdmin(roles.includes("admin") || roles.includes("owner"));
+    }
+
+    checkAdminRole();
+  }, [user]);
   
   return (
     <>
@@ -173,6 +203,24 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
             </Link>
           );
         })}
+        
+        {/* Admin Link - only visible to admins */}
+        {isAdmin && (
+          <Link
+            to="/dashboard/admin"
+            onClick={onClose}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+              collapsed && "justify-center px-2",
+              currentPath === "/dashboard/admin"
+                ? "bg-destructive/10 text-destructive font-medium"
+                : "text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+            )}
+          >
+            <Shield className={cn("w-5 h-5 flex-shrink-0")} />
+            {!collapsed && <span>Admin</span>}
+          </Link>
+        )}
       </nav>
 
       {/* Upgrade Button & User Section */}
