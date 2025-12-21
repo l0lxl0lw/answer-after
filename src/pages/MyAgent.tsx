@@ -134,7 +134,38 @@ export default function MyAgent() {
     setIsSavingGreeting(true);
     try {
       await saveAgentData(customGreeting, agentContent);
-      toast({ title: 'Greeting saved', description: 'Your custom greeting has been updated.' });
+      
+      // Generate TTS for the greeting and save to storage
+      if (customGreeting.trim()) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session) {
+          const { data, error } = await supabase.functions.invoke('generate-greeting-tts', {
+            body: { 
+              greeting: customGreeting,
+              organizationId: user.organization_id
+            },
+            headers: {
+              Authorization: `Bearer ${sessionData.session.access_token}`,
+            },
+          });
+          
+          if (error) {
+            console.error('TTS generation error:', error);
+            toast({ 
+              title: 'Greeting saved', 
+              description: 'Text saved but audio generation failed.',
+              variant: 'default' 
+            });
+          } else {
+            toast({ 
+              title: 'Greeting saved', 
+              description: 'Your greeting has been saved and audio generated.' 
+            });
+          }
+        }
+      } else {
+        toast({ title: 'Greeting saved', description: 'Your custom greeting has been updated.' });
+      }
     } catch (error: any) {
       toast({ title: 'Error saving greeting', description: error.message, variant: 'destructive' });
     } finally {

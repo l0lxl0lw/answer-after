@@ -244,14 +244,45 @@ serve(async (req) => {
       }
     }
 
+    // Check if there's a pre-generated greeting audio for this organization
+    let greetingAudioUrl: string | null = null;
+    if (phoneData) {
+      const { data: greetingFile } = await supabase.storage
+        .from('greetings')
+        .getPublicUrl(`${phoneData.organization_id}/greeting.mp3`);
+      
+      // Check if file exists by trying to fetch its metadata
+      const { data: fileList } = await supabase.storage
+        .from('greetings')
+        .list(phoneData.organization_id);
+      
+      if (fileList && fileList.some(f => f.name === 'greeting.mp3')) {
+        greetingAudioUrl = greetingFile.publicUrl;
+        console.log(`Found greeting audio for org ${phoneData.organization_id}: ${greetingAudioUrl}`);
+      }
+    }
+
     // If no agent ID, use fallback
     if (!agentId) {
       console.log('No ElevenLabs agent found, using fallback TTS');
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+      
+      // If we have a custom greeting audio, play it before fallback
+      let twiml: string;
+      if (greetingAudioUrl) {
+        twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${greetingAudioUrl}</Play>
+    <Pause length="1"/>
+    <Say voice="Polly.Joanna-Neural">Please hold while we connect you to an agent.</Say>
+    <Hangup/>
+</Response>`;
+      } else {
+        twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna-Neural">Hi! Thanks for calling AnswerAfter. Please hold while we connect you to our AI assistant.</Say>
     <Hangup/>
 </Response>`;
+      }
 
       return new Response(twiml, {
         headers: {
@@ -267,12 +298,24 @@ serve(async (req) => {
     
     console.log(`Returning Streams TwiML with WebSocket URL: ${wsUrl}`);
 
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    // Play custom greeting audio first, then connect to AI agent
+    let twiml: string;
+    if (greetingAudioUrl) {
+      twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${greetingAudioUrl}</Play>
+    <Connect>
+        <Stream url="${wsUrl}" />
+    </Connect>
+</Response>`;
+    } else {
+      twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
         <Stream url="${wsUrl}" />
     </Connect>
 </Response>`;
+    }
 
     return new Response(twiml, {
       headers: {
