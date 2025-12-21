@@ -301,7 +301,7 @@ async function handleCreateAgent(
   }
 
   const agentContext = context || agentRecord?.context || '';
-  const { prompt: systemPrompt, firstMessage } = buildAgentPrompt(orgData, agentContext);
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
   const agentConfig = {
     name: `${orgData.name} - ${organizationId}`,
@@ -371,7 +371,11 @@ async function handleCreateAgent(
   }
 }
 
-function buildAgentPrompt(orgData: any, context: string): { prompt: string; firstMessage: string } {
+async function buildAgentPrompt(
+  supabase: any,
+  orgData: any, 
+  context: string
+): Promise<{ prompt: string; firstMessage: string }> {
   let greeting = '';
   let content = '';
   
@@ -384,10 +388,57 @@ function buildAgentPrompt(orgData: any, context: string): { prompt: string; firs
     content = context;
   }
 
-  // Default first message if no custom greeting
-  const firstMessage = greeting || `Hello! Thanks for calling ${orgData.name}. How can I help you today?`;
+  // Fetch prompt templates from database
+  const { data: templates, error: templatesError } = await supabase
+    .from('prompt_templates')
+    .select('name, template')
+    .eq('is_active', true);
 
-  const basePrompt = `You are a friendly AI receptionist for ${orgData.name}, a professional service company.
+  if (templatesError) {
+    console.error('Error fetching prompt templates:', templatesError);
+  }
+
+  // Create a map for easy lookup
+  const templateMap: Record<string, string> = {};
+  if (templates) {
+    for (const t of templates) {
+      templateMap[t.name] = t.template;
+    }
+  }
+
+  // Get templates with fallbacks
+  const basePromptTemplate = templateMap['agent_base_prompt'] || getDefaultBasePrompt();
+  const firstMessageTemplate = templateMap['agent_first_message'] || 'Hello! Thanks for calling {{orgName}}. How can I help you today?';
+  const contextPrefix = templateMap['agent_context_prefix'] || 'ADDITIONAL BUSINESS CONTEXT:';
+
+  // Replace placeholders in templates
+  const replacePlaceholders = (template: string): string => {
+    return template
+      .replace(/\{\{orgName\}\}/g, orgData.name)
+      .replace(/\{\{businessHoursStart\}\}/g, orgData.business_hours_start || '8:00 AM')
+      .replace(/\{\{businessHoursEnd\}\}/g, orgData.business_hours_end || '5:00 PM');
+  };
+
+  // Build first message
+  const firstMessage = greeting || replacePlaceholders(firstMessageTemplate);
+
+  // Build full prompt
+  let fullPrompt = replacePlaceholders(basePromptTemplate);
+  if (content && content.trim()) {
+    fullPrompt = `${fullPrompt}
+
+${contextPrefix}
+${content}`;
+  }
+
+  console.log('Built agent prompt from database templates');
+
+  return { prompt: fullPrompt, firstMessage };
+}
+
+// Fallback if database templates not available
+function getDefaultBasePrompt(): string {
+  return `You are a friendly AI receptionist for {{orgName}}, a professional service company.
 
 Your responsibilities:
 1. Greet callers warmly
@@ -402,19 +453,9 @@ Be warm, professional, and helpful.
 
 If the caller describes an emergency (gas leak, flooding, no heat in freezing weather, no cooling in extreme heat), acknowledge the urgency and assure them help is on the way.
 
-Business hours: ${orgData.business_hours_start || '8:00 AM'} to ${orgData.business_hours_end || '5:00 PM'}
+Business hours: {{businessHoursStart}} to {{businessHoursEnd}}
 
 When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`;
-
-  let fullPrompt = basePrompt;
-  if (content && content.trim()) {
-    fullPrompt = `${basePrompt}
-
-ADDITIONAL BUSINESS CONTEXT:
-${content}`;
-  }
-
-  return { prompt: fullPrompt, firstMessage };
 }
 
 async function handleUpdateAgent(
@@ -468,7 +509,7 @@ async function handleUpdateAgent(
   }
 
   const agentContext = context || agentRecord?.context || '';
-  const { prompt: systemPrompt, firstMessage } = buildAgentPrompt(orgData, agentContext);
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
   const updateConfig = {
     conversation_config: {
