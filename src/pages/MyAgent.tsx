@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,9 +24,27 @@ export default function MyAgent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   const [agentData, setAgentData] = useState<{ elevenlabs_agent_id: string | null; context: string | null } | null>(null);
+  const [hasCustomAgentAccess, setHasCustomAgentAccess] = useState(false);
 
-  // Check if user has custom agent access (Pro and above)
-  const hasCustomAgentAccess = subscription?.plan === 'pro' || subscription?.plan === 'business' || subscription?.plan === 'enterprise';
+  // Check if user has custom agent access based on subscription tier
+  useEffect(() => {
+    const checkCustomAgentAccess = async () => {
+      if (!subscription?.plan) {
+        setHasCustomAgentAccess(false);
+        return;
+      }
+      
+      const { data: tier } = await supabase
+        .from('subscription_tiers')
+        .select('has_custom_agent')
+        .eq('plan_id', subscription.plan)
+        .maybeSingle();
+      
+      setHasCustomAgentAccess(tier?.has_custom_agent ?? false);
+    };
+    
+    checkCustomAgentAccess();
+  }, [subscription?.plan]);
 
   // Fetch organization agent data
   useEffect(() => {
