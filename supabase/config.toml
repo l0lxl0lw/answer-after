@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.get-twilio-call]
 verify_jwt = true
+
+[functions.generate-greeting-tts]
+verify_jwt = true
