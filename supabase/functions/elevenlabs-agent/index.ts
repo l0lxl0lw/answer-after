@@ -301,12 +301,13 @@ async function handleCreateAgent(
   }
 
   const agentContext = context || agentRecord?.context || '';
-  const systemPrompt = buildAgentPrompt(orgData, agentContext);
+  const { prompt: systemPrompt, firstMessage } = buildAgentPrompt(orgData, agentContext);
 
   const agentConfig = {
     name: `${orgData.name} - ${organizationId}`,
     conversation_config: {
       agent: {
+        first_message: firstMessage,
         prompt: {
           prompt: systemPrompt
         }
@@ -370,7 +371,7 @@ async function handleCreateAgent(
   }
 }
 
-function buildAgentPrompt(orgData: any, context: string): string {
+function buildAgentPrompt(orgData: any, context: string): { prompt: string; firstMessage: string } {
   let greeting = '';
   let content = '';
   
@@ -383,9 +384,10 @@ function buildAgentPrompt(orgData: any, context: string): string {
     content = context;
   }
 
-  const basePrompt = `You are a friendly AI receptionist for ${orgData.name}, a professional service company.
+  // Default first message if no custom greeting
+  const firstMessage = greeting || `Hello! Thanks for calling ${orgData.name}. How can I help you today?`;
 
-${greeting ? `INITIAL GREETING (use this when answering):\n${greeting}\n` : ''}
+  const basePrompt = `You are a friendly AI receptionist for ${orgData.name}, a professional service company.
 
 Your responsibilities:
 1. Greet callers warmly
@@ -404,14 +406,15 @@ Business hours: ${orgData.business_hours_start || '8:00 AM'} to ${orgData.busine
 
 When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`;
 
+  let fullPrompt = basePrompt;
   if (content && content.trim()) {
-    return `${basePrompt}
+    fullPrompt = `${basePrompt}
 
 ADDITIONAL BUSINESS CONTEXT:
 ${content}`;
   }
 
-  return basePrompt;
+  return { prompt: fullPrompt, firstMessage };
 }
 
 async function handleUpdateAgent(
@@ -465,11 +468,12 @@ async function handleUpdateAgent(
   }
 
   const agentContext = context || agentRecord?.context || '';
-  const systemPrompt = buildAgentPrompt(orgData, agentContext);
+  const { prompt: systemPrompt, firstMessage } = buildAgentPrompt(orgData, agentContext);
 
   const updateConfig = {
     conversation_config: {
       agent: {
+        first_message: firstMessage,
         prompt: {
           prompt: systemPrompt
         }
