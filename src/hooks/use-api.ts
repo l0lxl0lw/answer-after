@@ -163,19 +163,12 @@ export function useCall(id: string) {
     queryKey: ['calls', 'twilio', id],
     queryFn: async () => {
       // Fetch call details from Twilio via edge function
-      const { data, error } = await supabase.functions.invoke('get-twilio-call', {
-        body: null,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      // The edge function uses query params, so we need to call it differently
+      const session = await supabase.auth.getSession();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-twilio-call?call_sid=${id}`,
         {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'Authorization': `Bearer ${session.data.session?.access_token}`,
             'Content-Type': 'application/json',
           },
         }
