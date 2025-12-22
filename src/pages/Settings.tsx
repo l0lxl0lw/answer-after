@@ -109,6 +109,9 @@ export default function Settings() {
     
     setIsSavingOrg(true);
     try {
+      // Check if name has changed
+      const nameChanged = organization && orgForm.name !== organization.name;
+      
       const { error } = await supabase
         .from('organizations')
         .update({
@@ -123,6 +126,26 @@ export default function Settings() {
         .eq('id', user.organization_id);
 
       if (error) throw error;
+
+      // If name changed, update the ElevenLabs agent name
+      if (nameChanged) {
+        try {
+          const { error: agentError } = await supabase.functions.invoke('elevenlabs-agent', {
+            body: {
+              action: 'rename-agent',
+              organizationId: user.organization_id,
+              name: orgForm.name,
+            },
+          });
+          
+          if (agentError) {
+            console.error('Error renaming agent:', agentError);
+            // Don't fail the whole operation, just log it
+          }
+        } catch (agentErr) {
+          console.error('Error calling rename-agent:', agentErr);
+        }
+      }
 
       toast({
         title: 'Settings saved',
