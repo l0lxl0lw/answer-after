@@ -301,6 +301,53 @@ export type Database = {
           },
         ]
       }
+      google_calendar_connections: {
+        Row: {
+          access_token: string
+          connected_at: string | null
+          connected_email: string | null
+          created_at: string | null
+          id: string
+          organization_id: string
+          refresh_token: string
+          selected_calendars: string[] | null
+          token_expires_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          access_token: string
+          connected_at?: string | null
+          connected_email?: string | null
+          created_at?: string | null
+          id?: string
+          organization_id: string
+          refresh_token: string
+          selected_calendars?: string[] | null
+          token_expires_at: string
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          connected_at?: string | null
+          connected_email?: string | null
+          created_at?: string | null
+          id?: string
+          organization_id?: string
+          refresh_token?: string
+          selected_calendars?: string[] | null
+          token_expires_at?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       on_call_schedules: {
         Row: {
           created_at: string

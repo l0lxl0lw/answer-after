@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   format,
@@ -58,9 +58,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useSchedules, useTechnicians, useCreateSchedule, useCreateTechnician } from "@/hooks/use-api";
+import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
 import { cn } from "@/lib/utils";
 import type { OnCallSchedule, TechnicianWithSchedule } from "@/types/database";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 const TIME_SLOTS = [
   { label: "5 PM - 9 PM", start: 17, end: 21 },
@@ -293,24 +295,44 @@ function TechnicianDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 }
 
 export default function Schedules() {
+  const navigate = useNavigate();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [techDialogOpen, setTechDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const { toast } = useToast();
 
+  const { data: calendarConnection, isLoading: connectionLoading } = useGoogleCalendarConnection();
   const { data: schedules, isLoading: schedulesLoading } = useSchedules();
   const { data: technicians, isLoading: techniciansLoading } = useTechnicians();
+
+  // Redirect to onboarding if no calendar connection
+  useEffect(() => {
+    if (!connectionLoading && !calendarConnection) {
+      navigate("/dashboard/schedules/onboarding");
+    }
+  }, [calendarConnection, connectionLoading, navigate]);
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 0 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
-  const isLoading = schedulesLoading || techniciansLoading;
+  const isLoading = schedulesLoading || techniciansLoading || connectionLoading;
 
   const handleAddSchedule = (date?: Date) => {
     setSelectedDate(date);
     setDialogOpen(true);
   };
+
+  // Show loading while checking connection
+  if (connectionLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Skeleton className="h-8 w-48" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
