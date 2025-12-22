@@ -17,6 +17,7 @@ import {
   Menu,
   Sparkles,
   Shield,
+  Puzzle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -29,6 +30,7 @@ const sidebarLinks = [
   { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
   { name: "Schedules", href: "/dashboard/schedules", icon: Wrench },
   { name: "My Agent", href: "/dashboard/my-agent", icon: Bot },
+  { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 

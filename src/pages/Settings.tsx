@@ -9,11 +9,10 @@ import {
   Save, 
   Plus, 
   Trash2,
-  ExternalLink,
-  Check,
-  Calendar,
+  Clock,
   Loader2,
-  Clock
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +26,6 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrganization, usePhoneNumbers, useSubscription } from '@/hooks/use-api';
-import { useGoogleCalendarConnection } from '@/hooks/useGoogleCalendarConnection';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,9 +35,7 @@ export default function Settings() {
   const { data: organization, isLoading: orgLoading } = useOrganization();
   const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
-  const { data: calendarConnection, isLoading: calendarLoading, refetch: refetchCalendar } = useGoogleCalendarConnection();
 
-  const [isDisconnectingCalendar, setIsDisconnectingCalendar] = useState(false);
   const [isAddingPhone, setIsAddingPhone] = useState(false);
   const [addPhoneOpen, setAddPhoneOpen] = useState(false);
   const [newPhone, setNewPhone] = useState({
@@ -258,36 +254,6 @@ export default function Settings() {
         description: error.message || 'Please try again.',
         variant: 'destructive',
       });
-    }
-  };
-
-  const handleDisconnectCalendar = async () => {
-    if (!calendarConnection) return;
-    
-    setIsDisconnectingCalendar(true);
-    try {
-      const { error } = await supabase
-        .from('google_calendar_connections')
-        .delete()
-        .eq('id', calendarConnection.id);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Calendar disconnected',
-        description: 'Google Calendar has been disconnected successfully.',
-      });
-
-      refetchCalendar();
-    } catch (error: any) {
-      console.error('Error disconnecting calendar:', error);
-      toast({
-        title: 'Error disconnecting calendar',
-        description: error.message || 'Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsDisconnectingCalendar(false);
     }
   };
 
@@ -721,62 +687,6 @@ export default function Settings() {
                       ))}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-
-              {/* Google Calendar Integration */}
-              <Card className={calendarConnection ? '' : 'border-dashed'}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
-                    Google Calendar Integration
-                  </CardTitle>
-                  <CardDescription>
-                    Sync your appointments with Google Calendar
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                    <div className="space-y-1">
-                      <p className="font-medium">
-                        {calendarConnection ? 'Google Calendar Connected' : 'Connect Google Calendar'}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {calendarConnection 
-                          ? `Connected as ${calendarConnection.connected_email || 'your account'}`
-                          : 'Automatically sync appointments with your calendar'
-                        }
-                      </p>
-                    </div>
-                    {calendarConnection ? (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-600 border-green-500/30">
-                          <Check className="h-4 w-4" />
-                          Connected
-                        </Badge>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={handleDisconnectCalendar}
-                          disabled={isDisconnectingCalendar}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          {isDisconnectingCalendar ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'Disconnect'
-                          )}
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button variant="outline" asChild>
-                        <a href="/calendar-onboarding">
-                          Connect
-                          <ExternalLink className="h-4 w-4 ml-2" />
-                        </a>
-                      </Button>
-                    )}
-                  </div>
                 </CardContent>
               </Card>
             </motion.div>
