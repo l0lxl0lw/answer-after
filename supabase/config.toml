@@ -35,3 +35,6 @@ verify_jwt = true
 
 [functions.send-trial-reminder]
 verify_jwt = false
+
+[functions.google-calendar-auth]
+verify_jwt = false
