@@ -40,7 +40,6 @@ export type AuditAction =
   | 'call.failed'
   | 'appointment.created'
   | 'appointment.updated'
-  | 'technician.dispatched'
   | 'user.created'
   | 'user.updated'
   | 'settings.updated'
@@ -132,38 +131,12 @@ export interface CallTranscript {
   created_at: string;
 }
 
-// ============= Scheduling =============
-
-export interface Technician {
-  id: string;
-  organization_id: string;
-  user_id: string | null; // May be external tech without app access
-  full_name: string;
-  phone: string;
-  email: string | null;
-  specializations: string[];
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface OnCallSchedule {
-  id: string;
-  organization_id: string;
-  technician_id: string;
-  start_datetime: string;
-  end_datetime: string;
-  is_primary: boolean;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
+// ============= Appointments =============
 
 export interface Appointment {
   id: string;
   organization_id: string;
   call_id: string | null;
-  technician_id: string | null;
   customer_name: string;
   customer_phone: string;
   customer_address: string | null;
@@ -217,11 +190,6 @@ export interface CallWithDetails extends Call {
   appointment?: Appointment;
 }
 
-export interface TechnicianWithSchedule extends Technician {
-  schedules: OnCallSchedule[];
-  user?: User;
-}
-
 export interface OrganizationWithSubscription extends Organization {
   subscription: Subscription | null;
   phone_numbers: PhoneNumber[];
@@ -235,7 +203,6 @@ export interface DashboardStats {
   total_calls_week: number;
   total_calls_month?: number;
   appointments_booked_today: number;
-  technicians_dispatched_today: number;
   average_call_duration: number;
   answer_rate: number;
   revenue_captured_estimate: number;

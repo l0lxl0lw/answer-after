@@ -10,9 +10,6 @@ import type {
   CallWithDetails,
   CallEvent,
   CallTranscript,
-  Technician,
-  TechnicianWithSchedule,
-  OnCallSchedule,
   Appointment,
   Subscription,
   DashboardStats,
@@ -107,78 +104,6 @@ export const mockPhoneNumbers: PhoneNumber[] = [
   },
 ];
 
-// ============= Technicians =============
-
-export const mockTechnicians: Technician[] = [
-  {
-    id: 'tech_01',
-    organization_id: 'org_01',
-    user_id: 'user_03',
-    full_name: 'James Wilson',
-    phone: '+15555551234',
-    email: 'james@comfortzonehvac.com',
-    specializations: ['Heating', 'Cooling', 'Maintenance'],
-    is_active: true,
-    created_at: '2024-06-01T08:00:00Z',
-    updated_at: '2024-10-20T16:00:00Z',
-  },
-  {
-    id: 'tech_02',
-    organization_id: 'org_01',
-    user_id: null,
-    full_name: 'Roberto Martinez',
-    phone: '+15556667777',
-    email: 'roberto.martinez@email.com',
-    specializations: ['Heating', 'Gas', 'Installation'],
-    is_active: true,
-    created_at: '2024-02-15T10:00:00Z',
-    updated_at: '2024-09-10T14:00:00Z',
-  },
-  {
-    id: 'tech_03',
-    organization_id: 'org_01',
-    user_id: null,
-    full_name: 'Amy Rodriguez',
-    phone: '+15558889999',
-    email: 'amy.rodriguez@email.com',
-    specializations: ['Cooling', 'Maintenance'],
-    is_active: true,
-    created_at: '2024-04-01T11:00:00Z',
-    updated_at: '2024-08-25T09:00:00Z',
-  },
-];
-
-// ============= Schedules =============
-
-const today = new Date();
-const tomorrow = new Date(today);
-tomorrow.setDate(tomorrow.getDate() + 1);
-
-export const mockSchedules: OnCallSchedule[] = [
-  {
-    id: 'schedule_01',
-    organization_id: 'org_01',
-    technician_id: 'tech_01',
-    start_datetime: new Date(today.setHours(17, 0, 0, 0)).toISOString(),
-    end_datetime: new Date(tomorrow.setHours(8, 0, 0, 0)).toISOString(),
-    is_primary: true,
-    notes: 'Primary on-call tonight',
-    created_at: '2024-12-15T10:00:00Z',
-    updated_at: '2024-12-15T10:00:00Z',
-  },
-  {
-    id: 'schedule_02',
-    organization_id: 'org_01',
-    technician_id: 'tech_02',
-    start_datetime: new Date(today.setHours(17, 0, 0, 0)).toISOString(),
-    end_datetime: new Date(tomorrow.setHours(8, 0, 0, 0)).toISOString(),
-    is_primary: false,
-    notes: 'Backup if James unavailable',
-    created_at: '2024-12-15T10:00:00Z',
-    updated_at: '2024-12-15T10:00:00Z',
-  },
-];
-
 // ============= Calls =============
 
 const callTimes = [
@@ -201,7 +126,7 @@ export const mockCalls: Call[] = [
     outcome: 'booked',
     duration_seconds: 245,
     recording_url: 'https://api.twilio.com/recordings/RE123',
-    summary: 'Complete heating failure. Technician James Wilson scheduled for tomorrow morning.',
+    summary: 'Heating issue. Appointment scheduled for tomorrow morning.',
     started_at: callTimes[0].toISOString(),
     ended_at: new Date(callTimes[0].getTime() + 245000).toISOString(),
     created_at: callTimes[0].toISOString(),
@@ -252,7 +177,7 @@ export const mockCalls: Call[] = [
     outcome: 'booked',
     duration_seconds: 312,
     recording_url: 'https://api.twilio.com/recordings/RE126',
-    summary: 'Furnace inspection requested. Technician Roberto Martinez scheduled.',
+    summary: 'Furnace inspection requested. Appointment scheduled.',
     started_at: callTimes[3].toISOString(),
     ended_at: new Date(callTimes[3].getTime() + 312000).toISOString(),
     created_at: callTimes[3].toISOString(),
@@ -313,25 +238,16 @@ export const mockCallEvents: CallEvent[] = [
     event_type: 'appointment_booked',
     event_data: { appointment_date: 'tomorrow_morning' },
     ai_prompt: 'Schedule appointment for heating issue.',
-    ai_response: 'I\'ve scheduled our technician James to come by tomorrow morning between 8-10am. He\'ll give you a call when he\'s on his way. Can I confirm your address?',
+    ai_response: 'I\'ve scheduled an appointment for tomorrow morning between 8-10am. You\'ll receive a confirmation call when someone is on their way. Can I confirm your address?',
     created_at: new Date(callTimes[0].getTime() + 120000).toISOString(),
   },
   {
     id: 'event_05',
     call_id: 'call_01',
-    event_type: 'dispatched',
-    event_data: { technician_id: 'tech_01', scheduled_for: 'tomorrow_morning' },
-    ai_prompt: null,
-    ai_response: 'James Wilson has been scheduled for tomorrow morning. He will call you when he\'s on his way. Is there anything else I can help you with?',
-    created_at: new Date(callTimes[0].getTime() + 180000).toISOString(),
-  },
-  {
-    id: 'event_06',
-    call_id: 'call_01',
     event_type: 'completed',
     event_data: { duration: 245, outcome: 'booked' },
     ai_prompt: null,
-    ai_response: 'Thank you for calling Comfort Zone HVAC. James is scheduled for tomorrow morning. Have a great evening!',
+    ai_response: 'Thank you for calling Comfort Zone HVAC. Your appointment is scheduled for tomorrow morning. Have a great evening!',
     created_at: new Date(callTimes[0].getTime() + 240000).toISOString(),
   },
 ];
@@ -379,7 +295,7 @@ export const mockCallTranscripts: CallTranscript[] = [
     id: 'trans_05',
     call_id: 'call_01',
     speaker: 'ai',
-    content: 'I understand. I\'ve scheduled our technician James to come by tomorrow morning between 8-10am. He\'ll give you a call when he\'s on his way. Can I confirm your address?',
+    content: 'I understand. I\'ve scheduled an appointment for tomorrow morning between 8-10am. You\'ll get a confirmation call when someone is on the way. Can I confirm your address?',
     confidence: 1.0,
     timestamp_ms: 35000,
     created_at: new Date(callTimes[0].getTime() + 35000).toISOString(),
@@ -397,7 +313,7 @@ export const mockCallTranscripts: CallTranscript[] = [
     id: 'trans_07',
     call_id: 'call_01',
     speaker: 'ai',
-    content: 'Perfect, 1847 Oak Street. James Wilson has been scheduled for tomorrow morning between 8-10am. He will call you when he\'s on his way. Is there anything else I can help you with?',
+    content: 'Perfect, 1847 Oak Street. Your appointment is scheduled for tomorrow morning between 8-10am. You will get a call when someone is on their way. Is there anything else I can help you with?',
     confidence: 1.0,
     timestamp_ms: 55000,
     created_at: new Date(callTimes[0].getTime() + 55000).toISOString(),
@@ -415,7 +331,7 @@ export const mockCallTranscripts: CallTranscript[] = [
     id: 'trans_09',
     call_id: 'call_01',
     speaker: 'ai',
-    content: 'Thank you for calling Comfort Zone HVAC. James is scheduled for tomorrow morning. Have a great evening!',
+    content: 'Thank you for calling Comfort Zone HVAC. Your appointment is scheduled for tomorrow morning. Have a great evening!',
     confidence: 1.0,
     timestamp_ms: 75000,
     created_at: new Date(callTimes[0].getTime() + 75000).toISOString(),
@@ -432,14 +348,6 @@ export const mockCallWithDetails: CallWithDetails = {
   appointment: undefined,
 };
 
-// ============= Technicians With Schedules =============
-
-export const mockTechniciansWithSchedules: TechnicianWithSchedule[] = mockTechnicians.map(tech => ({
-  ...tech,
-  schedules: mockSchedules.filter(s => s.technician_id === tech.id),
-  user: mockUsers.find(u => u.id === tech.user_id),
-}));
-
 // ============= Appointments =============
 
 export const mockAppointments: Appointment[] = [
@@ -447,7 +355,6 @@ export const mockAppointments: Appointment[] = [
     id: 'apt_01',
     organization_id: 'org_01',
     call_id: 'call_02',
-    technician_id: 'tech_03',
     customer_name: 'Lisa Park',
     customer_phone: '+15558882222',
     customer_address: '2456 Maple Avenue',
@@ -463,7 +370,6 @@ export const mockAppointments: Appointment[] = [
     id: 'apt_02',
     organization_id: 'org_01',
     call_id: 'call_05',
-    technician_id: 'tech_01',
     customer_name: 'Jennifer Adams',
     customer_phone: '+15555555555',
     customer_address: '789 Pine Street',
@@ -498,13 +404,14 @@ export const mockSubscription: Subscription = {
 export const mockDashboardStats: DashboardStats = {
   total_calls_today: 12,
   total_calls_week: 47,
-  total_calls_month: 186,
+  total_calls_month: 156,
   appointments_booked_today: 4,
-  technicians_dispatched_today: 2,
-  average_call_duration: 178,
+  average_call_duration: 187,
   answer_rate: 98.5,
-  revenue_captured_estimate: 2450,
+  revenue_captured_estimate: 4750,
 };
+
+// ============= Calls by Hour =============
 
 export const mockCallsByHour: CallsByHour[] = [
   { hour: 17, count: 3 },
@@ -512,65 +419,52 @@ export const mockCallsByHour: CallsByHour[] = [
   { hour: 19, count: 4 },
   { hour: 20, count: 6 },
   { hour: 21, count: 8 },
-  { hour: 22, count: 5 },
-  { hour: 23, count: 3 },
-  { hour: 0, count: 2 },
-  { hour: 1, count: 1 },
-  { hour: 2, count: 1 },
-  { hour: 3, count: 0 },
-  { hour: 4, count: 1 },
-  { hour: 5, count: 2 },
-  { hour: 6, count: 3 },
+  { hour: 22, count: 4 },
+  { hour: 23, count: 2 },
+  { hour: 0, count: 1 },
+  { hour: 1, count: 0 },
+  { hour: 5, count: 1 },
+  { hour: 6, count: 2 },
   { hour: 7, count: 3 },
 ];
 
+// ============= Calls by Outcome =============
+
 export const mockCallsByOutcome: CallsByOutcome[] = [
-  { outcome: 'booked', count: 36, percentage: 77 },
-  { outcome: 'callback_requested', count: 8, percentage: 17 },
-  { outcome: 'escalated', count: 2, percentage: 4 },
-  { outcome: 'no_action', count: 1, percentage: 2 },
+  { outcome: 'booked', count: 28, percentage: 59.6 },
+  { outcome: 'callback_requested', count: 8, percentage: 17.0 },
+  { outcome: 'information_provided', count: 6, percentage: 12.8 },
+  { outcome: 'no_action', count: 3, percentage: 6.4 },
+  { outcome: 'voicemail', count: 2, percentage: 4.3 },
 ];
 
-// ============= Audit Logs =============
+// ============= Audit Log =============
 
 export const mockAuditLogs: AuditLog[] = [
   {
     id: 'audit_01',
     organization_id: 'org_01',
     user_id: 'user_01',
-    action: 'call.completed',
-    resource_type: 'call',
-    resource_id: 'call_01',
-    old_value: null,
-    new_value: { outcome: 'dispatched', technician_id: 'tech_01' },
-    ip_address: null,
-    user_agent: null,
-    created_at: callTimes[0].toISOString(),
-  },
-  {
-    id: 'audit_02',
-    organization_id: 'org_01',
-    user_id: 'user_01',
-    action: 'technician.dispatched',
-    resource_type: 'technician',
-    resource_id: 'tech_01',
-    old_value: null,
-    new_value: { call_id: 'call_01', dispatched_at: callTimes[0].toISOString() },
-    ip_address: null,
-    user_agent: null,
-    created_at: callTimes[0].toISOString(),
-  },
-  {
-    id: 'audit_03',
-    organization_id: 'org_01',
-    user_id: 'user_02',
     action: 'appointment.created',
     resource_type: 'appointment',
     resource_id: 'apt_01',
     old_value: null,
-    new_value: { customer_name: 'Lisa Park', scheduled_start: mockAppointments[0].scheduled_start },
+    new_value: { customer_name: 'Lisa Park', scheduled_start: '2024-12-21T10:00:00Z' },
     ip_address: '192.168.1.100',
-    user_agent: 'Mozilla/5.0...',
+    user_agent: 'Mozilla/5.0',
     created_at: callTimes[1].toISOString(),
+  },
+  {
+    id: 'audit_02',
+    organization_id: 'org_01',
+    user_id: null,
+    action: 'call.completed',
+    resource_type: 'call',
+    resource_id: 'call_01',
+    old_value: { status: 'active' },
+    new_value: { status: 'completed', outcome: 'booked' },
+    ip_address: null,
+    user_agent: null,
+    created_at: callTimes[0].toISOString(),
   },
 ];
