@@ -24,17 +24,17 @@ const features = [
   {
     icon: Settings,
     title: "Business Rules Engine",
-    description: "Define pricing, duration, emergency protocols, and scheduling constraints for each service you offer.",
+    description: "Define pricing, duration, and scheduling constraints for each service you offer.",
   },
   {
     icon: Bell,
     title: "Instant Notifications",
-    description: "Get emergency alerts, daily summaries, and call transcripts delivered to your phone or email.",
+    description: "Get daily summaries, new booking alerts, and call transcripts delivered to your phone or email.",
   },
   {
     icon: Zap,
-    title: "Emergency Detection",
-    description: "AI identifies urgent vs. routine requests and escalates appropriately based on your protocols.",
+    title: "Smart Prioritization",
+    description: "AI categorizes requests and routes them appropriately based on your business rules.",
   },
   {
     icon: BarChart3,

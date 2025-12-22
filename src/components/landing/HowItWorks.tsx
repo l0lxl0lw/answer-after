@@ -24,7 +24,7 @@ const steps = [
     icon: BellRing,
     step: "04",
     title: "You're Notified",
-    description: "Receive instant alerts for emergencies and daily summaries of all appointments.",
+    description: "Receive instant alerts for new bookings and daily summaries of all appointments.",
   },
 ];
 

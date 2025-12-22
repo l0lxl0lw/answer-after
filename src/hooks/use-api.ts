@@ -131,12 +131,9 @@ export function useCalls(params?: CallListParams) {
         throw error;
       }
       
-      // Apply client-side filtering for emergency and outcome since Twilio doesn't have these
+      // Apply client-side filtering for outcome since Twilio doesn't have these
       let calls = data?.calls || [];
       
-      if (params?.is_emergency !== undefined) {
-        calls = calls.filter((c: any) => c.is_emergency === params.is_emergency);
-      }
       if (params?.outcome) {
         calls = calls.filter((c: any) => c.outcome === params.outcome);
       }
@@ -287,7 +284,6 @@ export function useCreateAppointment() {
           issue_description: data.issue_description,
           scheduled_start: data.scheduled_start,
           scheduled_end: data.scheduled_end,
-          is_emergency: data.is_emergency || false,
           notes: data.notes || null,
         })
         .select()

@@ -6,7 +6,6 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Phone,
   PhoneIncoming,
-  AlertTriangle,
   Clock,
   Search,
   Filter,
@@ -45,10 +44,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 // Get badge variant based on outcome
-function getOutcomeBadge(outcome: string | null, isEmergency: boolean) {
-  if (isEmergency) {
-    return { variant: "destructive" as const, label: "Emergency" };
-  }
+function getOutcomeBadge(outcome: string | null) {
   switch (outcome) {
     case "booked":
       return { variant: "default" as const, label: "Booked" };
@@ -84,7 +80,7 @@ function getStatusColor(status: string): string {
 
 // Call Row Component
 function CallRow({ call }: { call: Call }) {
-  const badge = getOutcomeBadge(call.outcome, call.is_emergency);
+  const badge = getOutcomeBadge(call.outcome);
 
   return (
     <Link
@@ -92,17 +88,8 @@ function CallRow({ call }: { call: Call }) {
       className="flex items-center justify-between p-4 rounded-xl bg-card border border-border hover:border-primary/30 hover:shadow-md transition-all group"
     >
       <div className="flex items-center gap-4 flex-1 min-w-0">
-        <div
-          className={cn(
-            "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
-            call.is_emergency ? "bg-destructive/10" : "bg-primary/10"
-          )}
-        >
-          {call.is_emergency ? (
-            <AlertTriangle className="w-6 h-6 text-destructive" />
-          ) : (
-            <PhoneIncoming className="w-6 h-6 text-primary" />
-          )}
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-primary/10">
+          <PhoneIncoming className="w-6 h-6 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -147,7 +134,6 @@ function CallRow({ call }: { call: Call }) {
 export default function CallHistory() {
   const [search, setSearch] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
-  const [emergencyFilter, setEmergencyFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{
     from: Date | undefined;
     to: Date | undefined;
@@ -156,17 +142,15 @@ export default function CallHistory() {
   const { data, isLoading } = useCalls({
     search: search || undefined,
     outcome: outcomeFilter !== "all" ? outcomeFilter : undefined,
-    is_emergency: emergencyFilter === "emergency" ? true : emergencyFilter === "non-emergency" ? false : undefined,
     start_date: dateRange.from?.toISOString(),
     end_date: dateRange.to?.toISOString(),
   });
 
-  const hasFilters = search || outcomeFilter !== "all" || emergencyFilter !== "all" || dateRange.from || dateRange.to;
+  const hasFilters = search || outcomeFilter !== "all" || dateRange.from || dateRange.to;
 
   const clearFilters = () => {
     setSearch("");
     setOutcomeFilter("all");
-    setEmergencyFilter("all");
     setDateRange({ from: undefined, to: undefined });
   };
 
@@ -214,23 +198,12 @@ export default function CallHistory() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Outcomes</SelectItem>
-                    <SelectItem value="dispatched">Dispatched</SelectItem>
                     <SelectItem value="booked">Booked</SelectItem>
-                    <SelectItem value="message_taken">Message Taken</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="abandoned">Abandoned</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Emergency Filter */}
-                <Select value={emergencyFilter} onValueChange={setEmergencyFilter}>
-                  <SelectTrigger className="w-full lg:w-[160px]">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="emergency">Emergency Only</SelectItem>
-                    <SelectItem value="non-emergency">Non-Emergency</SelectItem>
+                    <SelectItem value="callback_requested">Callback Requested</SelectItem>
+                    <SelectItem value="information_provided">Info Provided</SelectItem>
+                    <SelectItem value="escalated">Escalated</SelectItem>
+                    <SelectItem value="no_action">No Action</SelectItem>
+                    <SelectItem value="voicemail">Voicemail</SelectItem>
                   </SelectContent>
                 </Select>
 
