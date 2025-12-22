@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Calendar, CheckCircle2, Shield, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
@@ -172,17 +171,17 @@ export default function CalendarCallback() {
           <>
             <div>
               <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">
-                Select Your Dispatch Calendar
+                Select Your Calendar
               </h1>
               <p className="text-muted-foreground">
-                Choose the calendar AnswerAfter will use for emergency scheduling.
+                Choose the calendar AnswerAfter will use for appointment scheduling.
               </p>
             </div>
 
             <Alert>
               <Shield className="h-4 w-4" />
               <AlertDescription>
-                <strong>You control your calendar.</strong> AnswerAfter only reads availability and creates emergency appointments on your selected calendar. We never access other calendars or modify existing events.
+                <strong>You control your calendar.</strong> AnswerAfter only reads availability and creates appointments on your selected calendar. We never access other calendars or modify existing events.
               </AlertDescription>
             </Alert>
 
@@ -190,11 +189,10 @@ export default function CalendarCallback() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-primary" />
-                  Designate Your Dispatch Calendar
+                  Select Your Appointment Calendar
                 </CardTitle>
                 <CardDescription>
-                  This calendar becomes the single source of truth for after-hours scheduling. 
-                  Examples: "After-Hours Dispatch", "On-Call Tech", "Emergency Calls"
+                  This calendar becomes the source for scheduling appointments booked through AnswerAfter.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -250,7 +248,7 @@ export default function CalendarCallback() {
                     <p><strong>What AnswerAfter can do:</strong></p>
                     <ul className="list-disc list-inside space-y-1 pl-2">
                       <li>Read availability on this calendar</li>
-                      <li>Create emergency dispatch events</li>
+                      <li>Create appointment events</li>
                       <li>Update events that AnswerAfter created</li>
                     </ul>
                     <p className="mt-3"><strong>What AnswerAfter cannot do:</strong></p>
@@ -296,10 +294,10 @@ export default function CalendarCallback() {
                 <div className="text-center">
                   <h2 className="text-xl font-semibold mb-2">Calendar Connected!</h2>
                   <p className="text-muted-foreground">
-                    "{selectedCalendarInfo?.summary}" is now your dispatch calendar
+                    "{selectedCalendarInfo?.summary}" is now your appointment calendar
                   </p>
                 </div>
-                <p className="text-sm text-muted-foreground">Redirecting to schedules...</p>
+                <p className="text-sm text-muted-foreground">Redirecting to schedule...</p>
               </div>
             </CardContent>
           </Card>
