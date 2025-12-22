@@ -526,12 +526,12 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
-              {/* Emergency Keywords */}
+              {/* Call Forwarding Keywords */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Emergency Keywords</CardTitle>
+                  <CardTitle>Call Forwarding Keywords</CardTitle>
                   <CardDescription>
-                    Words that trigger emergency handling for incoming calls
+                    When callers say these words, the AI Agent will transfer the call to your notification phone number
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -539,7 +539,7 @@ export default function Settings() {
                     <Input
                       value={newKeyword}
                       onChange={(e) => setNewKeyword(e.target.value)}
-                      placeholder="Add new keyword..."
+                      placeholder="e.g., emergency, urgent, speak to someone..."
                       onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
                     />
                     <Button onClick={handleAddKeyword} size="icon">
