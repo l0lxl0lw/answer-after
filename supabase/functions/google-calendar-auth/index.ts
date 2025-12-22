@@ -24,7 +24,8 @@ serve(async (req) => {
   }
 
   try {
-    const { action, redirectUrl, code, organizationId, selectedCalendar } = await req.json();
+    const body = await req.json();
+    const { action, redirectUrl, code, organizationId, accessToken, refreshToken, expiresIn, email, calendarId } = body;
 
     // Create supabase client with service role for database operations
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -103,9 +104,6 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-
-        // Get the user's access token from temporary storage or pass it directly
-        const { accessToken } = await req.json().catch(() => ({}));
         
         if (!accessToken) {
           return new Response(JSON.stringify({ error: "Access token required" }), {
@@ -142,9 +140,8 @@ serve(async (req) => {
 
       case "save-connection": {
         // Save the calendar connection to database
-        const { accessToken, refreshToken, expiresIn, email, calendarId } = await req.json().catch(() => ({}));
-        
         if (!organizationId || !accessToken || !refreshToken || !calendarId) {
+          console.error("Missing fields:", { organizationId: !!organizationId, accessToken: !!accessToken, refreshToken: !!refreshToken, calendarId: !!calendarId });
           return new Response(JSON.stringify({ error: "Missing required fields" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -183,9 +180,7 @@ serve(async (req) => {
 
       case "refresh-token": {
         // Refresh an expired access token
-        const { refreshToken: storedRefreshToken } = await req.json().catch(() => ({}));
-        
-        if (!storedRefreshToken) {
+        if (!refreshToken) {
           return new Response(JSON.stringify({ error: "Refresh token required" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -198,7 +193,7 @@ serve(async (req) => {
           body: new URLSearchParams({
             client_id: GOOGLE_CLIENT_ID,
             client_secret: GOOGLE_CLIENT_SECRET,
-            refresh_token: storedRefreshToken,
+            refresh_token: refreshToken,
             grant_type: "refresh_token",
           }),
         });
