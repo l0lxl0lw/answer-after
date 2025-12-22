@@ -7,13 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
 import { useToast } from "@/hooks/use-toast";
 
 export default function CalendarOnboarding() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState(false);
 
@@ -71,14 +69,14 @@ export default function CalendarOnboarding() {
 
   // Connected state
   if (connection) {
-    const dispatchCalendar = connection.selected_calendars?.[0] || "No calendar selected";
+    const selectedCalendar = connection.selected_calendars?.[0] || "No calendar selected";
     
     return (
       <DashboardLayout>
         <div className="max-w-2xl mx-auto space-y-6">
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Calendar Connected</h1>
-            <p className="text-muted-foreground">Your dispatch calendar is linked to AnswerAfter</p>
+            <p className="text-muted-foreground">Your calendar is linked to AnswerAfter</p>
           </motion.div>
 
           <Card>
@@ -96,13 +94,13 @@ export default function CalendarOnboarding() {
               </div>
 
               <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Dispatch Calendar</p>
-                <p className="font-medium">{dispatchCalendar}</p>
+                <p className="text-sm text-muted-foreground mb-1">Selected Calendar</p>
+                <p className="font-medium">{selectedCalendar}</p>
               </div>
 
               <div className="flex gap-3">
                 <Button onClick={() => navigate("/dashboard/schedules")} className="flex-1">
-                  View Schedules <ArrowRight className="w-4 h-4 ml-2" />
+                  View Schedule <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
                 <Button variant="outline" onClick={handleDisconnect}>
                   Disconnect
@@ -119,16 +117,16 @@ export default function CalendarOnboarding() {
     <DashboardLayout>
       <div className="max-w-2xl mx-auto space-y-6">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Connect Your Dispatch Calendar</h1>
+          <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Connect Your Calendar</h1>
           <p className="text-muted-foreground">
-            Link your Google Calendar so AnswerAfter can schedule emergency dispatch appointments
+            Link your Google Calendar so AnswerAfter can schedule appointments for you
           </p>
         </motion.div>
 
         <Alert className="border-primary/20 bg-primary/5">
           <Shield className="h-4 w-4 text-primary" />
           <AlertDescription className="text-foreground">
-            <strong>You control your calendar.</strong> AnswerAfter uses secure, minimal access to schedule after-hours emergencies only. We never access personal calendars or modify your existing events.
+            <strong>You control your calendar.</strong> AnswerAfter uses secure, minimal access to schedule appointments. We never access personal calendars or modify your existing events.
           </AlertDescription>
         </Alert>
 
@@ -139,7 +137,7 @@ export default function CalendarOnboarding() {
               Google Calendar Integration
             </CardTitle>
             <CardDescription>
-              Connect a designated dispatch calendar for emergency scheduling. AnswerAfter will only read availability and create appointments on your selected calendar.
+              Connect your calendar for appointment scheduling. AnswerAfter will only read availability and create appointments on your selected calendar.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -160,9 +158,9 @@ export default function CalendarOnboarding() {
                   <Calendar className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium">Select Your Dispatch Calendar</p>
+                  <p className="font-medium">Select Your Calendar</p>
                   <p className="text-sm text-muted-foreground">
-                    Choose one calendar for emergency scheduling (e.g., "After-Hours Dispatch", "On-Call Tech")
+                    Choose one calendar for appointment scheduling
                   </p>
                 </div>
               </div>
@@ -173,7 +171,7 @@ export default function CalendarOnboarding() {
                 <div>
                   <p className="font-medium">Limited Access</p>
                   <p className="text-sm text-muted-foreground">
-                    AnswerAfter can only read availability and create emergency appointments. No access to other calendars.
+                    AnswerAfter can only read availability and create appointments. No access to other calendars.
                   </p>
                 </div>
               </div>
@@ -182,8 +180,8 @@ export default function CalendarOnboarding() {
             <div className="p-4 bg-muted/30 rounded-lg text-sm space-y-2">
               <p className="font-medium">What AnswerAfter can do:</p>
               <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                <li>Read availability on your dispatch calendar</li>
-                <li>Create emergency dispatch events</li>
+                <li>Read availability on your calendar</li>
+                <li>Create appointment events</li>
                 <li>Update events that AnswerAfter created</li>
               </ul>
               <p className="font-medium mt-3">What AnswerAfter cannot do:</p>
