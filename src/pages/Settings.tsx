@@ -27,6 +27,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrganization, usePhoneNumbers, useSubscription } from '@/hooks/use-api';
+import { useGoogleCalendarConnection } from '@/hooks/useGoogleCalendarConnection';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,6 +37,7 @@ export default function Settings() {
   const { data: organization, isLoading: orgLoading } = useOrganization();
   const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
+  const { data: calendarConnection, isLoading: calendarLoading } = useGoogleCalendarConnection();
 
   const [isAddingPhone, setIsAddingPhone] = useState(false);
   const [addPhoneOpen, setAddPhoneOpen] = useState(false);
@@ -691,29 +693,43 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
-              {/* Google Calendar Integration Placeholder */}
-              <Card className="border-dashed">
+              {/* Google Calendar Integration */}
+              <Card className={calendarConnection ? '' : 'border-dashed'}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Calendar className="h-5 w-5" />
                     Google Calendar Integration
                   </CardTitle>
                   <CardDescription>
-                    Sync your on-call schedules with Google Calendar
+                    Sync your appointments with Google Calendar
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                     <div className="space-y-1">
-                      <p className="font-medium">Connect Google Calendar</p>
+                      <p className="font-medium">
+                        {calendarConnection ? 'Google Calendar Connected' : 'Connect Google Calendar'}
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        Automatically sync technician schedules with your calendar
+                        {calendarConnection 
+                          ? `Connected as ${calendarConnection.connected_email || 'your account'}`
+                          : 'Automatically sync appointments with your calendar'
+                        }
                       </p>
                     </div>
-                    <Button variant="outline">
-                      Connect
-                      <ExternalLink className="h-4 w-4 ml-2" />
-                    </Button>
+                    {calendarConnection ? (
+                      <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-600 border-green-500/30">
+                        <Check className="h-4 w-4" />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Button variant="outline" asChild>
+                        <a href="/calendar-onboarding">
+                          Connect
+                          <ExternalLink className="h-4 w-4 ml-2" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
