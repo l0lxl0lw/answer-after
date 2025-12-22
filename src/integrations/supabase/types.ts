@@ -92,7 +92,6 @@ export type Database = {
           scheduled_end: string
           scheduled_start: string
           status: Database["public"]["Enums"]["appointment_status"]
-          technician_id: string | null
           updated_at: string
         }
         Insert: {
@@ -109,7 +108,6 @@ export type Database = {
           scheduled_end: string
           scheduled_start: string
           status?: Database["public"]["Enums"]["appointment_status"]
-          technician_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -126,7 +124,6 @@ export type Database = {
           scheduled_end?: string
           scheduled_start?: string
           status?: Database["public"]["Enums"]["appointment_status"]
-          technician_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -142,13 +139,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "appointments_technician_id_fkey"
-            columns: ["technician_id"]
-            isOneToOne: false
-            referencedRelation: "technicians"
             referencedColumns: ["id"]
           },
         ]
@@ -344,57 +334,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: true
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      on_call_schedules: {
-        Row: {
-          created_at: string
-          end_datetime: string
-          id: string
-          is_primary: boolean
-          notes: string | null
-          organization_id: string
-          start_datetime: string
-          technician_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          end_datetime: string
-          id?: string
-          is_primary?: boolean
-          notes?: string | null
-          organization_id: string
-          start_datetime: string
-          technician_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          end_datetime?: string
-          id?: string
-          is_primary?: boolean
-          notes?: string | null
-          organization_id?: string
-          start_datetime?: string
-          technician_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "on_call_schedules_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "on_call_schedules_technician_id_fkey"
-            columns: ["technician_id"]
-            isOneToOne: false
-            referencedRelation: "technicians"
             referencedColumns: ["id"]
           },
         ]
@@ -726,53 +665,6 @@ export type Database = {
             foreignKeyName: "subscriptions_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: true
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      technicians: {
-        Row: {
-          created_at: string
-          email: string | null
-          full_name: string
-          id: string
-          is_active: boolean
-          organization_id: string
-          phone: string
-          specializations: string[] | null
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          email?: string | null
-          full_name: string
-          id?: string
-          is_active?: boolean
-          organization_id: string
-          phone: string
-          specializations?: string[] | null
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          email?: string | null
-          full_name?: string
-          id?: string
-          is_active?: boolean
-          organization_id?: string
-          phone?: string
-          specializations?: string[] | null
-          updated_at?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "technicians_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
