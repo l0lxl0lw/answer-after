@@ -32,6 +32,10 @@ serve(async (req) => {
       if (body.action === 'update-agent') {
         return await handleUpdateAgent(supabase, body.organizationId, body.context);
       }
+      
+      if (body.action === 'rename-agent') {
+        return await handleRenameAgent(supabase, body.organizationId, body.name);
+      }
     }
 
     // Handle WebSocket upgrade for Twilio <-> ElevenLabs bridge
@@ -563,6 +567,91 @@ async function handleUpdateAgent(
   } catch (error) {
     console.error('Error updating ElevenLabs agent:', error);
     return new Response(JSON.stringify({ error: 'Failed to update agent' }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleRenameAgent(
+  supabase: any,
+  organizationId: string,
+  name: string
+) {
+  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+  
+  if (!ELEVENLABS_API_KEY) {
+    return new Response(JSON.stringify({ error: 'ElevenLabs API key not configured' }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  if (!organizationId || !name) {
+    return new Response(JSON.stringify({ error: 'Organization ID and name are required' }), { 
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  console.log(`Renaming ElevenLabs agent for organization: ${organizationId} to: ${name}`);
+
+  // Get existing agent record
+  const { data: agentRecord, error: agentError } = await supabase
+    .from('organization_agents')
+    .select('elevenlabs_agent_id')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  if (!agentRecord?.elevenlabs_agent_id) {
+    console.log('No existing agent found, nothing to rename');
+    return new Response(JSON.stringify({ 
+      success: true, 
+      message: 'No agent exists to rename' 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  const updateConfig = {
+    name: `${name} - ${organizationId}`
+  };
+
+  try {
+    console.log('Renaming ElevenLabs agent:', agentRecord.elevenlabs_agent_id);
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentRecord.elevenlabs_agent_id}`, {
+      method: 'PATCH',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateConfig),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ElevenLabs agent rename error:', response.status, errorText);
+      return new Response(JSON.stringify({ error: `Failed to rename agent: ${errorText}` }), { 
+        status: response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const agentData = await response.json();
+    console.log('ElevenLabs agent renamed:', agentData);
+
+    return new Response(JSON.stringify({
+      success: true,
+      agent_id: agentRecord.elevenlabs_agent_id,
+      message: 'Agent renamed successfully'
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error renaming ElevenLabs agent:', error);
+    return new Response(JSON.stringify({ error: 'Failed to rename agent' }), { 
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
