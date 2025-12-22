@@ -229,43 +229,6 @@ export const api = {
     delete: (id: string) =>
       apiClient.delete<void>(`/appointments/${id}`),
   },
-
-  // Technicians
-  technicians: {
-    list: () =>
-      apiClient.get<import('@/types/database').TechnicianWithSchedule[]>('/technicians'),
-    
-    get: (id: string) =>
-      apiClient.get<import('@/types/database').TechnicianWithSchedule>(`/technicians/${id}`),
-    
-    create: (data: import('@/types/api').CreateTechnicianRequest) =>
-      apiClient.post<import('@/types/database').Technician>('/technicians', data),
-    
-    update: (id: string, data: import('@/types/api').UpdateTechnicianRequest) =>
-      apiClient.patch<import('@/types/database').Technician>(`/technicians/${id}`, data),
-    
-    delete: (id: string) =>
-      apiClient.delete<void>(`/technicians/${id}`),
-  },
-
-  // Schedules
-  schedules: {
-    list: (params?: import('@/types/api').ScheduleListParams) =>
-      apiClient.get<import('@/types/database').OnCallSchedule[]>('/schedules', params as Record<string, string | number | boolean | undefined>),
-    
-    getCurrent: () =>
-      apiClient.get<{ primary: import('@/types/database').TechnicianWithSchedule | null; backup: import('@/types/database').TechnicianWithSchedule | null }>('/schedules/current'),
-    
-    create: (data: import('@/types/api').CreateScheduleRequest) =>
-      apiClient.post<import('@/types/database').OnCallSchedule>('/schedules', data),
-    
-    update: (id: string, data: import('@/types/api').UpdateScheduleRequest) =>
-      apiClient.patch<import('@/types/database').OnCallSchedule>(`/schedules/${id}`, data),
-    
-    delete: (id: string) =>
-      apiClient.delete<void>(`/schedules/${id}`),
-  },
-
   // Subscription
   subscription: {
     get: () =>

@@ -8,9 +8,6 @@ import type {
   PhoneNumber,
   Call,
   CallWithDetails,
-  Technician,
-  TechnicianWithSchedule,
-  OnCallSchedule,
   Appointment,
   Subscription,
   DashboardStats,
@@ -24,10 +21,6 @@ import type {
   CallListResponse,
   CreateAppointmentRequest,
   UpdateAppointmentRequest,
-  CreateTechnicianRequest,
-  UpdateTechnicianRequest,
-  CreateScheduleRequest,
-  UpdateScheduleRequest,
   DailyReportResponse,
 } from '@/types/api';
 import {
@@ -37,9 +30,6 @@ import {
   mockPhoneNumbers,
   mockCalls,
   mockCallWithDetails,
-  mockTechnicians,
-  mockTechniciansWithSchedules,
-  mockSchedules,
   mockAppointments,
   mockSubscription,
   mockDashboardStats,
@@ -240,7 +230,6 @@ export const mockApi = {
         id: 'apt_new_' + Date.now(),
         organization_id: 'org_01',
         call_id: data.call_id || null,
-        technician_id: data.technician_id || null,
         customer_name: data.customer_name,
         customer_phone: data.customer_phone,
         customer_address: data.customer_address || null,
@@ -260,87 +249,6 @@ export const mockApi = {
       const apt = mockAppointments.find(a => a.id === id);
       if (!apt) throw new Error('Appointment not found');
       return { ...apt, ...data, updated_at: new Date().toISOString() };
-    },
-  },
-
-  // ============= Technicians =============
-  technicians: {
-    async list(): Promise<TechnicianWithSchedule[]> {
-      await delay();
-      return mockTechniciansWithSchedules;
-    },
-
-    async get(id: string): Promise<TechnicianWithSchedule> {
-      await delay();
-      const tech = mockTechniciansWithSchedules.find(t => t.id === id);
-      if (!tech) throw new Error('Technician not found');
-      return tech;
-    },
-
-    async create(data: CreateTechnicianRequest): Promise<Technician> {
-      await delay();
-      const newTech: Technician = {
-        id: 'tech_new_' + Date.now(),
-        organization_id: 'org_01',
-        user_id: data.user_id || null,
-        full_name: data.full_name,
-        phone: data.phone,
-        email: data.email || null,
-        specializations: data.specializations || [],
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      return newTech;
-    },
-
-    async update(id: string, data: UpdateTechnicianRequest): Promise<Technician> {
-      await delay();
-      const tech = mockTechnicians.find(t => t.id === id);
-      if (!tech) throw new Error('Technician not found');
-      return { ...tech, ...data, updated_at: new Date().toISOString() };
-    },
-  },
-
-  // ============= Schedules =============
-  schedules: {
-    async list(): Promise<OnCallSchedule[]> {
-      await delay();
-      return mockSchedules;
-    },
-
-    async getCurrent(): Promise<{ primary: TechnicianWithSchedule | null; backup: TechnicianWithSchedule | null }> {
-      await delay();
-      const primary = mockTechniciansWithSchedules.find(t => 
-        t.schedules.some(s => s.is_primary)
-      ) || null;
-      const backup = mockTechniciansWithSchedules.find(t => 
-        t.schedules.some(s => !s.is_primary)
-      ) || null;
-      return { primary, backup };
-    },
-
-    async create(data: CreateScheduleRequest): Promise<OnCallSchedule> {
-      await delay();
-      const newSchedule: OnCallSchedule = {
-        id: 'schedule_new_' + Date.now(),
-        organization_id: 'org_01',
-        technician_id: data.technician_id,
-        start_datetime: data.start_datetime,
-        end_datetime: data.end_datetime,
-        is_primary: data.is_primary || false,
-        notes: data.notes || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      return newSchedule;
-    },
-
-    async update(id: string, data: UpdateScheduleRequest): Promise<OnCallSchedule> {
-      await delay();
-      const schedule = mockSchedules.find(s => s.id === id);
-      if (!schedule) throw new Error('Schedule not found');
-      return { ...schedule, ...data, updated_at: new Date().toISOString() };
     },
   },
 
