@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointment_reminders: {
+        Row: {
+          appointment_id: string
+          call_duration_seconds: number | null
+          created_at: string
+          id: string
+          notes: string | null
+          organization_id: string
+          reminder_number: number
+          reminder_type: string
+          response: string | null
+          scheduled_time: string
+          status: string
+          twilio_call_sid: string | null
+          updated_at: string
+        }
+        Insert: {
+          appointment_id: string
+          call_duration_seconds?: number | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id: string
+          reminder_number: number
+          reminder_type?: string
+          response?: string | null
+          scheduled_time: string
+          status?: string
+          twilio_call_sid?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string
+          call_duration_seconds?: number | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          reminder_number?: number
+          reminder_type?: string
+          response?: string | null
+          scheduled_time?: string
+          status?: string
+          twilio_call_sid?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_reminders_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointments: {
         Row: {
           call_id: string | null
@@ -497,6 +560,7 @@ export type Database = {
           has_custom_agent: boolean
           has_custom_ai_training: boolean
           has_hipaa_compliance: boolean
+          has_outbound_reminders: boolean
           has_priority_support: boolean
           has_sla_guarantee: boolean
           id: string
@@ -522,6 +586,7 @@ export type Database = {
           has_custom_agent?: boolean
           has_custom_ai_training?: boolean
           has_hipaa_compliance?: boolean
+          has_outbound_reminders?: boolean
           has_priority_support?: boolean
           has_sla_guarantee?: boolean
           id?: string
@@ -547,6 +612,7 @@ export type Database = {
           has_custom_agent?: boolean
           has_custom_ai_training?: boolean
           has_hipaa_compliance?: boolean
+          has_outbound_reminders?: boolean
           has_priority_support?: boolean
           has_sla_guarantee?: boolean
           id?: string
