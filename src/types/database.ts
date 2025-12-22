@@ -55,7 +55,6 @@ export interface Organization {
   timezone: string;
   business_hours_start: string | null; // HH:MM format
   business_hours_end: string | null;   // HH:MM format
-  emergency_keywords: string[];
   notification_email: string | null;
   notification_phone: string | null;
   created_at: string;
@@ -104,7 +103,6 @@ export interface Call {
   caller_name: string | null;
   status: CallStatus;
   outcome: CallOutcome | null;
-  is_emergency: boolean;
   duration_seconds: number | null;
   recording_url: string | null;
   summary: string | null;
@@ -172,7 +170,6 @@ export interface Appointment {
   issue_description: string;
   scheduled_start: string;
   scheduled_end: string;
-  is_emergency: boolean;
   status: AppointmentStatus;
   notes: string | null;
   created_at: string;
@@ -237,7 +234,6 @@ export interface DashboardStats {
   total_calls_today: number;
   total_calls_week: number;
   total_calls_month?: number;
-  emergency_calls_today: number;
   appointments_booked_today: number;
   technicians_dispatched_today: number;
   average_call_duration: number;
@@ -248,7 +244,6 @@ export interface DashboardStats {
 export interface CallsByHour {
   hour: number;
   count: number;
-  emergency_count: number;
 }
 
 export interface CallsByOutcome {

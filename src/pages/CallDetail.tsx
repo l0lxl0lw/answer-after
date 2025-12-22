@@ -5,7 +5,6 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Phone,
   PhoneIncoming,
-  AlertTriangle,
   Clock,
   ArrowLeft,
   Play,
@@ -46,8 +45,6 @@ function getEventIcon(eventType: string) {
       return MessageSquare;
     case "qualification":
       return FileText;
-    case "emergency_detected":
-      return AlertTriangle;
     case "non_emergency":
       return CheckCircle2;
     case "dispatched":
@@ -66,7 +63,6 @@ function getEventIcon(eventType: string) {
 // Get color for event type
 function getEventColor(eventType: string) {
   switch (eventType) {
-    case "emergency_detected":
     case "failed":
       return "text-destructive bg-destructive/10 border-destructive/20";
     case "dispatched":
@@ -258,17 +254,8 @@ export default function CallDetail() {
 
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div
-                className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center",
-                  call.is_emergency ? "bg-destructive/10" : "bg-primary/10"
-                )}
-              >
-                {call.is_emergency ? (
-                  <AlertTriangle className="w-7 h-7 text-destructive" />
-                ) : (
-                  <PhoneIncoming className="w-7 h-7 text-primary" />
-                )}
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-primary/10">
+                <PhoneIncoming className="w-7 h-7 text-primary" />
               </div>
               <div>
                 <h1 className="font-display text-2xl font-bold">
@@ -279,12 +266,6 @@ export default function CallDetail() {
             </div>
 
             <div className="flex items-center gap-3">
-              {call.is_emergency && (
-                <Badge variant="destructive" className="text-sm py-1 px-3">
-                  <AlertTriangle className="w-4 h-4 mr-1" />
-                  Emergency
-                </Badge>
-              )}
               <Badge
                 variant={call.outcome === "booked" ? "default" : "secondary"}
                 className="text-sm py-1 px-3 capitalize"

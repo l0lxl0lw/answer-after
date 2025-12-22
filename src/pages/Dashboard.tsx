@@ -5,7 +5,6 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Phone,
   PhoneIncoming,
-  AlertTriangle,
   Calendar,
   Clock,
   DollarSign,
@@ -33,10 +32,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 // Get badge variant based on outcome
-function getOutcomeBadge(outcome: string | null, isEmergency: boolean) {
-  if (isEmergency) {
-    return { variant: "destructive" as const, label: "Emergency" };
-  }
+function getOutcomeBadge(outcome: string | null) {
   switch (outcome) {
     case "dispatched":
       return { variant: "default" as const, label: "Dispatched" };
@@ -185,7 +181,7 @@ function OnCallStatusCard() {
 
 // Recent Call Item
 function RecentCallItem({ call }: { call: Call }) {
-  const badge = getOutcomeBadge(call.outcome, call.is_emergency);
+  const badge = getOutcomeBadge(call.outcome);
   const timeAgo = formatDistanceToNow(new Date(call.started_at), { addSuffix: true });
 
   return (
@@ -194,18 +190,8 @@ function RecentCallItem({ call }: { call: Call }) {
       className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group"
     >
       <div className="flex items-center gap-4">
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center ${
-            call.is_emergency
-              ? "bg-destructive/10"
-              : "bg-primary/10"
-          }`}
-        >
-          {call.is_emergency ? (
-            <AlertTriangle className="w-5 h-5 text-destructive" />
-          ) : (
-            <PhoneIncoming className="w-5 h-5 text-primary" />
-          )}
+        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/10">
+          <PhoneIncoming className="w-5 h-5 text-primary" />
         </div>
         <div>
           <p className="font-medium group-hover:text-primary transition-colors">
@@ -253,7 +239,7 @@ const Dashboard = () => {
         </motion.div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           {[
             {
               title: "Total Calls Today",
@@ -261,13 +247,6 @@ const Dashboard = () => {
               icon: Phone,
               description: `${stats?.total_calls_week ?? 0} this week`,
               trend: { value: "+12%", up: true },
-            },
-            {
-              title: "Emergencies",
-              value: stats?.emergency_calls_today ?? 0,
-              icon: AlertTriangle,
-              description: "Handled today",
-              trend: undefined,
             },
             {
               title: "Appointments",
@@ -371,11 +350,6 @@ const Dashboard = () => {
                       >
                         <div className="flex items-start justify-between mb-1">
                           <p className="font-medium text-sm">{apt.customer_name}</p>
-                          {apt.is_emergency && (
-                            <Badge variant="destructive" className="text-xs">
-                              Emergency
-                            </Badge>
-                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mb-2 line-clamp-1">
                           {apt.issue_description}

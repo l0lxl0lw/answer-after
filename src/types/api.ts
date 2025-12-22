@@ -102,7 +102,6 @@ export interface UpdateOrganizationRequest {
   timezone?: string;
   business_hours_start?: string;
   business_hours_end?: string;
-  emergency_keywords?: string[];
   notification_email?: string;
   notification_phone?: string;
 }
@@ -153,7 +152,6 @@ export interface AvailablePhoneNumber {
 export interface CallListParams extends PaginationParams, DateRangeParams {
   status?: string;
   outcome?: string;
-  is_emergency?: boolean;
   phone_number_id?: string;
   search?: string;
 }
@@ -193,7 +191,6 @@ export interface CreateAppointmentRequest {
   issue_description: string;
   scheduled_start: string;
   scheduled_end: string;
-  is_emergency?: boolean;
   notes?: string;
 }
 

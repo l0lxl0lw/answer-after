@@ -9,11 +9,11 @@ import {
 const faqs = [
   {
     question: "How does the AI handle different types of service requests?",
-    answer: "Our AI is trained to understand context and intent across various service industries. You configure business rules that define how different services should be handled — including pricing, duration, availability windows, and emergency protocols. The AI follows these rules to provide accurate information and schedule appropriately.",
+    answer: "Our AI is trained to understand context and intent across various service industries. You configure business rules that define how different services should be handled — including pricing, duration, and availability windows. The AI follows these rules to provide accurate information and schedule appropriately.",
   },
   {
     question: "What happens if the AI can't handle a call?",
-    answer: "When the AI encounters a situation outside its configured parameters (like an unusual request or an angry customer), it gracefully escalates according to your settings. This can include taking a message, transferring to an on-call staff member, or sending you an immediate emergency notification.",
+    answer: "When the AI encounters a situation outside its configured parameters (like an unusual request or a complex question), it gracefully escalates according to your settings. This can include taking a message, transferring to an on-call staff member, or sending you an immediate notification.",
   },
   {
     question: "How long does it take to set up?",

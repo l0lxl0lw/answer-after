@@ -8,7 +8,6 @@ import {
   MapPin,
   Phone,
   User,
-  AlertTriangle,
   Plus,
   Search,
   Filter,
@@ -193,11 +192,8 @@ export default function Appointments() {
                                   <User className="w-4 h-4 text-primary" />
                                 </div>
                                 <div>
-                                  <p className="font-medium flex items-center gap-2">
+                                  <p className="font-medium">
                                     {apt.customer_name}
-                                    {apt.is_emergency && (
-                                      <AlertTriangle className="w-4 h-4 text-destructive" />
-                                    )}
                                   </p>
                                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                                     <Phone className="w-3 h-3" />

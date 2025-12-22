@@ -184,9 +184,6 @@ export const mockApi = {
       await delay();
       let filtered = [...mockCalls];
       
-      if (params?.is_emergency !== undefined) {
-        filtered = filtered.filter(c => c.is_emergency === params.is_emergency);
-      }
       if (params?.outcome) {
         filtered = filtered.filter(c => c.outcome === params.outcome);
       }
@@ -250,7 +247,6 @@ export const mockApi = {
         issue_description: data.issue_description,
         scheduled_start: data.scheduled_start,
         scheduled_end: data.scheduled_end,
-        is_emergency: data.is_emergency || false,
         status: 'scheduled',
         notes: data.notes || null,
         created_at: new Date().toISOString(),
@@ -392,7 +388,7 @@ export const mockApi = {
           { issue: 'Thermostat issues', count: 3 },
           { issue: 'Gas smell', count: 2 },
         ],
-        notable_calls: mockCalls.filter(c => c.is_emergency),
+        notable_calls: mockCalls.filter(c => c.outcome === 'booked'),
       };
     },
   },
