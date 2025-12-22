@@ -10,9 +10,6 @@ import type {
   CallWithDetails,
   CallEvent,
   Appointment,
-  Technician,
-  TechnicianWithSchedule,
-  OnCallSchedule,
   Subscription,
   SubscriptionPlan,
   DashboardStats,
@@ -184,7 +181,6 @@ export interface TwilioStatusCallback {
 
 export interface CreateAppointmentRequest {
   call_id?: string;
-  technician_id?: string;
   customer_name: string;
   customer_phone: string;
   customer_address?: string;
@@ -195,7 +191,6 @@ export interface CreateAppointmentRequest {
 }
 
 export interface UpdateAppointmentRequest {
-  technician_id?: string;
   customer_name?: string;
   customer_phone?: string;
   customer_address?: string;
@@ -207,47 +202,7 @@ export interface UpdateAppointmentRequest {
 }
 
 export interface AppointmentListParams extends PaginationParams, DateRangeParams {
-  technician_id?: string;
   status?: string;
-}
-
-// ============= Technician Endpoints =============
-
-export interface CreateTechnicianRequest {
-  full_name: string;
-  phone: string;
-  email?: string;
-  specializations?: string[];
-  user_id?: string;
-}
-
-export interface UpdateTechnicianRequest {
-  full_name?: string;
-  phone?: string;
-  email?: string;
-  specializations?: string[];
-  is_active?: boolean;
-}
-
-// ============= Schedule Endpoints =============
-
-export interface CreateScheduleRequest {
-  technician_id: string;
-  start_datetime: string;
-  end_datetime: string;
-  is_primary?: boolean;
-  notes?: string;
-}
-
-export interface UpdateScheduleRequest {
-  start_datetime?: string;
-  end_datetime?: string;
-  is_primary?: boolean;
-  notes?: string;
-}
-
-export interface ScheduleListParams extends DateRangeParams {
-  technician_id?: string;
 }
 
 // ============= Subscription Endpoints =============
@@ -354,20 +309,6 @@ export interface ApiEndpoints {
   'POST /appointments': { request: CreateAppointmentRequest; response: Appointment };
   'PATCH /appointments/:id': { request: UpdateAppointmentRequest; response: Appointment };
   'DELETE /appointments/:id': { request: void; response: void };
-  
-  // Technicians
-  'GET /technicians': { request: void; response: TechnicianWithSchedule[] };
-  'GET /technicians/:id': { request: void; response: TechnicianWithSchedule };
-  'POST /technicians': { request: CreateTechnicianRequest; response: Technician };
-  'PATCH /technicians/:id': { request: UpdateTechnicianRequest; response: Technician };
-  'DELETE /technicians/:id': { request: void; response: void };
-  
-  // Schedules
-  'GET /schedules': { request: ScheduleListParams; response: OnCallSchedule[] };
-  'POST /schedules': { request: CreateScheduleRequest; response: OnCallSchedule };
-  'PATCH /schedules/:id': { request: UpdateScheduleRequest; response: OnCallSchedule };
-  'DELETE /schedules/:id': { request: void; response: void };
-  'GET /schedules/current': { request: void; response: { primary: TechnicianWithSchedule | null; backup: TechnicianWithSchedule | null } };
   
   // Subscription
   'GET /subscription': { request: void; response: Subscription | null };

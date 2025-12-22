@@ -10,7 +10,6 @@ import {
   DollarSign,
   ArrowUpRight,
   User,
-  Users,
   CheckCircle2,
   Loader2,
 } from "lucide-react";
@@ -18,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardStats, useRecentCalls, useCurrentOnCall, useAppointments } from "@/hooks/use-api";
+import { useDashboardStats, useRecentCalls, useAppointments } from "@/hooks/use-api";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import type { Call } from "@/types/database";
@@ -97,87 +96,6 @@ function StatCard({
   );
 }
 
-// On-Call Status Card
-function OnCallStatusCard() {
-  const { data: onCall, isLoading } = useCurrentOnCall();
-
-  return (
-    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-      <CardHeader className="pb-3">
-        <CardTitle className="font-display text-lg flex items-center gap-2">
-          <Users className="w-5 h-5 text-primary" />
-          On-Call Status
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ) : (
-          <>
-            {/* Primary On-Call */}
-            <div className="p-4 rounded-xl bg-card border border-border">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Primary
-                </span>
-                <Badge variant="default" className="bg-success text-success-foreground">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                  Active
-                </Badge>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {onCall?.primary?.full_name || "No one assigned"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {onCall?.primary?.phone || "—"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Backup On-Call */}
-            <div className="p-4 rounded-xl bg-muted/50 border border-border/50">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Backup
-                </span>
-                <Badge variant="outline">Standby</Badge>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {onCall?.backup?.full_name || "No backup assigned"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {onCall?.backup?.phone || "—"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        <Link to="/dashboard/schedules">
-          <Button variant="outline" size="sm" className="w-full mt-2">
-            <Calendar className="w-4 h-4 mr-2" />
-            Manage Schedules
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
-  );
-}
 
 // Recent Call Item
 function RecentCallItem({ call }: { call: Call }) {
@@ -324,9 +242,6 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0.5 }}
             className="space-y-6"
           >
-            {/* On-Call Status */}
-            <OnCallStatusCard />
-
             {/* Upcoming Appointments */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -409,12 +324,6 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  <p>
-                    <strong className="text-foreground">
-                      {stats?.technicians_dispatched_today ?? 0}
-                    </strong>{" "}
-                    technicians dispatched today
-                  </p>
                   <p>
                     Average call duration:{" "}
                     <strong className="text-foreground">

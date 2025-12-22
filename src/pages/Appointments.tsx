@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppointments, useTechnicians, useOrganization } from "@/hooks/use-api";
+import { useAppointments, useOrganization } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import { AppointmentReminders } from "@/components/appointments/AppointmentReminders";
 
@@ -54,7 +54,6 @@ export default function Appointments() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
   const { data, isLoading } = useAppointments(page, 10);
-  const { data: technicians } = useTechnicians();
   const { data: organization } = useOrganization();
   
   const appointments = data?.appointments || [];
@@ -69,11 +68,6 @@ export default function Appointments() {
     return matchesSearch && matchesStatus;
   });
 
-  const getTechnicianName = (techId: string | null) => {
-    if (!techId) return "Unassigned";
-    const tech = technicians?.find((t) => t.id === techId);
-    return tech?.full_name || "Unknown";
-  };
 
   return (
     <DashboardLayout>
@@ -174,7 +168,6 @@ export default function Appointments() {
                         <TableHead>Customer</TableHead>
                         <TableHead>Date & Time</TableHead>
                         <TableHead>Issue</TableHead>
-                        <TableHead>Technician</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -223,13 +216,6 @@ export default function Appointments() {
                             </TableCell>
                             <TableCell>
                               <p className="max-w-[200px] truncate">{apt.issue_description}</p>
-                            </TableCell>
-                            <TableCell>
-                              <span className={cn(
-                                apt.technician_id ? "text-foreground" : "text-muted-foreground"
-                              )}>
-                                {getTechnicianName(apt.technician_id)}
-                              </span>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
