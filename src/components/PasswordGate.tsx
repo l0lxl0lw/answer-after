@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-const SITE_PASSWORD = "answerafter2024"; // Change this to your preferred password
+const SITE_PASSWORD = import.meta.env.VITE_SITE_PASSWORD || "";
 const STORAGE_KEY = "site_unlocked";
 
 interface PasswordGateProps {
