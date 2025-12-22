@@ -37,8 +37,9 @@ export default function Settings() {
   const { data: organization, isLoading: orgLoading } = useOrganization();
   const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
-  const { data: calendarConnection, isLoading: calendarLoading } = useGoogleCalendarConnection();
+  const { data: calendarConnection, isLoading: calendarLoading, refetch: refetchCalendar } = useGoogleCalendarConnection();
 
+  const [isDisconnectingCalendar, setIsDisconnectingCalendar] = useState(false);
   const [isAddingPhone, setIsAddingPhone] = useState(false);
   const [addPhoneOpen, setAddPhoneOpen] = useState(false);
   const [newPhone, setNewPhone] = useState({
@@ -257,6 +258,36 @@ export default function Settings() {
         description: error.message || 'Please try again.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    if (!calendarConnection) return;
+    
+    setIsDisconnectingCalendar(true);
+    try {
+      const { error } = await supabase
+        .from('google_calendar_connections')
+        .delete()
+        .eq('id', calendarConnection.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Calendar disconnected',
+        description: 'Google Calendar has been disconnected successfully.',
+      });
+
+      refetchCalendar();
+    } catch (error: any) {
+      console.error('Error disconnecting calendar:', error);
+      toast({
+        title: 'Error disconnecting calendar',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDisconnectingCalendar(false);
     }
   };
 
@@ -718,10 +749,25 @@ export default function Settings() {
                       </p>
                     </div>
                     {calendarConnection ? (
-                      <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-600 border-green-500/30">
-                        <Check className="h-4 w-4" />
-                        Connected
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-600 border-green-500/30">
+                          <Check className="h-4 w-4" />
+                          Connected
+                        </Badge>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleDisconnectCalendar}
+                          disabled={isDisconnectingCalendar}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {isDisconnectingCalendar ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Disconnect'
+                          )}
+                        </Button>
+                      </div>
                     ) : (
                       <Button variant="outline" asChild>
                         <a href="/calendar-onboarding">
