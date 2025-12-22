@@ -48,6 +48,7 @@ const TABLES = [
   "profiles",
   "subscriptions",
   "subscription_tiers",
+  "appointment_reminders",
   "phone_numbers",
   "calls",
   "call_events",

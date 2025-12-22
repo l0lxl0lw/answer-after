@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
@@ -12,6 +12,8 @@ import {
   Plus,
   Search,
   Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,8 +35,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppointments, useTechnicians } from "@/hooks/use-api";
+import { useAppointments, useTechnicians, useOrganization } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { AppointmentReminders } from "@/components/appointments/AppointmentReminders";
 
 const statusColors: Record<string, string> = {
   scheduled: "bg-primary/20 text-primary",
@@ -49,9 +52,11 @@ export default function Appointments() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   
   const { data, isLoading } = useAppointments(page, 10);
   const { data: technicians } = useTechnicians();
+  const { data: organization } = useOrganization();
   
   const appointments = data?.appointments || [];
   const meta = data?.meta;
@@ -176,61 +181,104 @@ export default function Appointments() {
                     </TableHeader>
                     <TableBody>
                       {filteredAppointments.map((apt) => (
-                        <TableRow key={apt.id}>
-                          <TableCell>
-                            <div className="flex items-start gap-3">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <User className="w-4 h-4 text-primary" />
-                              </div>
-                              <div>
-                                <p className="font-medium flex items-center gap-2">
-                                  {apt.customer_name}
-                                  {apt.is_emergency && (
-                                    <AlertTriangle className="w-4 h-4 text-destructive" />
-                                  )}
-                                </p>
-                                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                  <Phone className="w-3 h-3" />
-                                  {apt.customer_phone}
-                                </p>
-                                {apt.customer_address && (
-                                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                    <MapPin className="w-3 h-3" />
-                                    {apt.customer_address}
+                        <>
+                          <TableRow 
+                            key={apt.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setExpandedId(expandedId === apt.id ? null : apt.id)}
+                          >
+                            <TableCell>
+                              <div className="flex items-start gap-3">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                  <User className="w-4 h-4 text-primary" />
+                                </div>
+                                <div>
+                                  <p className="font-medium flex items-center gap-2">
+                                    {apt.customer_name}
+                                    {apt.is_emergency && (
+                                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                                    )}
                                   </p>
+                                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                    <Phone className="w-3 h-3" />
+                                    {apt.customer_phone}
+                                  </p>
+                                  {apt.customer_address && (
+                                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                      <MapPin className="w-3 h-3" />
+                                      {apt.customer_address}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-muted-foreground" />
+                                <div>
+                                  <p className="font-medium">
+                                    {format(new Date(apt.scheduled_start), "MMM d, yyyy")}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {format(new Date(apt.scheduled_start), "h:mm a")} - {format(new Date(apt.scheduled_end), "h:mm a")}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <p className="max-w-[200px] truncate">{apt.issue_description}</p>
+                            </TableCell>
+                            <TableCell>
+                              <span className={cn(
+                                apt.technician_id ? "text-foreground" : "text-muted-foreground"
+                              )}>
+                                {getTechnicianName(apt.technician_id)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Badge className={statusColors[apt.status] || "bg-muted"}>
+                                  {apt.status.replace("_", " ")}
+                                </Badge>
+                                {expandedId === apt.id ? (
+                                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
                                 )}
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-4 h-4 text-muted-foreground" />
-                              <div>
-                                <p className="font-medium">
-                                  {format(new Date(apt.scheduled_start), "MMM d, yyyy")}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  {format(new Date(apt.scheduled_start), "h:mm a")} - {format(new Date(apt.scheduled_end), "h:mm a")}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <p className="max-w-[200px] truncate">{apt.issue_description}</p>
-                          </TableCell>
-                          <TableCell>
-                            <span className={cn(
-                              apt.technician_id ? "text-foreground" : "text-muted-foreground"
-                            )}>
-                              {getTechnicianName(apt.technician_id)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={statusColors[apt.status] || "bg-muted"}>
-                              {apt.status.replace("_", " ")}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
+                            </TableCell>
+                          </TableRow>
+                          <AnimatePresence>
+                            {expandedId === apt.id && organization && (
+                              <TableRow key={`${apt.id}-details`}>
+                                <TableCell colSpan={5} className="bg-muted/20 p-0">
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <h4 className="font-medium text-sm mb-2">Appointment Details</h4>
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                          <p><strong>Issue:</strong> {apt.issue_description}</p>
+                                          {apt.notes && <p><strong>Notes:</strong> {apt.notes}</p>}
+                                        </div>
+                                      </div>
+                                      <AppointmentReminders
+                                        appointmentId={apt.id}
+                                        appointmentStart={apt.scheduled_start}
+                                        organizationId={organization.id}
+                                      />
+                                    </div>
+                                  </motion.div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </AnimatePresence>
+                        </>
                       ))}
                     </TableBody>
                   </Table>

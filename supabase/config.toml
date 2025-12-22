@@ -17,3 +17,21 @@ verify_jwt = true
 
 [functions.generate-greeting-tts]
 verify_jwt = true
+
+[functions.outbound-reminder-call]
+verify_jwt = true
+
+[functions.reminder-webhook]
+verify_jwt = false
+
+[functions.process-scheduled-reminders]
+verify_jwt = false
+
+[functions.create-checkout-with-trial]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+[functions.send-trial-reminder]
+verify_jwt = false
