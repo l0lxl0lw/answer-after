@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { 
   Calendar, 
   Check, 
-  ExternalLink, 
   Loader2,
   Puzzle
 } from 'lucide-react';
@@ -18,6 +17,36 @@ import { supabase } from '@/integrations/supabase/client';
 export default function Integrations() {
   const { data: calendarConnection, isLoading: calendarLoading, refetch: refetchCalendar } = useGoogleCalendarConnection();
   const [isDisconnectingCalendar, setIsDisconnectingCalendar] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  const handleConnectGoogle = async () => {
+    setIsConnecting(true);
+    try {
+      // Get the redirect URL for OAuth callback
+      const redirectUrl = `${window.location.origin}/dashboard/schedules/callback`;
+      
+      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+        body: { action: 'authorize', redirectUrl }
+      });
+
+      if (error) throw error;
+
+      if (data?.authUrl) {
+        // Redirect to Google OAuth
+        window.location.href = data.authUrl;
+      } else {
+        throw new Error('No authorization URL returned');
+      }
+    } catch (error: any) {
+      console.error('Error starting Google auth:', error);
+      toast({
+        title: 'Connection failed',
+        description: error.message || 'Failed to start Google authentication',
+        variant: 'destructive',
+      });
+      setIsConnecting(false);
+    }
+  };
 
   const handleDisconnectCalendar = async () => {
     if (!calendarConnection) return;
@@ -114,11 +143,19 @@ export default function Integrations() {
                     </Button>
                   </div>
                 ) : (
-                  <Button variant="outline" asChild>
-                    <a href="/calendar-onboarding">
-                      Connect
-                      <ExternalLink className="h-4 w-4 ml-2" />
-                    </a>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleConnectGoogle}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      'Connect'
+                    )}
                   </Button>
                 )}
               </div>
