@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Save, Loader2, MessageCircle, FileText } from 'lucide-react';
+import { Bot, Save, Loader2, MessageCircle, FileText, Mic } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,15 +14,25 @@ import { useSubscription } from '@/hooks/use-api';
 const MAX_GREETING_WORDS = 100;
 const MAX_CONTENT_WORDS = 4000;
 
+interface ElevenLabsVoice {
+  id: string;
+  name: string;
+  elevenlabs_voice_id: string;
+  description: string | null;
+}
+
 export default function MyAgent() {
   const { user } = useAuth();
   const { data: subscription } = useSubscription();
   
   const [customGreeting, setCustomGreeting] = useState('');
   const [agentContent, setAgentContent] = useState('');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
   
   const [isSavingGreeting, setIsSavingGreeting] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
+  const [isSavingVoice, setIsSavingVoice] = useState(false);
   const [hasCustomAgentAccess, setHasCustomAgentAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -47,6 +58,23 @@ export default function MyAgent() {
     checkCustomAgentAccess();
   }, [subscription?.plan]);
 
+  // Fetch available voices
+  useEffect(() => {
+    const fetchVoices = async () => {
+      const { data, error } = await supabase
+        .from('elevenlabs_voices')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (!error && data) {
+        setVoices(data);
+      }
+    };
+    
+    fetchVoices();
+  }, []);
+
   // Fetch existing agent data
   useEffect(() => {
     const fetchAgentData = async () => {
@@ -54,17 +82,22 @@ export default function MyAgent() {
       
       const { data, error } = await supabase
         .from('organization_agents')
-        .select('context')
+        .select('context, voice_id')
         .eq('organization_id', user.organization_id)
         .maybeSingle();
       
-      if (!error && data?.context) {
-        try {
-          const parsed = JSON.parse(data.context);
-          setCustomGreeting(parsed.greeting || '');
-          setAgentContent(parsed.content || '');
-        } catch {
-          setAgentContent(data.context);
+      if (!error && data) {
+        if (data.context) {
+          try {
+            const parsed = JSON.parse(data.context);
+            setCustomGreeting(parsed.greeting || '');
+            setAgentContent(parsed.content || '');
+          } catch {
+            setAgentContent(data.context);
+          }
+        }
+        if (data.voice_id) {
+          setSelectedVoiceId(data.voice_id);
         }
       }
     };
@@ -197,6 +230,58 @@ export default function MyAgent() {
     }
   };
 
+  const handleSaveVoice = async () => {
+    if (!user?.organization_id || !selectedVoiceId) return;
+    
+    setIsSavingVoice(true);
+    try {
+      const { data: existingAgent } = await supabase
+        .from('organization_agents')
+        .select('id, elevenlabs_agent_id')
+        .eq('organization_id', user.organization_id)
+        .maybeSingle();
+
+      if (existingAgent) {
+        const { error } = await supabase
+          .from('organization_agents')
+          .update({ voice_id: selectedVoiceId })
+          .eq('organization_id', user.organization_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('organization_agents')
+          .insert({ organization_id: user.organization_id, voice_id: selectedVoiceId });
+        if (error) throw error;
+      }
+
+      // Update ElevenLabs agent if one exists
+      if (existingAgent?.elevenlabs_agent_id) {
+        const selectedVoice = voices.find(v => v.id === selectedVoiceId);
+        if (selectedVoice) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData.session) {
+            await supabase.functions.invoke('elevenlabs-agent', {
+              body: { 
+                action: 'update-agent',
+                organizationId: user.organization_id,
+                voiceId: selectedVoice.elevenlabs_voice_id
+              },
+              headers: {
+                Authorization: `Bearer ${sessionData.session.access_token}`,
+              },
+            });
+          }
+        }
+      }
+
+      toast({ title: 'Voice saved', description: 'Your agent voice has been updated.' });
+    } catch (error: any) {
+      toast({ title: 'Error saving voice', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsSavingVoice(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -267,6 +352,44 @@ export default function MyAgent() {
                 <Button onClick={handleSaveGreeting} disabled={isSavingGreeting}>
                   {isSavingGreeting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                   Save Greeting
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Agent Voice */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="h-5 w-5" />
+                Agent Voice
+              </CardTitle>
+              <CardDescription>
+                Select the voice your AI agent will use when speaking to callers
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Select value={selectedVoiceId || ''} onValueChange={setSelectedVoiceId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a voice" />
+                </SelectTrigger>
+                <SelectContent>
+                  {voices.map((voice) => (
+                    <SelectItem key={voice.id} value={voice.id}>
+                      <div className="flex flex-col">
+                        <span>{voice.name}</span>
+                        {voice.description && (
+                          <span className="text-xs text-muted-foreground">{voice.description}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveVoice} disabled={isSavingVoice || !selectedVoiceId}>
+                  {isSavingVoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save Voice
                 </Button>
               </div>
             </CardContent>

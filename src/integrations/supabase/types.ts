@@ -291,6 +291,36 @@ export type Database = {
           },
         ]
       }
+      elevenlabs_voices: {
+        Row: {
+          created_at: string
+          description: string | null
+          elevenlabs_voice_id: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          elevenlabs_voice_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          elevenlabs_voice_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       google_calendar_connections: {
         Row: {
           access_token: string
@@ -346,6 +376,7 @@ export type Database = {
           id: string
           organization_id: string
           updated_at: string
+          voice_id: string | null
         }
         Insert: {
           context?: string | null
@@ -354,6 +385,7 @@ export type Database = {
           id?: string
           organization_id: string
           updated_at?: string
+          voice_id?: string | null
         }
         Update: {
           context?: string | null
@@ -362,6 +394,7 @@ export type Database = {
           id?: string
           organization_id?: string
           updated_at?: string
+          voice_id?: string | null
         }
         Relationships: [
           {
@@ -369,6 +402,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: true
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_agents_voice_id_fkey"
+            columns: ["voice_id"]
+            isOneToOne: false
+            referencedRelation: "elevenlabs_voices"
             referencedColumns: ["id"]
           },
         ]
