@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.google-calendar-auth]
 verify_jwt = false
+
+[functions.generate-voice-previews]
+verify_jwt = false
