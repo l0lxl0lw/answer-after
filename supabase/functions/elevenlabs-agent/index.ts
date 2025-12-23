@@ -319,7 +319,7 @@ async function handleCreateAgent(
           prompt: systemPrompt
         },
         llm: {
-          model: 'gemini-2.5-flash'
+          model: 'gemini-2.5-flash-lite'
         }
       },
       tts: {
@@ -533,7 +533,7 @@ async function handleUpdateAgent(
           prompt: systemPrompt
         },
         llm: {
-          model: 'gemini-2.5-flash'
+          model: 'gemini-2.5-flash-lite'
         }
       }
     }
