@@ -40,6 +40,8 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  Bot,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -252,7 +254,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <Tabs defaultValue="tables" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="tables" className="flex items-center gap-2">
               <Database className="w-4 h-4" />
               Database Tables
@@ -260,6 +262,10 @@ export default function Admin() {
             <TabsTrigger value="prompts" className="flex items-center gap-2">
               <Code className="w-4 h-4" />
               Prompt Logic
+            </TabsTrigger>
+            <TabsTrigger value="ai-settings" className="flex items-center gap-2">
+              <Bot className="w-4 h-4" />
+              AI Settings
             </TabsTrigger>
           </TabsList>
 
@@ -543,9 +549,204 @@ export default function Admin() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* AI Settings Tab */}
+          <TabsContent value="ai-settings" className="mt-6 space-y-6">
+            <AISettingsEditor />
+          </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Available LLM models for ElevenLabs agents
+const LLM_MODELS = [
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Recommended - Best balance of speed and quality' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'Faster and cheaper, slightly lower quality' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Highest quality, slower and more expensive' },
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'OpenAI model - high quality' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'OpenAI model - faster and cheaper' },
+];
+
+// Component to edit AI settings
+function AISettingsEditor() {
+  const [agents, setAgents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [savingAgentId, setSavingAgentId] = useState<string | null>(null);
+  const [selectedModels, setSelectedModels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
+
+  async function fetchAgents() {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("organization_agents")
+      .select(`
+        *,
+        organizations(name)
+      `);
+
+    if (!error && data) {
+      setAgents(data);
+      // Initialize selected models from context
+      const models: Record<string, string> = {};
+      data.forEach((agent) => {
+        try {
+          const parsed = JSON.parse(agent.context || '{}');
+          models[agent.id] = parsed.llmModel || 'gemini-2.5-flash';
+        } catch {
+          models[agent.id] = 'gemini-2.5-flash';
+        }
+      });
+      setSelectedModels(models);
+    }
+    setIsLoading(false);
+  }
+
+  async function handleSaveModel(agent: any) {
+    setSavingAgentId(agent.id);
+    
+    try {
+      // Parse existing context
+      let contextObj: any = {};
+      try {
+        contextObj = JSON.parse(agent.context || '{}');
+      } catch {
+        contextObj = {};
+      }
+      
+      // Update with new model
+      contextObj.llmModel = selectedModels[agent.id];
+      
+      // Save to database
+      const { error } = await supabase
+        .from("organization_agents")
+        .update({ 
+          context: JSON.stringify(contextObj),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", agent.id);
+
+      if (error) {
+        toast.error(`Failed to save: ${error.message}`);
+        return;
+      }
+
+      // Update ElevenLabs agent
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        await supabase.functions.invoke('elevenlabs-agent', {
+          body: { 
+            action: 'update-agent',
+            organizationId: agent.organization_id,
+            context: JSON.stringify(contextObj),
+          },
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+        });
+      }
+
+      toast.success(`Model updated for ${agent.organizations?.name || 'agent'}`);
+      fetchAgents();
+    } catch (err: any) {
+      toast.error(`Failed to update: ${err.message}`);
+    } finally {
+      setSavingAgentId(null);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2].map((i) => (
+          <Skeleton key={i} className="h-32 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (agents.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <Bot className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">No agents configured yet</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5" />
+            LLM Model Settings
+          </CardTitle>
+          <CardDescription>
+            Configure which language model each organization's AI agent uses
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className="bg-muted/50 border rounded-lg p-4 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">
+                    {agent.organizations?.name || "Unknown Organization"}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Agent ID: {agent.elevenlabs_agent_id || "Not created"}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Select 
+                  value={selectedModels[agent.id] || 'gemini-2.5-flash'} 
+                  onValueChange={(value) => setSelectedModels(prev => ({ ...prev, [agent.id]: value }))}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LLM_MODELS.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex flex-col">
+                          <span>{model.name}</span>
+                          <span className="text-xs text-muted-foreground">{model.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveModel(agent)}
+                  disabled={savingAgentId === agent.id}
+                >
+                  {savingAgentId === agent.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span className="ml-2">Save</span>
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

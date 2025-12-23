@@ -309,6 +309,17 @@ async function handleCreateAgent(
 
   // Default voice is Veda Sky (625jGFaa0zTLtQfxwc6Q)
   const DEFAULT_VOICE_ID = '625jGFaa0zTLtQfxwc6Q';
+  
+  // Get LLM model from agent context or use default
+  let llmModel = 'gemini-2.5-flash';
+  try {
+    const parsed = JSON.parse(agentContext);
+    if (parsed.llmModel) {
+      llmModel = parsed.llmModel;
+    }
+  } catch {
+    // Use default model
+  }
 
   const agentConfig = {
     name: `${orgData.name} - ${organizationId}`,
@@ -319,7 +330,7 @@ async function handleCreateAgent(
           prompt: systemPrompt
         },
         llm: {
-          model: 'gemini-2.5-flash-lite'
+          model: llmModel
         }
       },
       tts: {
@@ -525,6 +536,17 @@ async function handleUpdateAgent(
   const agentContext = context || agentRecord?.context || '';
   const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
+  // Get LLM model from agent context or use default
+  let llmModel = 'gemini-2.5-flash';
+  try {
+    const parsed = JSON.parse(agentContext);
+    if (parsed.llmModel) {
+      llmModel = parsed.llmModel;
+    }
+  } catch {
+    // Use default model
+  }
+
   const updateConfig: any = {
     conversation_config: {
       agent: {
@@ -533,7 +555,7 @@ async function handleUpdateAgent(
           prompt: systemPrompt
         },
         llm: {
-          model: 'gemini-2.5-flash-lite'
+          model: llmModel
         }
       }
     }
