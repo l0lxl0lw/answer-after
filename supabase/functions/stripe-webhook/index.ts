@@ -24,6 +24,9 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
+    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+    if (!webhookSecret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
+
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     const supabaseClient = createClient(
@@ -32,12 +35,24 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // Verify webhook signature for security
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) {
+      logStep("Missing stripe-signature header");
+      return new Response(JSON.stringify({ error: "Missing signature" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+
     let event: Stripe.Event;
     try {
-      event = JSON.parse(body) as Stripe.Event;
-    } catch (parseError) {
-      logStep("Invalid JSON body", { body: body.substring(0, 100) });
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+      logStep("Webhook signature verified");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logStep("Webhook signature verification failed", { error: errorMessage });
+      return new Response(JSON.stringify({ error: "Webhook signature verification failed" }), {
         headers: { "Content-Type": "application/json" },
         status: 400,
       });
