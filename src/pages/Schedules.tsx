@@ -88,7 +88,7 @@ export default function Schedules() {
               </p>
             </div>
             <CardDescription>
-              Appointments booked by AnswerAfter will appear here. Dimmed hours indicate after-hours when AI handles calls.
+              Appointments booked by AnswerAfter will appear here automatically.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
