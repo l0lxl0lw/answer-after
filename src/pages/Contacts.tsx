@@ -48,6 +48,66 @@ interface GoogleContact {
   biographies?: Array<{ value: string }>;
 }
 
+// Format phone number as user types: +1 (XXX) XXX-XXXX
+function formatPhoneNumber(value: string): string {
+  // Strip all non-digits except leading +
+  const hasPlus = value.startsWith('+');
+  const digits = value.replace(/\D/g, '');
+  
+  if (digits.length === 0) return hasPlus ? '+' : '';
+  
+  // Handle US format (11 digits starting with 1, or 10 digits)
+  let formatted = '';
+  
+  if (digits.length >= 1) {
+    // Check if starts with country code 1
+    const hasCountryCode = digits.startsWith('1') && digits.length > 10;
+    const countryCode = hasCountryCode ? digits[0] : (digits.length <= 10 ? '' : digits[0]);
+    const remaining = hasCountryCode ? digits.slice(1) : (digits.length <= 10 ? digits : digits.slice(1));
+    
+    if (countryCode) {
+      formatted = `+${countryCode} `;
+    } else if (hasPlus || digits.length > 10) {
+      formatted = '+1 ';
+    }
+    
+    // Format area code
+    if (remaining.length > 0) {
+      const areaCode = remaining.slice(0, 3);
+      if (remaining.length <= 3) {
+        formatted += `(${areaCode}`;
+      } else {
+        formatted += `(${areaCode}) `;
+      }
+    }
+    
+    // Format exchange
+    if (remaining.length > 3) {
+      const exchange = remaining.slice(3, 6);
+      formatted += exchange;
+    }
+    
+    // Format subscriber
+    if (remaining.length > 6) {
+      const subscriber = remaining.slice(6, 10);
+      formatted += `-${subscriber}`;
+    }
+  }
+  
+  return formatted;
+}
+
+// Validate phone number format
+function isValidPhoneNumber(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 10 || digits.length === 11;
+}
+
+// Get just the digits for storage
+function getPhoneDigits(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
 export default function Contacts() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -288,9 +348,16 @@ export default function Contacts() {
                     <Input
                       id="phone"
                       value={newContact.phone}
-                      onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                      onChange={(e) => setNewContact({ ...newContact, phone: formatPhoneNumber(e.target.value) })}
                       placeholder="+1 (555) 123-4567"
+                      className={newContact.phone && !isValidPhoneNumber(newContact.phone) ? "border-destructive focus-visible:ring-destructive" : ""}
                     />
+                    {newContact.phone && !isValidPhoneNumber(newContact.phone) && (
+                      <p className="text-xs text-destructive">Please enter a valid 10-digit phone number</p>
+                    )}
+                    {newContact.phone && isValidPhoneNumber(newContact.phone) && (
+                      <p className="text-xs text-emerald-600">Valid phone number</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="notes">Notes (optional)</Label>
@@ -308,7 +375,7 @@ export default function Contacts() {
                     </Button>
                     <Button 
                       onClick={() => createMutation.mutate(newContact)}
-                      disabled={!newContact.name || !newContact.phone || createMutation.isPending}
+                      disabled={!newContact.name || !newContact.phone || !isValidPhoneNumber(newContact.phone) || createMutation.isPending}
                     >
                       {createMutation.isPending ? "Creating..." : "Create Contact"}
                     </Button>
@@ -449,8 +516,15 @@ export default function Contacts() {
                 <Input
                   id="edit-phone"
                   value={editForm.phone}
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, phone: formatPhoneNumber(e.target.value) })}
+                  className={editForm.phone && !isValidPhoneNumber(editForm.phone) ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
+                {editForm.phone && !isValidPhoneNumber(editForm.phone) && (
+                  <p className="text-xs text-destructive">Please enter a valid 10-digit phone number</p>
+                )}
+                {editForm.phone && isValidPhoneNumber(editForm.phone) && (
+                  <p className="text-xs text-emerald-600">Valid phone number</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-notes">Notes</Label>
@@ -470,7 +544,7 @@ export default function Contacts() {
                     resourceName: editingContact.resourceName,
                     ...editForm
                   })}
-                  disabled={updateMutation.isPending}
+                  disabled={!editForm.phone || !isValidPhoneNumber(editForm.phone) || updateMutation.isPending}
                 >
                   {updateMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
