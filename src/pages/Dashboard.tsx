@@ -18,7 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardStats, useRecentCalls } from "@/hooks/use-api";
+import { useDashboardStats, useRecentCalls, useOrganization } from "@/hooks/use-api";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
 import { useQuery } from "@tanstack/react-query";
@@ -174,17 +174,20 @@ const weeklyChartData = [
 const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
+  const { data: organization } = useOrganization();
 
   // Fetch Google Contacts for name mapping
   const { data: googleContacts } = useQuery({
-    queryKey: ['google-contacts-dashboard'],
+    queryKey: ['google-contacts-dashboard', organization?.id],
     queryFn: async () => {
+      if (!organization?.id) return [];
       const { data, error } = await supabase.functions.invoke('google-contacts', {
-        body: { action: 'list' }
+        body: { action: 'list', organizationId: organization.id }
       });
       if (error) throw error;
       return data?.contacts as GoogleContact[] || [];
     },
+    enabled: !!organization?.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
