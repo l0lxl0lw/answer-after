@@ -11,7 +11,6 @@ import Dashboard from "./pages/Dashboard";
 import CallHistory from "./pages/CallHistory";
 import CallDetail from "./pages/CallDetail";
 import Schedules from "./pages/Schedules";
-import CalendarOnboarding from "./pages/CalendarOnboarding";
 import CalendarCallback from "./pages/CalendarCallback";
 import Contacts from "./pages/Contacts";
 import Appointments from "./pages/Appointments";
@@ -42,7 +41,6 @@ const App = () => (
             <Route path="/dashboard/calls" element={<ProtectedRoute><CallHistory /></ProtectedRoute>} />
             <Route path="/dashboard/calls/:id" element={<ProtectedRoute><CallDetail /></ProtectedRoute>} />
             <Route path="/dashboard/schedules" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
-            <Route path="/dashboard/schedules/onboarding" element={<ProtectedRoute><CalendarOnboarding /></ProtectedRoute>} />
             <Route path="/dashboard/schedules/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
             <Route path="/dashboard/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
             <Route path="/dashboard/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
