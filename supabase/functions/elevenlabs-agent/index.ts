@@ -307,6 +307,9 @@ async function handleCreateAgent(
   const agentContext = context || agentRecord?.context || '';
   const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
+  // Default voice is Lauren (DODLEQrClDo8wCz460ld)
+  const DEFAULT_VOICE_ID = 'DODLEQrClDo8wCz460ld';
+
   const agentConfig = {
     name: `${orgData.name} - ${organizationId}`,
     conversation_config: {
@@ -315,6 +318,9 @@ async function handleCreateAgent(
         prompt: {
           prompt: systemPrompt
         }
+      },
+      tts: {
+        voice_id: DEFAULT_VOICE_ID
       }
     },
     platform_settings: {
