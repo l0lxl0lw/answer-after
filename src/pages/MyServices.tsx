@@ -93,7 +93,7 @@ const categoryConfig = {
   installation: { label: "INSTALLATION", color: "bg-accent text-accent-foreground", icon: Settings2 },
 };
 
-const Services = () => {
+const MyServices = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -520,4 +520,4 @@ const Services = () => {
   );
 };
 
-export default Services;
+export default MyServices;
