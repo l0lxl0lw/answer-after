@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   MessageSquare,
   MoreVertical,
+  User,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardStats, useRecentCalls } from "@/hooks/use-api";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+
+interface GoogleContact {
+  resourceName: string;
+  name: string;
+  phone: string;
+  email?: string;
+}
+
+// Normalize phone number for comparison
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '').slice(-10);
+}
 import {
   LineChart,
   Line,
@@ -114,9 +129,11 @@ function StatCard({
 }
 
 // Recent Call Item (compact)
-function RecentCallItem({ call }: { call: Call }) {
+function RecentCallItem({ call, contactName }: { call: Call; contactName?: string }) {
   const badge = getOutcomeBadge(call.outcome);
   const timeAgo = formatDistanceToNow(new Date(call.started_at), { addSuffix: true });
+  const displayName = contactName || call.caller_name || call.caller_phone;
+  const isKnownContact = !!contactName;
 
   return (
     <Link
@@ -124,12 +141,16 @@ function RecentCallItem({ call }: { call: Call }) {
       className="flex items-center justify-between py-3 border-b border-border last:border-0 hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors"
     >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10">
-          <PhoneIncoming className="w-4 h-4 text-primary" />
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isKnownContact ? 'bg-emerald-500/10' : 'bg-primary/10'}`}>
+          {isKnownContact ? (
+            <User className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <PhoneIncoming className="w-4 h-4 text-primary" />
+          )}
         </div>
         <div>
           <p className="font-medium text-sm">
-            {call.caller_name || call.caller_phone}
+            {displayName}
           </p>
           <p className="text-xs text-muted-foreground">{timeAgo}</p>
         </div>
@@ -153,6 +174,38 @@ const weeklyChartData = [
 const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
+
+  // Fetch Google Contacts for name mapping
+  const { data: googleContacts } = useQuery({
+    queryKey: ['google-contacts-dashboard'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('google-contacts', {
+        body: { action: 'list' }
+      });
+      if (error) throw error;
+      return data?.contacts as GoogleContact[] || [];
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Build phone-to-name map
+  const phoneToContactName = useMemo(() => {
+    const map = new Map<string, string>();
+    if (googleContacts) {
+      googleContacts.forEach((contact) => {
+        if (contact.phone) {
+          map.set(normalizePhone(contact.phone), contact.name);
+        }
+      });
+    }
+    return map;
+  }, [googleContacts]);
+
+  // Get contact name for a call
+  const getContactName = (call: Call): string | undefined => {
+    const normalizedPhone = normalizePhone(call.caller_phone);
+    return phoneToContactName.get(normalizedPhone);
+  };
 
   const organizationName = "Your Business";
 
@@ -342,7 +395,7 @@ const Dashboard = () => {
                 ) : recentCalls && recentCalls.length > 0 ? (
                   <div>
                     {recentCalls.map((call) => (
-                      <RecentCallItem key={call.id} call={call} />
+                      <RecentCallItem key={call.id} call={call} contactName={getContactName(call)} />
                     ))}
                   </div>
                 ) : (
