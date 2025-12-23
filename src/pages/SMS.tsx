@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,52 +15,55 @@ import {
   CheckCheck,
   AlertCircle,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/use-api";
 
-// Mock SMS data - will be replaced with real API data
-const mockSmsMessages = [
-  {
-    id: "1",
-    direction: "outbound" as const,
-    to: "+1 (206) 778-0089",
-    from: "+1 (555) 123-4567",
-    body: "Hi! This is a reminder about your appointment tomorrow at 2:00 PM. Reply YES to confirm or NO to reschedule.",
-    status: "delivered",
-    created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    contact_name: "Testing",
-  },
-  {
-    id: "2",
-    direction: "inbound" as const,
-    to: "+1 (555) 123-4567",
-    from: "+1 (206) 778-0089",
-    body: "YES",
-    status: "received",
-    created_at: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    contact_name: "Testing",
-  },
-  {
-    id: "3",
-    direction: "outbound" as const,
-    to: "+1 (425) 555-1234",
-    from: "+1 (555) 123-4567",
-    body: "Thank you for calling! We've received your request and will get back to you within 24 hours.",
-    status: "delivered",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    contact_name: null,
-  },
-  {
-    id: "4",
-    direction: "outbound" as const,
-    to: "+1 (360) 555-9876",
-    from: "+1 (555) 123-4567",
-    body: "Your appointment has been confirmed for Friday at 10:00 AM. See you then!",
-    status: "failed",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    contact_name: null,
-  },
-];
+interface SMSMessage {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  from: string;
+  to: string;
+  body: string;
+  status: string;
+  created_at: string;
+  error_code: string | null;
+  error_message: string | null;
+  contact_name?: string;
+}
+
+// Raw Google Contact structure from API
+interface RawGoogleContact {
+  resourceName: string;
+  names?: Array<{ displayName?: string; givenName?: string }>;
+  phoneNumbers?: Array<{ value?: string; canonicalForm?: string }>;
+}
+
+// Normalize phone number for comparison
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.slice(-10);
+}
+
+// Extract phone numbers from contact for matching
+function getContactPhones(contact: RawGoogleContact): string[] {
+  const phones: string[] = [];
+  if (contact.phoneNumbers) {
+    contact.phoneNumbers.forEach(pn => {
+      if (pn.canonicalForm) phones.push(normalizePhone(pn.canonicalForm));
+      if (pn.value) phones.push(normalizePhone(pn.value));
+    });
+  }
+  return [...new Set(phones)];
+}
+
+// Get display name from contact
+function getContactDisplayName(contact: RawGoogleContact): string {
+  return contact.names?.[0]?.displayName || contact.names?.[0]?.givenName || 'Unknown';
+}
 
 function getStatusBadge(status: string, direction: string) {
   if (direction === "inbound") {
@@ -71,17 +74,19 @@ function getStatusBadge(status: string, direction: string) {
     case "delivered":
       return { variant: "default" as const, label: "Delivered", icon: CheckCheck };
     case "sent":
-      return { variant: "secondary" as const, label: "Sent", icon: ArrowUpRight };
-    case "pending":
-      return { variant: "outline" as const, label: "Pending", icon: Clock };
+      return { variant: "secondary" as const, label: "Sent", icon: Send };
+    case "queued":
+    case "sending":
+      return { variant: "outline" as const, label: "Sending", icon: Clock };
     case "failed":
+    case "undelivered":
       return { variant: "destructive" as const, label: "Failed", icon: AlertCircle };
     default:
       return { variant: "outline" as const, label: status, icon: Clock };
   }
 }
 
-function SMSItem({ message }: { message: typeof mockSmsMessages[0] }) {
+function SMSItem({ message }: { message: SMSMessage }) {
   const badge = getStatusBadge(message.status, message.direction);
   const timeAgo = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
   const displayName = message.contact_name || (message.direction === "inbound" ? message.from : message.to);
@@ -111,6 +116,9 @@ function SMSItem({ message }: { message: typeof mockSmsMessages[0] }) {
           <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo}</span>
         </div>
         <p className="text-sm text-muted-foreground line-clamp-2">{message.body}</p>
+        {message.error_message && (
+          <p className="text-xs text-destructive mt-1">{message.error_message}</p>
+        )}
       </div>
     </div>
   );
@@ -118,10 +126,62 @@ function SMSItem({ message }: { message: typeof mockSmsMessages[0] }) {
 
 const SMS = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const { data: organization } = useOrganization();
+
+  // Fetch SMS messages from Twilio
+  const { data: smsData, isLoading, refetch, isRefetching } = useQuery({
+    queryKey: ['sms-messages', organization?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('get-twilio-sms');
+      if (error) throw error;
+      return data as { messages: SMSMessage[]; meta: { total: number } };
+    },
+    enabled: !!organization?.id,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
+  // Fetch Google Contacts for name mapping
+  const { data: googleContacts } = useQuery({
+    queryKey: ['google-contacts-sms', organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      const { data, error } = await supabase.functions.invoke('google-contacts', {
+        body: { action: 'list', organizationId: organization.id }
+      });
+      if (error) throw error;
+      return data?.contacts as RawGoogleContact[] || [];
+    },
+    enabled: !!organization?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Build phone-to-name map
+  const phoneToContactName = useMemo(() => {
+    const map = new Map<string, string>();
+    if (googleContacts) {
+      googleContacts.forEach((contact) => {
+        const name = getContactDisplayName(contact);
+        const phones = getContactPhones(contact);
+        phones.forEach(phone => {
+          map.set(phone, name);
+        });
+      });
+    }
+    return map;
+  }, [googleContacts]);
+
+  // Enrich messages with contact names
+  const enrichedMessages = useMemo(() => {
+    if (!smsData?.messages) return [];
+    return smsData.messages.map(msg => {
+      const phoneToMatch = msg.direction === 'inbound' ? msg.from : msg.to;
+      const contactName = phoneToContactName.get(normalizePhone(phoneToMatch));
+      return { ...msg, contact_name: contactName };
+    });
+  }, [smsData?.messages, phoneToContactName]);
 
   // Filter messages based on search
-  const filteredMessages = mockSmsMessages.filter(msg => 
+  const filteredMessages = enrichedMessages.filter(msg => 
     msg.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
     msg.to.includes(searchQuery) ||
     msg.from.includes(searchQuery) ||
@@ -129,10 +189,10 @@ const SMS = () => {
   );
 
   // Stats
-  const totalMessages = mockSmsMessages.length;
-  const inboundCount = mockSmsMessages.filter(m => m.direction === "inbound").length;
-  const outboundCount = mockSmsMessages.filter(m => m.direction === "outbound").length;
-  const deliveredCount = mockSmsMessages.filter(m => m.status === "delivered").length;
+  const totalMessages = enrichedMessages.length;
+  const inboundCount = enrichedMessages.filter(m => m.direction === "inbound").length;
+  const outboundCount = enrichedMessages.filter(m => m.direction === "outbound").length;
+  const deliveredCount = enrichedMessages.filter(m => m.status === "delivered").length;
 
   return (
     <DashboardLayout>
@@ -150,8 +210,14 @@ const SMS = () => {
               View and manage automated SMS communications.
             </p>
           </div>
-          <Button variant="outline" size="sm" className="gap-2">
-            <RefreshCw className="w-4 h-4" />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={() => refetch()}
+            disabled={isRefetching}
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefetching ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </motion.div>
@@ -165,7 +231,7 @@ const SMS = () => {
                   <MessageSquare className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{totalMessages}</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : totalMessages}</p>
                   <p className="text-xs text-muted-foreground">Total Messages</p>
                 </div>
               </div>
@@ -178,7 +244,7 @@ const SMS = () => {
                   <ArrowDownLeft className="w-5 h-5 text-sky-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{inboundCount}</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : inboundCount}</p>
                   <p className="text-xs text-muted-foreground">Inbound</p>
                 </div>
               </div>
@@ -191,7 +257,7 @@ const SMS = () => {
                   <ArrowUpRight className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{outboundCount}</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : outboundCount}</p>
                   <p className="text-xs text-muted-foreground">Outbound</p>
                 </div>
               </div>
@@ -204,7 +270,7 @@ const SMS = () => {
                   <CheckCheck className="w-5 h-5 text-violet-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{deliveredCount}</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : deliveredCount}</p>
                   <p className="text-xs text-muted-foreground">Delivered</p>
                 </div>
               </div>
