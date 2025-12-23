@@ -73,23 +73,35 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchAttempted, setFetchAttempted] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 }); // Sunday start
+  // Memoize weekStart to prevent unnecessary re-renders
+  const weekStart = useMemo(() => 
+    startOfWeek(currentDate, { weekStartsOn: 0 }),
+    [currentDate.getTime()]
+  );
+  
+  // Create a stable string key for the week to use in dependencies
+  const weekKey = weekStart.toISOString();
   
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  }, [weekStart]);
+  }, [weekKey]);
 
   const today = new Date();
 
   // Fetch calendar events
   useEffect(() => {
+    let cancelled = false;
+    
     async function fetchEvents() {
       if (!user?.organization_id) return;
       
       setIsLoading(true);
+      setFetchAttempted(true);
+      
       try {
         const weekEnd = addDays(weekStart, 7);
         
@@ -102,6 +114,8 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
           },
         });
 
+        if (cancelled) return;
+
         if (error) {
           console.error('Error fetching events:', error);
           return;
@@ -109,14 +123,21 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
 
         setEvents(data?.events || []);
       } catch (error) {
+        if (cancelled) return;
         console.error('Failed to fetch calendar events:', error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchEvents();
-  }, [user?.organization_id, weekStart]);
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.organization_id, weekKey]);
 
   const isHourAvailable = (dayIndex: number, hour: number): boolean => {
     if (!businessHours) return true;
