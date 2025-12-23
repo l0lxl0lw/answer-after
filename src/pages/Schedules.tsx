@@ -6,11 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
+import { useOrganization } from "@/hooks/use-api";
 import { useNavigate } from "react-router-dom";
+import { WeeklyCalendarView } from "@/components/schedules/WeeklyCalendarView";
+import { WeekSchedule } from "@/components/settings/BusinessHoursSchedule";
 
 export default function Schedules() {
   const navigate = useNavigate();
   const { data: calendarConnection, isLoading } = useGoogleCalendarConnection();
+  const { data: organization } = useOrganization();
 
   // Redirect to onboarding if no calendar connection
   useEffect(() => {
@@ -39,8 +43,8 @@ export default function Schedules() {
   const calendarId = calendarConnection.selected_calendars?.[0] || "primary";
   const encodedCalendarId = encodeURIComponent(calendarId);
   
-  // Google Calendar embed URL
-  const embedUrl = `https://calendar.google.com/calendar/embed?src=${encodedCalendarId}&ctz=America/Los_Angeles&mode=WEEK&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=0&showTz=1`;
+  // Get business hours schedule from organization
+  const businessHours = (organization as any)?.business_hours_schedule as WeekSchedule | null;
 
   return (
     <DashboardLayout>
@@ -72,7 +76,7 @@ export default function Schedules() {
           </div>
         </motion.div>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -84,17 +88,14 @@ export default function Schedules() {
               </p>
             </div>
             <CardDescription>
-              Appointments booked by AnswerAfter will appear here automatically
+              Appointments booked by AnswerAfter will appear here. Dimmed hours indicate after-hours when AI handles calls.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="w-full aspect-[16/10] min-h-[600px]">
-              <iframe
-                src={embedUrl}
-                className="w-full h-full border-0 rounded-b-lg"
-                frameBorder="0"
-                scrolling="no"
-                title="Google Calendar"
+            <div className="h-[650px]">
+              <WeeklyCalendarView 
+                businessHours={businessHours} 
+                timezone={organization?.timezone}
               />
             </div>
           </CardContent>
