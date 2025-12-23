@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Save, Loader2, MessageCircle, FileText, Mic } from 'lucide-react';
+import { Bot, Save, Loader2, MessageCircle, FileText, Mic, Play, Square } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,11 @@ interface ElevenLabsVoice {
   name: string;
   elevenlabs_voice_id: string;
   description: string | null;
+  preview_url: string | null;
 }
+
+// Singleton audio instance for previews
+let previewAudio: HTMLAudioElement | null = null;
 
 export default function MyAgent() {
   const { user } = useAuth();
@@ -29,6 +33,7 @@ export default function MyAgent() {
   const [agentContent, setAgentContent] = useState('');
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   
   const [isSavingGreeting, setIsSavingGreeting] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
@@ -282,6 +287,40 @@ export default function MyAgent() {
     }
   };
 
+  const handlePreviewVoice = (voice: ElevenLabsVoice) => {
+    if (!voice.preview_url) {
+      toast({ title: 'No preview available', description: 'Preview audio is not available for this voice.', variant: 'destructive' });
+      return;
+    }
+
+    // If currently playing this voice, stop it
+    if (playingVoiceId === voice.id) {
+      if (previewAudio) {
+        previewAudio.pause();
+        previewAudio.currentTime = 0;
+      }
+      setPlayingVoiceId(null);
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (previewAudio) {
+      previewAudio.pause();
+      previewAudio.currentTime = 0;
+    }
+
+    // Create new audio and play
+    previewAudio = new Audio(voice.preview_url);
+    previewAudio.onended = () => setPlayingVoiceId(null);
+    previewAudio.onerror = () => {
+      setPlayingVoiceId(null);
+      toast({ title: 'Playback error', description: 'Failed to play audio preview.', variant: 'destructive' });
+    };
+    
+    previewAudio.play();
+    setPlayingVoiceId(voice.id);
+  };
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -386,11 +425,36 @@ export default function MyAgent() {
                   ))}
                 </SelectContent>
               </Select>
-              <div className="flex justify-end">
-                <Button onClick={handleSaveVoice} disabled={isSavingVoice || !selectedVoiceId}>
-                  {isSavingVoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  Save Voice
-                </Button>
+              <div className="flex justify-between items-center">
+                {selectedVoiceId && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      const voice = voices.find(v => v.id === selectedVoiceId);
+                      if (voice) handlePreviewVoice(voice);
+                    }}
+                    disabled={!voices.find(v => v.id === selectedVoiceId)?.preview_url}
+                  >
+                    {playingVoiceId === selectedVoiceId ? (
+                      <>
+                        <Square className="h-4 w-4 mr-2" />
+                        Stop Preview
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Preview Voice
+                      </>
+                    )}
+                  </Button>
+                )}
+                <div className={selectedVoiceId ? '' : 'ml-auto'}>
+                  <Button onClick={handleSaveVoice} disabled={isSavingVoice || !selectedVoiceId}>
+                    {isSavingVoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Voice
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
