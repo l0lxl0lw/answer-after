@@ -24,6 +24,7 @@ import {
   PhoneOutgoing,
   Clock,
   Check,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -55,6 +56,7 @@ const sidebarSections = [
     links: [
       { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
       { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
+      { name: "Contacts", href: "/dashboard/contacts", icon: Users },
     ],
   },
   {

@@ -11,11 +11,12 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Minimal scopes for reading/writing calendar events only
+// Scopes for calendar and contacts access
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/contacts",
 ].join(" ");
 
 serve(async (req) => {
