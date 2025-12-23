@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Plus,
@@ -8,20 +9,14 @@ import {
   Clock,
   DollarSign,
   AlertCircle,
-  Search,
+  Zap,
+  Settings2,
+  Loader2,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -49,142 +44,159 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { z } from "zod";
+
+// Validation schema
+const serviceSchema = z.object({
+  name: z.string().trim().min(1, "Service name is required").max(100, "Name too long"),
+  description: z.string().max(500, "Description too long").optional(),
+  base_price_cents: z.number().min(0, "Price must be positive"),
+  duration_minutes: z.number().min(1, "Duration must be at least 1 minute").max(1440, "Duration too long"),
+  category: z.enum(["routine", "emergency", "maintenance", "installation"]),
+});
 
 interface Service {
-  id: number;
+  id: string;
   name: string;
-  description: string;
+  description: string | null;
+  base_price_cents: number;
+  duration_minutes: number;
   category: string;
-  basePrice: number;
-  afterHoursMultiplier: number;
-  estimatedDuration: string;
-  priority: "low" | "medium" | "high" | "emergency";
-  availableDays: string[];
-  availableHours: { start: string; end: string };
-  isActive: boolean;
+  is_active: boolean;
+  organization_id: string;
+  created_at: string;
 }
 
-const initialServices: Service[] = [
-  {
-    id: 1,
-    name: "Emergency Heating Repair",
-    description: "24/7 emergency heating system repair and diagnostics",
-    category: "Heating",
-    basePrice: 250,
-    afterHoursMultiplier: 1.5,
-    estimatedDuration: "2-4 hours",
-    priority: "emergency",
-    availableDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    availableHours: { start: "00:00", end: "23:59" },
-    isActive: true,
-  },
-  {
-    id: 2,
-    name: "AC Maintenance",
-    description: "Regular air conditioning maintenance and filter replacement",
-    category: "Cooling",
-    basePrice: 150,
-    afterHoursMultiplier: 1.25,
-    estimatedDuration: "1-2 hours",
-    priority: "medium",
-    availableDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    availableHours: { start: "08:00", end: "18:00" },
-    isActive: true,
-  },
-  {
-    id: 3,
-    name: "Thermostat Installation",
-    description: "Smart thermostat installation and configuration",
-    category: "Installation",
-    basePrice: 200,
-    afterHoursMultiplier: 1.0,
-    estimatedDuration: "1-2 hours",
-    priority: "low",
-    availableDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    availableHours: { start: "09:00", end: "17:00" },
-    isActive: true,
-  },
-  {
-    id: 4,
-    name: "Plumbing Emergency",
-    description: "Emergency pipe repair, leak detection, and water damage prevention",
-    category: "Plumbing",
-    basePrice: 300,
-    afterHoursMultiplier: 1.75,
-    estimatedDuration: "2-5 hours",
-    priority: "emergency",
-    availableDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    availableHours: { start: "00:00", end: "23:59" },
-    isActive: true,
-  },
-  {
-    id: 5,
-    name: "Duct Cleaning",
-    description: "Complete air duct cleaning and sanitization service",
-    category: "Maintenance",
-    basePrice: 350,
-    afterHoursMultiplier: 1.0,
-    estimatedDuration: "3-4 hours",
-    priority: "low",
-    availableDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    availableHours: { start: "08:00", end: "16:00" },
-    isActive: false,
-  },
-];
+interface FormData {
+  name: string;
+  description: string;
+  base_price_cents: number;
+  duration_minutes: number;
+  category: string;
+}
 
-const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const priorityColors = {
-  low: "bg-muted text-muted-foreground",
-  medium: "bg-primary/20 text-primary",
-  high: "bg-warning/20 text-warning",
-  emergency: "bg-destructive/20 text-destructive",
-};
-
-const emptyService: Omit<Service, "id"> = {
+const emptyForm: FormData = {
   name: "",
   description: "",
-  category: "",
-  basePrice: 0,
-  afterHoursMultiplier: 1.0,
-  estimatedDuration: "",
-  priority: "medium",
-  availableDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-  availableHours: { start: "09:00", end: "17:00" },
-  isActive: true,
+  base_price_cents: 0,
+  duration_minutes: 60,
+  category: "routine",
+};
+
+const categoryConfig = {
+  emergency: { label: "EMERGENCY", color: "bg-destructive text-destructive-foreground", icon: Zap },
+  routine: { label: "ROUTINE", color: "bg-muted text-muted-foreground", icon: Settings2 },
+  maintenance: { label: "MAINTENANCE", color: "bg-primary/20 text-primary", icon: Settings2 },
+  installation: { label: "INSTALLATION", color: "bg-accent text-accent-foreground", icon: Settings2 },
 };
 
 const Services = () => {
-  const [services, setServices] = useState<Service[]>(initialServices);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [formData, setFormData] = useState<Omit<Service, "id">>(emptyService);
+  const [formData, setFormData] = useState<FormData>(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const filteredServices = services.filter(
-    (service) =>
-      service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      service.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Fetch services
+  const { data: services = [], isLoading } = useQuery({
+    queryKey: ["services"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("services")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Service[];
+    },
+    enabled: !!user,
+  });
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = "Service name is required";
-    if (!formData.category.trim()) errors.category = "Category is required";
-    if (formData.basePrice <= 0) errors.basePrice = "Price must be greater than 0";
-    if (!formData.estimatedDuration.trim()) errors.estimatedDuration = "Duration is required";
-    if (formData.availableDays.length === 0) errors.availableDays = "Select at least one day";
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: FormData) => {
+      const { error } = await supabase.from("services").insert({
+        organization_id: user?.organization_id,
+        name: data.name.trim(),
+        description: data.description.trim() || null,
+        base_price_cents: data.base_price_cents,
+        duration_minutes: data.duration_minutes,
+        category: data.category,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      toast({ title: "Service created", description: "Your service has been added." });
+      setIsDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
+      const { error } = await supabase
+        .from("services")
+        .update({
+          name: data.name.trim(),
+          description: data.description.trim() || null,
+          base_price_cents: data.base_price_cents,
+          duration_minutes: data.duration_minutes,
+          category: data.category,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      toast({ title: "Service updated", description: "Your changes have been saved." });
+      setIsDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("services").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      toast({ title: "Service deleted", description: "The service has been removed." });
+      setIsDeleteDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const validateForm = (): boolean => {
+    const result = serviceSchema.safeParse(formData);
+    if (!result.success) {
+      const errors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) errors[err.path[0].toString()] = err.message;
+      });
+      setFormErrors(errors);
+      return false;
+    }
+    setFormErrors({});
+    return true;
   };
 
   const handleOpenAdd = () => {
     setSelectedService(null);
-    setFormData(emptyService);
+    setFormData(emptyForm);
     setFormErrors({});
     setIsDialogOpen(true);
   };
@@ -193,72 +205,42 @@ const Services = () => {
     setSelectedService(service);
     setFormData({
       name: service.name,
-      description: service.description,
+      description: service.description || "",
+      base_price_cents: service.base_price_cents,
+      duration_minutes: service.duration_minutes,
       category: service.category,
-      basePrice: service.basePrice,
-      afterHoursMultiplier: service.afterHoursMultiplier,
-      estimatedDuration: service.estimatedDuration,
-      priority: service.priority,
-      availableDays: service.availableDays,
-      availableHours: service.availableHours,
-      isActive: service.isActive,
     });
     setFormErrors({});
     setIsDialogOpen(true);
   };
 
-  const handleOpenDelete = (service: Service) => {
-    setSelectedService(service);
-    setIsDeleteDialogOpen(true);
-  };
-
   const handleSave = () => {
     if (!validateForm()) return;
-
     if (selectedService) {
-      // Edit existing
-      setServices((prev) =>
-        prev.map((s) =>
-          s.id === selectedService.id ? { ...s, ...formData } : s
-        )
-      );
-      toast({
-        title: "Service updated",
-        description: `${formData.name} has been updated successfully.`,
-      });
+      updateMutation.mutate({ id: selectedService.id, data: formData });
     } else {
-      // Add new
-      const newService: Service = {
-        id: Math.max(...services.map((s) => s.id)) + 1,
-        ...formData,
-      };
-      setServices((prev) => [...prev, newService]);
-      toast({
-        title: "Service added",
-        description: `${formData.name} has been added successfully.`,
-      });
+      createMutation.mutate(formData);
     }
-    setIsDialogOpen(false);
   };
 
   const handleDelete = () => {
-    if (!selectedService) return;
-    setServices((prev) => prev.filter((s) => s.id !== selectedService.id));
-    toast({
-      title: "Service deleted",
-      description: `${selectedService.name} has been deleted.`,
-    });
-    setIsDeleteDialogOpen(false);
+    if (selectedService) {
+      deleteMutation.mutate(selectedService.id);
+    }
   };
 
-  const toggleDay = (day: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      availableDays: prev.availableDays.includes(day)
-        ? prev.availableDays.filter((d) => d !== day)
-        : [...prev.availableDays, day],
-    }));
+  const formatPrice = (cents: number) => {
+    return `$${(cents / 100).toFixed(0)}`;
   };
+
+  const formatDuration = (minutes: number) => {
+    if (minutes < 60) return `${minutes} mins`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <DashboardLayout>
@@ -267,15 +249,14 @@ const Services = () => {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div>
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">
-              Services
+              Services Catalog
             </h1>
             <p className="text-muted-foreground">
-              Manage your service offerings, pricing, and availability.
+              The AI uses this list to validate customer requests.
             </p>
           </div>
           <Button onClick={handleOpenAdd} className="gap-2">
@@ -284,394 +265,217 @@ const Services = () => {
           </Button>
         </motion.div>
 
-        {/* Search & Filters */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-        >
-          <Card>
-            <CardContent className="pt-6">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search services by name or category..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+        {/* Services Grid */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : services.length === 0 ? (
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Settings2 className="w-6 h-6 text-muted-foreground" />
               </div>
-            </CardContent>
+              <div>
+                <h3 className="font-semibold mb-1">No services yet</h3>
+                <p className="text-muted-foreground text-sm">
+                  Add your first service to help the AI understand what you offer.
+                </p>
+              </div>
+              <Button onClick={handleOpenAdd} className="gap-2">
+                <Plus className="w-4 h-4" />
+                Add Service
+              </Button>
+            </div>
           </Card>
-        </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {services.map((service, index) => {
+              const config = categoryConfig[service.category as keyof typeof categoryConfig] || categoryConfig.routine;
+              const IconComponent = config.icon;
 
-        {/* Services Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-display text-lg">
-                All Services ({filteredServices.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Service</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Pricing</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredServices.map((service) => (
-                      <TableRow key={service.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{service.name}</p>
-                            <p className="text-sm text-muted-foreground line-clamp-1">
-                              {service.description}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{service.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium">${service.basePrice}</span>
-                            {service.afterHoursMultiplier > 1 && (
-                              <span className="text-xs text-muted-foreground">
-                                ({service.afterHoursMultiplier}x after-hours)
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Clock className="w-4 h-4" />
-                            <span>{service.estimatedDuration}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={priorityColors[service.priority]}>
-                            {service.priority}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={service.isActive ? "default" : "secondary"}
-                          >
-                            {service.isActive ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleOpenEdit(service)}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => handleOpenDelete(service)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {filteredServices.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
-                          <p className="text-muted-foreground">
-                            No services found. Add your first service to get started.
-                          </p>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              return (
+                <motion.div
+                  key={service.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Card className="group relative hover:shadow-md transition-shadow">
+                    <CardContent className="p-5">
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${
+                        service.category === "emergency" 
+                          ? "bg-destructive/10" 
+                          : "bg-muted"
+                      }`}>
+                        {service.category === "emergency" ? (
+                          <Zap className="w-5 h-5 text-destructive" />
+                        ) : (
+                          <Settings2 className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="font-semibold text-foreground mb-3 line-clamp-1">
+                        {service.name}
+                      </h3>
+
+                      {/* Price & Duration */}
+                      <div className="space-y-1.5 mb-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <DollarSign className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">Base Price:</span>
+                          <span className="font-medium text-foreground">
+                            {formatPrice(service.base_price_cents)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">Est. Duration:</span>
+                          <span className="font-medium text-foreground">
+                            {formatDuration(service.duration_minutes)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Category Badge */}
+                      <Badge className={config.color}>
+                        {config.label}
+                      </Badge>
+
+                      {/* Actions (show on hover) */}
+                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleOpenEdit(service)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            setSelectedService(service);
+                            setIsDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
 
         {/* Add/Edit Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-display text-xl">
+              <DialogTitle>
                 {selectedService ? "Edit Service" : "Add New Service"}
               </DialogTitle>
               <DialogDescription>
                 {selectedService
                   ? "Update the service details below."
-                  : "Fill in the details to create a new service."}
+                  : "Define a service that the AI can offer to customers."}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-6 py-4">
-              {/* Basic Info */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Basic Information
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Service Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      placeholder="e.g., Emergency Heating Repair"
-                    />
-                    {formErrors.name && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.name}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category *</Label>
-                    <Input
-                      id="category"
-                      value={formData.category}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, category: e.target.value }))
-                      }
-                      placeholder="e.g., Heating, Cooling, Plumbing"
-                    />
-                    {formErrors.category && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.category}
-                      </p>
-                    )}
-                  </div>
-                </div>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Service Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Emergency Pipe Repair"
+                  maxLength={100}
+                />
+                {formErrors.name && (
+                  <p className="text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {formErrors.name}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Brief description of the service..."
+                  rows={2}
+                  maxLength={500}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
+                  <Label htmlFor="price">Base Price ($) *</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    min={0}
+                    value={formData.base_price_cents / 100}
                     onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, description: e.target.value }))
+                      setFormData({ ...formData, base_price_cents: Math.round(parseFloat(e.target.value || "0") * 100) })
                     }
-                    placeholder="Describe the service..."
-                    rows={3}
+                    placeholder="95"
                   />
+                  {formErrors.base_price_cents && (
+                    <p className="text-sm text-destructive">{formErrors.base_price_cents}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Duration (mins) *</Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={formData.duration_minutes}
+                    onChange={(e) =>
+                      setFormData({ ...formData, duration_minutes: parseInt(e.target.value || "60", 10) })
+                    }
+                    placeholder="60"
+                  />
+                  {formErrors.duration_minutes && (
+                    <p className="text-sm text-destructive">{formErrors.duration_minutes}</p>
+                  )}
                 </div>
               </div>
 
-              {/* Pricing */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Pricing Rules
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="basePrice">Base Price ($) *</Label>
-                    <Input
-                      id="basePrice"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.basePrice}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          basePrice: parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                    />
-                    {formErrors.basePrice && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.basePrice}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="multiplier">After-Hours Multiplier</Label>
-                    <Select
-                      value={formData.afterHoursMultiplier.toString()}
-                      onValueChange={(value) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          afterHoursMultiplier: parseFloat(value),
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1.0x (No increase)</SelectItem>
-                        <SelectItem value="1.25">1.25x</SelectItem>
-                        <SelectItem value="1.5">1.5x</SelectItem>
-                        <SelectItem value="1.75">1.75x</SelectItem>
-                        <SelectItem value="2">2.0x (Double)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="duration">Estimated Duration *</Label>
-                    <Input
-                      id="duration"
-                      value={formData.estimatedDuration}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          estimatedDuration: e.target.value,
-                        }))
-                      }
-                      placeholder="e.g., 2-4 hours"
-                    />
-                    {formErrors.estimatedDuration && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.estimatedDuration}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Scheduling */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Scheduling Constraints
-                </h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Available Days *</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {daysOfWeek.map((day) => (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => toggleDay(day)}
-                          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                            formData.availableDays.includes(day)
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-muted/50 text-muted-foreground border-border hover:border-primary/50"
-                          }`}
-                        >
-                          {day}
-                        </button>
-                      ))}
-                    </div>
-                    {formErrors.availableDays && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.availableDays}
-                      </p>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="startTime">Start Time</Label>
-                      <Input
-                        id="startTime"
-                        type="time"
-                        value={formData.availableHours.start}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            availableHours: {
-                              ...prev.availableHours,
-                              start: e.target.value,
-                            },
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="endTime">End Time</Label>
-                      <Input
-                        id="endTime"
-                        type="time"
-                        value={formData.availableHours.end}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            availableHours: {
-                              ...prev.availableHours,
-                              end: e.target.value,
-                            },
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Priority & Status */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Priority & Status
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Priority Level</Label>
-                    <Select
-                      value={formData.priority}
-                      onValueChange={(value: "low" | "medium" | "high" | "emergency") =>
-                        setFormData((prev) => ({ ...prev, priority: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="emergency">Emergency</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <div className="flex items-center gap-3 pt-2">
-                      <Checkbox
-                        id="isActive"
-                        checked={formData.isActive}
-                        onCheckedChange={(checked) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            isActive: checked === true,
-                          }))
-                        }
-                      />
-                      <Label
-                        htmlFor="isActive"
-                        className="font-normal cursor-pointer"
-                      >
-                        Service is active and available for booking
-                      </Label>
-                    </div>
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="category">Category *</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(val) => setFormData({ ...formData, category: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="routine">Routine</SelectItem>
+                    <SelectItem value="emergency">Emergency</SelectItem>
+                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    <SelectItem value="installation">Installation</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -679,21 +483,21 @@ const Services = () => {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {selectedService ? "Save Changes" : "Add Service"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
+        {/* Delete Confirmation */}
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Service</AlertDialogTitle>
+              <AlertDialogTitle>Delete Service?</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{selectedService?.name}"? This
-                action cannot be undone.
+                This will permanently delete "{selectedService?.name}". This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -702,7 +506,11 @@ const Services = () => {
                 onClick={handleDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete
+                {deleteMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Delete"
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

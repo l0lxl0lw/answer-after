@@ -46,6 +46,7 @@ const sidebarSections = [
     label: "Configure",
     links: [
       { name: "My Agent", href: "/dashboard/my-agent", icon: Bot },
+      { name: "Services", href: "/dashboard/services", icon: Wrench },
       { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
     ],
   },
@@ -59,7 +60,7 @@ const sidebarSections = [
   {
     label: "Manage",
     links: [
-      { name: "Schedules", href: "/dashboard/schedules", icon: Wrench },
+      { name: "Schedules", href: "/dashboard/schedules", icon: Calendar },
       { name: "Settings", href: "/dashboard/settings", icon: Settings },
     ],
   },
