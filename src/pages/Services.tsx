@@ -253,7 +253,7 @@ const Services = () => {
         >
           <div>
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">
-              Services Catalog
+              My Services
             </h1>
             <p className="text-muted-foreground">
               The AI uses this list to validate customer requests.
