@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.google-contacts]
 verify_jwt = true
+
+[functions.google-calendar-events]
+verify_jwt = true
