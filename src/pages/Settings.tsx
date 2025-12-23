@@ -14,6 +14,7 @@ import {
   Check,
   ExternalLink
 } from 'lucide-react';
+import { BusinessHoursSchedule, WeekSchedule } from '@/components/settings/BusinessHoursSchedule';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,16 @@ export default function Settings() {
     is_after_hours_only: true,
   });
 
+  const defaultSchedule: WeekSchedule = {
+    monday: { enabled: true, start: '09:00', end: '17:00' },
+    tuesday: { enabled: true, start: '09:00', end: '17:00' },
+    wednesday: { enabled: true, start: '09:00', end: '17:00' },
+    thursday: { enabled: true, start: '09:00', end: '17:00' },
+    friday: { enabled: true, start: '09:00', end: '17:00' },
+    saturday: { enabled: false, start: '09:00', end: '17:00' },
+    sunday: { enabled: false, start: '09:00', end: '17:00' },
+  };
+
   const [orgForm, setOrgForm] = useState({
     name: '',
     timezone: (() => {
@@ -56,8 +67,7 @@ export default function Settings() {
         return 'America/Chicago';
       }
     })(),
-    business_hours_start: '08:00',
-    business_hours_end: '17:00',
+    business_hours_schedule: defaultSchedule,
     notification_email: '',
     notification_phone: '',
     emergency_keywords: [] as string[],
@@ -91,11 +101,13 @@ export default function Settings() {
   // Handle checkout success redirect
   useEffect(() => {
     if (organization) {
+      // Parse business_hours_schedule from organization or use default
+      const scheduleFromOrg = (organization as any).business_hours_schedule as WeekSchedule | null;
+      
       setOrgForm({
         name: organization.name,
         timezone: organization.timezone,
-        business_hours_start: organization.business_hours_start || '08:00',
-        business_hours_end: organization.business_hours_end || '17:00',
+        business_hours_schedule: scheduleFromOrg || defaultSchedule,
         notification_email: organization.notification_email || '',
         notification_phone: organization.notification_phone || '',
         emergency_keywords: organization.emergency_keywords || [],
@@ -116,8 +128,7 @@ export default function Settings() {
         .update({
           name: orgForm.name,
           timezone: orgForm.timezone,
-          business_hours_start: orgForm.business_hours_start,
-          business_hours_end: orgForm.business_hours_end,
+          business_hours_schedule: orgForm.business_hours_schedule as any,
           notification_email: orgForm.notification_email || null,
           notification_phone: orgForm.notification_phone || null,
           emergency_keywords: orgForm.emergency_keywords,
@@ -468,26 +479,10 @@ export default function Settings() {
 
                   <Separator />
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="hours-start">Business Hours Start</Label>
-                      <Input
-                        id="hours-start"
-                        type="time"
-                        value={orgForm.business_hours_start}
-                        onChange={(e) => setOrgForm({ ...orgForm, business_hours_start: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="hours-end">Business Hours End</Label>
-                      <Input
-                        id="hours-end"
-                        type="time"
-                        value={orgForm.business_hours_end}
-                        onChange={(e) => setOrgForm({ ...orgForm, business_hours_end: e.target.value })}
-                      />
-                    </div>
-                  </div>
+                  <BusinessHoursSchedule
+                    schedule={orgForm.business_hours_schedule}
+                    onChange={(schedule) => setOrgForm({ ...orgForm, business_hours_schedule: schedule })}
+                  />
                 </CardContent>
               </Card>
 
