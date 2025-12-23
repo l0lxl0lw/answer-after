@@ -177,7 +177,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-muted/60 border border-border" />
-          <span className="text-muted-foreground">After hours (AI answers)</span>
+          <span className="text-muted-foreground">Unavailable</span>
         </div>
       </div>
     </div>
