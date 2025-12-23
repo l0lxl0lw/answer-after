@@ -135,7 +135,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
                         "h-12 border-r border-border/50 last:border-r-0 transition-colors relative",
                         available 
                           ? "bg-card hover:bg-accent/30" 
-                          : "bg-muted/40",
+                          : "bg-muted",
                         isCurrentHour && "ring-1 ring-primary/50"
                       )}
                     >
