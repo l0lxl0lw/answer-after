@@ -635,6 +635,7 @@ export interface SubscriptionTier {
   support_level: string;
   is_popular: boolean;
   is_active: boolean;
+  is_visible: boolean;
   display_order: number;
 }
 
@@ -646,6 +647,7 @@ export function useSubscriptionTiers() {
         .from('subscription_tiers')
         .select('*')
         .eq('is_active', true)
+        .eq('is_visible', true)
         .order('display_order', { ascending: true });
       
       if (error) throw error;
