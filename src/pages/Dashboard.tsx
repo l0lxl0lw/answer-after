@@ -236,8 +236,8 @@ const Dashboard = () => {
           </Badge>
         </motion.div>
 
-        {/* Stats Grid - 4 cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Stats Grid - 3 cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -272,21 +272,6 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
-          >
-            <StatCard
-              title="Emergencies"
-              value={0}
-              icon={AlertTriangle}
-              iconBgColor="bg-amber-100 dark:bg-amber-900/30"
-              iconColor="text-amber-600 dark:text-amber-400"
-              trend={{ value: "5%", up: false }}
-              loading={statsLoading}
-            />
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
           >
             <StatCard
               title="Revenue"
