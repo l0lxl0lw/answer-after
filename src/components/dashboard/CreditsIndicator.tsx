@@ -12,11 +12,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Settings, CreditCard, Sparkles, LogOut, Palette, ChevronRight, Monitor, Moon, Sun, Check } from "lucide-react";
@@ -202,48 +197,58 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
             Settings
           </Link>
           
-          {/* Appearance Section */}
-          <Collapsible open={appearanceOpen} onOpenChange={setAppearanceOpen}>
-            <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors">
+          {/* Appearance Section - Submenu */}
+          <div className="relative">
+            <button
+              onMouseEnter={() => setAppearanceOpen(true)}
+              onMouseLeave={() => setAppearanceOpen(false)}
+              className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+            >
               <div className="flex items-center gap-3">
                 <Palette className="w-4 h-4" />
                 Appearance
               </div>
-              <ChevronRight className={cn("w-4 h-4 transition-transform", appearanceOpen && "rotate-90")} />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pl-4">
-              <button
-                onClick={() => setTheme('system')}
-                className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            {appearanceOpen && (
+              <div
+                onMouseEnter={() => setAppearanceOpen(true)}
+                onMouseLeave={() => setAppearanceOpen(false)}
+                className="absolute left-full top-0 ml-1 w-40 bg-popover border border-border rounded-lg shadow-lg p-1 z-50"
               >
-                <div className="flex items-center gap-3">
-                  <Monitor className="w-4 h-4" />
-                  System
-                </div>
-                {theme === 'system' && <Check className="w-4 h-4 text-primary" />}
-              </button>
-              <button
-                onClick={() => setTheme('dark')}
-                className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Moon className="w-4 h-4" />
-                  Dark
-                </div>
-                {theme === 'dark' && <Check className="w-4 h-4 text-primary" />}
-              </button>
-              <button
-                onClick={() => setTheme('light')}
-                className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Sun className="w-4 h-4" />
-                  Light
-                </div>
-                {theme === 'light' && <Check className="w-4 h-4 text-primary" />}
-              </button>
-            </CollapsibleContent>
-          </Collapsible>
+                <button
+                  onClick={() => { setTheme('system'); setAppearanceOpen(false); }}
+                  className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Monitor className="w-4 h-4" />
+                    System
+                  </div>
+                  {theme === 'system' && <Check className="w-4 h-4 text-primary" />}
+                </button>
+                <button
+                  onClick={() => { setTheme('dark'); setAppearanceOpen(false); }}
+                  className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Moon className="w-4 h-4" />
+                    Dark
+                  </div>
+                  {theme === 'dark' && <Check className="w-4 h-4 text-primary" />}
+                </button>
+                <button
+                  onClick={() => { setTheme('light'); setAppearanceOpen(false); }}
+                  className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Sun className="w-4 h-4" />
+                    Light
+                  </div>
+                  {theme === 'light' && <Check className="w-4 h-4 text-primary" />}
+                </button>
+              </div>
+            )}
+          </div>
           
           <Link
             to="/dashboard/subscriptions"
