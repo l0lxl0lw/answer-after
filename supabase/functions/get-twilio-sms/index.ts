@@ -39,10 +39,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client
+    // Initialize Supabase client with service role to bypass RLS
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    
+    // Use anon key client for auth verification
+    const anonClient = createClient(supabaseUrl, supabaseAnonKey);
+    
+    // Use service role client for data queries (bypasses RLS)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get auth header and verify user
     const authHeader = req.headers.get('Authorization');
@@ -53,7 +59,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(
       authHeader.replace('Bearer ', '')
     );
 
@@ -65,7 +71,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get user's organization
+    // Get user's organization using service role client
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('organization_id')
