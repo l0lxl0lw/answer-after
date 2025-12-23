@@ -20,6 +20,10 @@ import {
   Puzzle,
   Bot,
   ChevronDown,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Clock,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -163,6 +167,7 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
   const { data: organization } = useOrganization();
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<'inbound' | 'outbound'>('inbound');
   
   // Check if user is admin
   useEffect(() => {
@@ -191,7 +196,7 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
   
   return (
     <>
-      {/* Logo & Dropdown */}
+      {/* Logo & Mode Dropdown */}
       <div className="mb-6">
         <Link
           to="/"
@@ -211,100 +216,142 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
           )}
         </Link>
 
-        {/* Workspace Dropdown */}
+        {/* Inbound/Outbound Mode Dropdown */}
         {!collapsed && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors text-sm">
+              <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors text-sm">
                 <div className="flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-primary" />
-                  <span className="font-medium truncate">
-                    {organization?.name || "Dashboard"}
+                  {selectedMode === 'inbound' ? (
+                    <PhoneIncoming className="w-4 h-4 text-primary" />
+                  ) : (
+                    <PhoneOutgoing className="w-4 h-4 text-primary" />
+                  )}
+                  <span className="font-medium">
+                    {selectedMode === 'inbound' ? 'Inbound' : 'Outbound'}
                   </span>
                 </div>
                 <ChevronDown className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem asChild>
-                <Link to="/dashboard" onClick={onClose}>
-                  <LayoutDashboard className="w-4 h-4 mr-2" />
-                  Dashboard
-                </Link>
+            <DropdownMenuContent align="start" className="w-56 bg-popover border border-border shadow-lg">
+              <DropdownMenuItem 
+                onClick={() => setSelectedMode('inbound')}
+                className="flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <PhoneIncoming className="w-4 h-4" />
+                  Inbound
+                </div>
+                {selectedMode === 'inbound' && <Check className="w-4 h-4 text-primary" />}
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/dashboard/settings" onClick={onClose}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </Link>
+              <DropdownMenuItem 
+                onClick={() => setSelectedMode('outbound')}
+                className="flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <PhoneOutgoing className="w-4 h-4" />
+                  Outbound
+                </div>
+                {selectedMode === 'outbound' && <Check className="w-4 h-4 text-primary" />}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-      </div>
 
-      {/* Navigation with Sections */}
-      <nav className="flex-1 space-y-4 overflow-y-auto">
-        {sidebarSections.map((section, sectionIndex) => (
-          <div key={sectionIndex}>
-            {/* Section Label */}
-            {section.label && !collapsed && (
-              <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {section.label}
-              </div>
+        {/* Collapsed mode indicator */}
+        {collapsed && (
+          <div className="flex justify-center">
+            {selectedMode === 'inbound' ? (
+              <PhoneIncoming className="w-5 h-5 text-primary" />
+            ) : (
+              <PhoneOutgoing className="w-5 h-5 text-primary" />
             )}
-            
-            {/* Section Links */}
-            <div className="space-y-1">
-              {section.links.map((link) => {
-                const isActive = currentPath === link.href;
-                return (
-                  <Link
-                    key={link.href}
-                    to={link.href}
-                    onClick={onClose}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                      collapsed && "justify-center px-2",
-                      isActive
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                    )}
-                  >
-                    <link.icon className={cn("w-5 h-5 flex-shrink-0", isActive && "text-primary")} />
-                    {!collapsed && <span>{link.name}</span>}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-        
-        {/* Admin Link - only visible to admins */}
-        {isAdmin && (
-          <div>
-            {!collapsed && (
-              <div className="px-3 py-1.5 text-xs font-medium text-destructive/70 uppercase tracking-wider">
-                Admin
-              </div>
-            )}
-            <Link
-              to="/dashboard/admin"
-              onClick={onClose}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                collapsed && "justify-center px-2",
-                currentPath === "/dashboard/admin"
-                  ? "bg-destructive/10 text-destructive font-medium"
-                  : "text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
-              )}
-            >
-              <Shield className={cn("w-5 h-5 flex-shrink-0")} />
-              {!collapsed && <span>Admin Panel</span>}
-            </Link>
           </div>
         )}
-      </nav>
+      </div>
+
+      {/* Navigation - Show based on selected mode */}
+      {selectedMode === 'inbound' ? (
+        <nav className="flex-1 space-y-4 overflow-y-auto">
+          {sidebarSections.map((section, sectionIndex) => (
+            <div key={sectionIndex}>
+              {/* Section Label */}
+              {section.label && !collapsed && (
+                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {section.label}
+                </div>
+              )}
+              
+              {/* Section Links */}
+              <div className="space-y-1">
+                {section.links.map((link) => {
+                  const isActive = currentPath === link.href;
+                  return (
+                    <Link
+                      key={link.href}
+                      to={link.href}
+                      onClick={onClose}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+                        collapsed && "justify-center px-2",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                      )}
+                    >
+                      <link.icon className={cn("w-5 h-5 flex-shrink-0", isActive && "text-primary")} />
+                      {!collapsed && <span>{link.name}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          
+          {/* Admin Link - only visible to admins */}
+          {isAdmin && (
+            <div>
+              {!collapsed && (
+                <div className="px-3 py-1.5 text-xs font-medium text-destructive/70 uppercase tracking-wider">
+                  Admin
+                </div>
+              )}
+              <Link
+                to="/dashboard/admin"
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+                  collapsed && "justify-center px-2",
+                  currentPath === "/dashboard/admin"
+                    ? "bg-destructive/10 text-destructive font-medium"
+                    : "text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+                )}
+              >
+                <Shield className={cn("w-5 h-5 flex-shrink-0")} />
+                {!collapsed && <span>Admin Panel</span>}
+              </Link>
+            </div>
+          )}
+        </nav>
+      ) : (
+        /* Outbound Coming Soon */
+        <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
+          {!collapsed ? (
+            <>
+              <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <Clock className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="font-semibold text-foreground mb-2">Coming Soon</h3>
+              <p className="text-sm text-muted-foreground">
+                Outbound calling features are currently in development.
+              </p>
+            </>
+          ) : (
+            <Clock className="w-6 h-6 text-muted-foreground" />
+          )}
+        </div>
+      )}
 
       {/* Upgrade Button & User Section */}
       <div className={cn(
