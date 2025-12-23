@@ -98,6 +98,59 @@ export function useDashboardStats() {
 
 // ============= Call Hooks =============
 
+export interface Conversation {
+  id: string;
+  conversation_id: string;
+  status: string;
+  started_at: string;
+  duration_seconds: number;
+  message_count: number;
+  summary: string | null;
+  call_successful: string | null;
+}
+
+export function useConversations(params?: { search?: string; page?: number; per_page?: number }) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['conversations', user?.organization_id, params],
+    queryFn: async () => {
+      if (!user?.organization_id) return { conversations: [], meta: { page: 1, per_page: 20, total: 0, has_more: false } };
+      
+      const session = await supabase.auth.getSession();
+      
+      // Build query params
+      const queryParams = new URLSearchParams();
+      if (params?.search) queryParams.set('search', params.search);
+      if (params?.page) queryParams.set('page', params.page.toString());
+      if (params?.per_page) queryParams.set('per_page', params.per_page.toString());
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-elevenlabs-conversations?${queryParams.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.data.session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch conversations');
+      }
+      
+      const data = await response.json();
+      
+      return {
+        conversations: data.conversations as Conversation[],
+        meta: data.meta,
+      };
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
 export function useCalls(params?: CallListParams) {
   const { user } = useAuth();
   
@@ -150,12 +203,12 @@ export function useCall(id: string) {
   const { user } = useAuth();
   
   return useQuery({
-    queryKey: ['calls', 'twilio', id],
+    queryKey: ['calls', 'conversation', id],
     queryFn: async () => {
-      // Fetch call details from Twilio via edge function
+      // Fetch conversation details from ElevenLabs via edge function
       const session = await supabase.auth.getSession();
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-twilio-call?call_sid=${id}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-elevenlabs-conversation?conversation_id=${id}`,
         {
           headers: {
             'Authorization': `Bearer ${session.data.session?.access_token}`,
@@ -166,7 +219,7 @@ export function useCall(id: string) {
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch call details');
+        throw new Error(errorData.error || 'Failed to fetch conversation details');
       }
       
       const callData = await response.json();
