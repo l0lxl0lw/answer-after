@@ -9,6 +9,7 @@ import { PasswordGate } from "@/components/PasswordGate";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import CallHistory from "./pages/CallHistory";
+import SMS from "./pages/SMS";
 import CallDetail from "./pages/CallDetail";
 import Schedules from "./pages/Schedules";
 import CalendarCallback from "./pages/CalendarCallback";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/calls" element={<ProtectedRoute><CallHistory /></ProtectedRoute>} />
             <Route path="/dashboard/calls/:id" element={<ProtectedRoute><CallDetail /></ProtectedRoute>} />
+            <Route path="/dashboard/sms" element={<ProtectedRoute><SMS /></ProtectedRoute>} />
             <Route path="/dashboard/schedules" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
             <Route path="/dashboard/schedules/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
             <Route path="/dashboard/calendar-setup" element={<ProtectedRoute><CalendarSetupGuide /></ProtectedRoute>} />

@@ -25,6 +25,7 @@ import {
   Clock,
   Check,
   Users,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -55,6 +56,7 @@ const sidebarSections = [
     label: "Monitor",
     links: [
       { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
+      { name: "SMS", href: "/dashboard/sms", icon: MessageSquare },
       { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
     ],
   },
