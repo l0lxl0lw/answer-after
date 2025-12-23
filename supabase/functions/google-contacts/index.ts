@@ -89,42 +89,37 @@ serve(async (req) => {
           });
         }
 
-        // Search for contacts with our source tag
-        const searchUrl = `https://people.googleapis.com/v1/people:searchContacts?query=${encodeURIComponent(SOURCE_TAG)}&readMask=names,phoneNumbers,biographies,metadata&sources=READ_SOURCE_TYPE_CONTACT&pageSize=100`;
+        // Always list all contacts and filter - search API can be unreliable
+        const listUrl = `https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,biographies,metadata&pageSize=1000&sortOrder=LAST_MODIFIED_DESCENDING`;
+        console.log("Fetching contacts from:", listUrl);
         
-        const searchResponse = await fetch(searchUrl, {
+        const listResponse = await fetch(listUrl, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
 
-        if (!searchResponse.ok) {
-          console.error("Search failed:", await searchResponse.text());
-          // Fallback to listing all contacts
-          const listUrl = `https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,biographies,metadata&pageSize=200`;
-          const listResponse = await fetch(listUrl, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-
-          if (!listResponse.ok) {
-            return new Response(JSON.stringify({ error: "Failed to fetch contacts" }), {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-
-          const listData = await listResponse.json();
-          // Filter by source tag in biographies
-          const contacts = (listData.connections || []).filter((contact: any) => {
-            const bio = contact.biographies?.[0]?.value || "";
-            return bio.includes(`Source: ${SOURCE_TAG}`);
-          });
-
-          return new Response(JSON.stringify({ contacts }), {
+        if (!listResponse.ok) {
+          const errorText = await listResponse.text();
+          console.error("List contacts failed:", errorText);
+          return new Response(JSON.stringify({ error: "Failed to fetch contacts", details: errorText }), {
+            status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
-        const searchData = await searchResponse.json();
-        const contacts = searchData.results?.map((r: any) => r.person) || [];
+        const listData = await listResponse.json();
+        console.log("Total contacts from Google:", listData.connections?.length || 0);
+        
+        // Filter by source tag in biographies
+        const contacts = (listData.connections || []).filter((contact: any) => {
+          const bio = contact.biographies?.[0]?.value || "";
+          const hasTag = bio.includes(`Source: ${SOURCE_TAG}`);
+          if (hasTag) {
+            console.log("Found AnswerAfter contact:", contact.names?.[0]?.displayName || contact.names?.[0]?.givenName);
+          }
+          return hasTag;
+        });
+
+        console.log("Filtered AnswerAfter contacts:", contacts.length);
 
         return new Response(JSON.stringify({ contacts }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
