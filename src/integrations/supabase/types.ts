@@ -602,6 +602,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_popular: boolean
+          is_visible: boolean
           name: string
           period: string
           phone_lines: number
@@ -628,6 +629,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_popular?: boolean
+          is_visible?: boolean
           name: string
           period?: string
           phone_lines?: number
@@ -654,6 +656,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_popular?: boolean
+          is_visible?: boolean
           name?: string
           period?: string
           phone_lines?: number
