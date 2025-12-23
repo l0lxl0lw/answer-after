@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, ExternalLink, Settings } from "lucide-react";
+import { Calendar, ExternalLink, Settings, RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,15 @@ import { WeekSchedule } from "@/components/settings/BusinessHoursSchedule";
 
 export default function Schedules() {
   const navigate = useNavigate();
-  const { data: calendarConnection, isLoading } = useGoogleCalendarConnection();
-  const { data: organization } = useOrganization();
+  const { data: calendarConnection, isLoading, refetch } = useGoogleCalendarConnection();
+  const { data: organization, refetch: refetchOrg } = useOrganization();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetch(), refetchOrg()]);
+    setIsRefreshing(false);
+  };
 
   // Redirect to onboarding if no calendar connection
   useEffect(() => {
@@ -61,6 +68,15 @@ export default function Schedules() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
             <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/schedules/onboarding")}>
               <Settings className="w-4 h-4 mr-2" />
               Calendar Settings
