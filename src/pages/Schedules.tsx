@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, ExternalLink, Settings, RefreshCw } from "lucide-react";
+import { Calendar, ExternalLink, Settings, RefreshCw, AlertCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,13 +23,6 @@ export default function Schedules() {
     setIsRefreshing(false);
   };
 
-  // Redirect to onboarding if no calendar connection
-  useEffect(() => {
-    if (!isLoading && !calendarConnection) {
-      navigate("/dashboard/schedules/onboarding");
-    }
-  }, [calendarConnection, isLoading, navigate]);
-
   // Show loading while checking connection
   if (isLoading) {
     return (
@@ -41,9 +34,28 @@ export default function Schedules() {
     );
   }
 
-  // Not connected - will redirect
+  // Not connected - show connect page
   if (!calendarConnection) {
-    return null;
+    return (
+      <DashboardLayout>
+        <Card className="max-w-lg mx-auto mt-12">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <AlertCircle className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <CardTitle>Connect Google Account</CardTitle>
+            <CardDescription>
+              To view and manage your schedule, you need to connect your Google Calendar first. This will allow AnswerAfter to book appointments on your behalf.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button onClick={() => navigate("/dashboard/schedules/onboarding")}>
+              Connect Google Account
+            </Button>
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
   }
 
   // Get the calendar ID for embedding
