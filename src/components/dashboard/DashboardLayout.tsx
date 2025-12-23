@@ -18,20 +18,47 @@ import {
   Sparkles,
   Shield,
   Puzzle,
+  Bot,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-import { Bot } from "lucide-react";
-
-const sidebarLinks = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
-  { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
-  { name: "Schedules", href: "/dashboard/schedules", icon: Wrench },
-  { name: "My Agent", href: "/dashboard/my-agent", icon: Bot },
-  { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+// Organized sidebar sections
+const sidebarSections = [
+  {
+    label: null, // No label for top section
+    links: [
+      { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Configure",
+    links: [
+      { name: "My Agent", href: "/dashboard/my-agent", icon: Bot },
+      { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
+    ],
+  },
+  {
+    label: "Monitor",
+    links: [
+      { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
+      { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
+    ],
+  },
+  {
+    label: "Manage",
+    links: [
+      { name: "Schedules", href: "/dashboard/schedules", icon: Wrench },
+      { name: "Settings", href: "/dashboard/settings", icon: Settings },
+    ],
+  },
 ];
 
 interface DashboardLayoutProps {
@@ -164,64 +191,118 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
   
   return (
     <>
-      {/* Logo */}
-      <Link
-        to="/"
-        className={cn(
-          "flex items-center gap-3 mb-8",
-          collapsed && "justify-center"
-        )}
-        onClick={onClose}
-      >
-        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-hero shadow-glow flex-shrink-0">
-          <Phone className="w-5 h-5 text-primary-foreground" />
-        </div>
-        {!collapsed && (
-          <span className="font-display font-bold text-lg">
-            Answer<span className="text-gradient">After</span>
-          </span>
-        )}
-      </Link>
+      {/* Logo & Dropdown */}
+      <div className="mb-6">
+        <Link
+          to="/"
+          className={cn(
+            "flex items-center gap-3 mb-4",
+            collapsed && "justify-center"
+          )}
+          onClick={onClose}
+        >
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-hero shadow-glow flex-shrink-0">
+            <Phone className="w-5 h-5 text-primary-foreground" />
+          </div>
+          {!collapsed && (
+            <span className="font-display font-bold text-lg">
+              Answer<span className="text-gradient">After</span>
+            </span>
+          )}
+        </Link>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1">
-        {sidebarLinks.map((link) => {
-          const isActive = currentPath === link.href;
-          return (
+        {/* Workspace Dropdown */}
+        {!collapsed && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors text-sm">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-primary" />
+                  <span className="font-medium truncate">
+                    {organization?.name || "Dashboard"}
+                  </span>
+                </div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem asChild>
+                <Link to="/dashboard" onClick={onClose}>
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  Dashboard
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/dashboard/settings" onClick={onClose}>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+
+      {/* Navigation with Sections */}
+      <nav className="flex-1 space-y-4 overflow-y-auto">
+        {sidebarSections.map((section, sectionIndex) => (
+          <div key={sectionIndex}>
+            {/* Section Label */}
+            {section.label && !collapsed && (
+              <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {section.label}
+              </div>
+            )}
+            
+            {/* Section Links */}
+            <div className="space-y-1">
+              {section.links.map((link) => {
+                const isActive = currentPath === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    onClick={onClose}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+                      collapsed && "justify-center px-2",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    )}
+                  >
+                    <link.icon className={cn("w-5 h-5 flex-shrink-0", isActive && "text-primary")} />
+                    {!collapsed && <span>{link.name}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        
+        {/* Admin Link - only visible to admins */}
+        {isAdmin && (
+          <div>
+            {!collapsed && (
+              <div className="px-3 py-1.5 text-xs font-medium text-destructive/70 uppercase tracking-wider">
+                Admin
+              </div>
+            )}
             <Link
-              key={link.href}
-              to={link.href}
+              to="/dashboard/admin"
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
                 collapsed && "justify-center px-2",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                currentPath === "/dashboard/admin"
+                  ? "bg-destructive/10 text-destructive font-medium"
+                  : "text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
               )}
             >
-              <link.icon className={cn("w-5 h-5 flex-shrink-0", isActive && "text-primary")} />
-              {!collapsed && <span>{link.name}</span>}
+              <Shield className={cn("w-5 h-5 flex-shrink-0")} />
+              {!collapsed && <span>Admin Panel</span>}
             </Link>
-          );
-        })}
-        
-        {/* Admin Link - only visible to admins */}
-        {isAdmin && (
-          <Link
-            to="/dashboard/admin"
-            onClick={onClose}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-              collapsed && "justify-center px-2",
-              currentPath === "/dashboard/admin"
-                ? "bg-destructive/10 text-destructive font-medium"
-                : "text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
-            )}
-          >
-            <Shield className={cn("w-5 h-5 flex-shrink-0")} />
-            {!collapsed && <span>Admin</span>}
-          </Link>
+          </div>
         )}
       </nav>
 
