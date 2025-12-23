@@ -202,7 +202,7 @@ export default function Contacts() {
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Button onClick={() => navigate("/dashboard/schedules/onboarding")}>
+            <Button onClick={() => navigate("/dashboard/integrations")}>
               Connect Google Account
             </Button>
           </CardContent>
@@ -226,7 +226,7 @@ export default function Contacts() {
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Button onClick={() => navigate("/dashboard/schedules/onboarding")}>
+            <Button onClick={() => navigate("/dashboard/integrations")}>
               Reconnect Google Account
             </Button>
           </CardContent>

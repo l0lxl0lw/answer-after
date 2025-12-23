@@ -49,7 +49,7 @@ export default function Schedules() {
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Button onClick={() => navigate("/dashboard/schedules/onboarding")}>
+            <Button onClick={() => navigate("/dashboard/integrations")}>
               Connect Google Account
             </Button>
           </CardContent>
@@ -89,7 +89,7 @@ export default function Schedules() {
               <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/schedules/onboarding")}>
+            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/integrations")}>
               <Settings className="w-4 h-4 mr-2" />
               Calendar Settings
             </Button>
