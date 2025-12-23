@@ -14,6 +14,8 @@ import { useSubscription } from '@/hooks/use-api';
 // Import voice preview audio files
 import liamPreview from '@/assets/voices/liam.mp3';
 import matildaPreview from '@/assets/voices/matilda.mp3';
+import laurenPreview from '@/assets/voices/lauren.mp3';
+import michaelPreview from '@/assets/voices/michael.mp3';
 
 const MAX_GREETING_WORDS = 100;
 const MAX_CONTENT_WORDS = 4000;
@@ -21,18 +23,32 @@ const MAX_CONTENT_WORDS = 4000;
 // Hardcoded voices with their ElevenLabs voice IDs
 const VOICES = [
   {
-    id: 'male',
-    name: 'Male (Liam)',
+    id: 'liam',
+    name: 'Liam',
     elevenlabs_voice_id: 'TX3LPaxmHKxFdv7VOQHJ',
     description: 'Professional male voice',
     preview_url: liamPreview,
   },
   {
-    id: 'female',
-    name: 'Female (Matilda)',
+    id: 'matilda',
+    name: 'Matilda',
     elevenlabs_voice_id: 'XrExE9yKIg1WjnnlVkGX',
     description: 'Professional female voice',
     preview_url: matildaPreview,
+  },
+  {
+    id: 'lauren',
+    name: 'Lauren',
+    elevenlabs_voice_id: 'DODLEQrClDo8wCz460ld',
+    description: 'Warm female voice',
+    preview_url: laurenPreview,
+  },
+  {
+    id: 'michael',
+    name: 'Michael',
+    elevenlabs_voice_id: 'ljX1ZrXuDIIRVcmiVSyR',
+    description: 'Friendly male voice',
+    preview_url: michaelPreview,
   },
 ] as const;
 
