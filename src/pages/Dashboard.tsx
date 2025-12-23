@@ -24,16 +24,37 @@ import type { Call } from "@/types/database";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-interface GoogleContact {
+// Raw Google Contact structure from API
+interface RawGoogleContact {
   resourceName: string;
-  name: string;
-  phone: string;
-  email?: string;
+  names?: Array<{ displayName?: string; givenName?: string }>;
+  phoneNumbers?: Array<{ value?: string; canonicalForm?: string }>;
+  biographies?: Array<{ value?: string }>;
 }
 
-// Normalize phone number for comparison
+// Normalize phone number for comparison - extract last 10 digits
 function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, '').slice(-10);
+  const digits = phone.replace(/\D/g, '');
+  // Handle various formats: +12067780089, (206) 778-0089, 2067780089
+  return digits.slice(-10);
+}
+
+// Extract phone numbers from contact for matching
+function getContactPhones(contact: RawGoogleContact): string[] {
+  const phones: string[] = [];
+  if (contact.phoneNumbers) {
+    contact.phoneNumbers.forEach(pn => {
+      // Use canonicalForm first (E.164 format like +12067780089), then fallback to value
+      if (pn.canonicalForm) phones.push(normalizePhone(pn.canonicalForm));
+      if (pn.value) phones.push(normalizePhone(pn.value));
+    });
+  }
+  return [...new Set(phones)]; // Remove duplicates
+}
+
+// Get display name from contact
+function getContactDisplayName(contact: RawGoogleContact): string {
+  return contact.names?.[0]?.displayName || contact.names?.[0]?.givenName || 'Unknown';
 }
 import {
   LineChart,
@@ -187,20 +208,22 @@ const Dashboard = () => {
         body: { action: 'list', organizationId: organization.id }
       });
       if (error) throw error;
-      return data?.contacts as GoogleContact[] || [];
+      return data?.contacts as RawGoogleContact[] || [];
     },
     enabled: !!organization?.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
-  // Build phone-to-name map
+  // Build phone-to-name map with multiple phone formats per contact
   const phoneToContactName = useMemo(() => {
     const map = new Map<string, string>();
     if (googleContacts) {
       googleContacts.forEach((contact) => {
-        if (contact.phone) {
-          map.set(normalizePhone(contact.phone), contact.name);
-        }
+        const name = getContactDisplayName(contact);
+        const phones = getContactPhones(contact);
+        phones.forEach(phone => {
+          map.set(phone, name);
+        });
       });
     }
     return map;
