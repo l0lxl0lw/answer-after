@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useSubscription } from "@/hooks/use-api";
 import {
@@ -12,12 +12,44 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Settings, CreditCard, Sparkles, LogOut } from "lucide-react";
+import { Settings, CreditCard, Sparkles, LogOut, Palette, ChevronRight, Monitor, Moon, Sun, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+
+type ThemeMode = 'system' | 'dark' | 'light';
+
+function useTheme() {
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as ThemeMode) || 'system';
+    }
+    return 'system';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme);
+    }
+
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  return { theme, setTheme: setThemeState };
+}
 
 interface CreditsIndicatorProps {
   collapsed?: boolean;
@@ -30,6 +62,8 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const totalCredits = subscription?.total_credits ?? 1000;
   const usedCredits = subscription?.used_credits ?? 0;
@@ -167,6 +201,50 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
             <Settings className="w-4 h-4" />
             Settings
           </Link>
+          
+          {/* Appearance Section */}
+          <Collapsible open={appearanceOpen} onOpenChange={setAppearanceOpen}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors">
+              <div className="flex items-center gap-3">
+                <Palette className="w-4 h-4" />
+                Appearance
+              </div>
+              <ChevronRight className={cn("w-4 h-4 transition-transform", appearanceOpen && "rotate-90")} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pl-4">
+              <button
+                onClick={() => setTheme('system')}
+                className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Monitor className="w-4 h-4" />
+                  System
+                </div>
+                {theme === 'system' && <Check className="w-4 h-4 text-primary" />}
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Moon className="w-4 h-4" />
+                  Dark
+                </div>
+                {theme === 'dark' && <Check className="w-4 h-4 text-primary" />}
+              </button>
+              <button
+                onClick={() => setTheme('light')}
+                className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Sun className="w-4 h-4" />
+                  Light
+                </div>
+                {theme === 'light' && <Check className="w-4 h-4 text-primary" />}
+              </button>
+            </CollapsibleContent>
+          </Collapsible>
+          
           <Link
             to="/dashboard/subscriptions"
             onClick={handleMenuItemClick}
