@@ -63,19 +63,23 @@ export default function Contacts() {
   const [editForm, setEditForm] = useState({ name: "", phone: "", notes: "" });
 
   // Fetch contacts
-  const { data: contactsData, isLoading: isContactsLoading, refetch } = useQuery({
+  const { data: contactsData, isLoading: isContactsLoading, error: contactsError, refetch } = useQuery({
     queryKey: ["google-contacts", user?.organization_id],
     queryFn: async () => {
-      if (!user?.organization_id) return { contacts: [] };
+      if (!user?.organization_id) return { contacts: [], needsReconnect: false };
       
       const { data, error } = await supabase.functions.invoke("google-contacts", {
         body: { action: "list", organizationId: user.organization_id },
       });
 
-      if (error) throw error;
-      return data as { contacts: GoogleContact[] };
+      if (error) {
+        // Check if it's a scope error - user needs to reconnect
+        throw error;
+      }
+      return data as { contacts: GoogleContact[], needsReconnect?: boolean };
     },
     enabled: !!user?.organization_id && !!connection,
+    retry: false,
   });
 
   // Create contact mutation
@@ -200,6 +204,30 @@ export default function Contacts() {
           <CardContent className="text-center">
             <Button onClick={() => navigate("/dashboard/schedules/onboarding")}>
               Connect Google Account
+            </Button>
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
+  // Show message if contacts scope is missing (user connected before contacts was added)
+  if (contactsError) {
+    return (
+      <DashboardLayout>
+        <Card className="max-w-lg mx-auto mt-12">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center">
+              <AlertCircle className="w-8 h-8 text-amber-600" />
+            </div>
+            <CardTitle>Reconnect Required</CardTitle>
+            <CardDescription>
+              Your Google account was connected before contacts sync was added. Please reconnect your Google account to grant the new contacts permission.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button onClick={() => navigate("/dashboard/schedules/onboarding")}>
+              Reconnect Google Account
             </Button>
           </CardContent>
         </Card>
