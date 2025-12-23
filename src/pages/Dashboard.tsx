@@ -183,16 +183,6 @@ function RecentCallItem({ call, contactName }: { call: Call; contactName?: strin
   );
 }
 
-// Mock chart data (weekly)
-const weeklyChartData = [
-  { name: "Mon", calls: 180, revenue: 4200 },
-  { name: "Tue", calls: 320, revenue: 5800 },
-  { name: "Wed", calls: 450, revenue: 7200 },
-  { name: "Thu", calls: 520, revenue: 8100 },
-  { name: "Fri", calls: 680, revenue: 9500 },
-  { name: "Sat", calls: 920, revenue: 12800 },
-  { name: "Sun", calls: 780, revenue: 11200 },
-];
 
 const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
@@ -259,7 +249,6 @@ const Dashboard = () => {
           </Badge>
         </motion.div>
 
-        {/* Stats Grid - 3 cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -267,12 +256,15 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0 }}
           >
             <StatCard
-              title="Total Calls"
+              title="Total Calls (7d)"
               value={stats?.total_calls_week ?? 0}
               icon={Phone}
               iconBgColor="bg-sky-100 dark:bg-sky-900/30"
               iconColor="text-sky-600 dark:text-sky-400"
-              trend={{ value: "12%", up: true }}
+              trend={stats?.calls_trend !== undefined ? { 
+                value: `${Math.abs(stats.calls_trend)}%`, 
+                up: stats.calls_trend >= 0 
+              } : undefined}
               loading={statsLoading}
             />
           </motion.div>
@@ -282,12 +274,15 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0.1 }}
           >
             <StatCard
-              title="Bookings Made"
-              value={stats?.appointments_booked_today ?? 0}
+              title="Bookings (7d)"
+              value={stats?.appointments_booked_week ?? 0}
               icon={Calendar}
               iconBgColor="bg-emerald-100 dark:bg-emerald-900/30"
               iconColor="text-emerald-600 dark:text-emerald-400"
-              trend={{ value: "8%", up: true }}
+              trend={stats?.bookings_trend !== undefined ? { 
+                value: `${Math.abs(stats.bookings_trend)}%`, 
+                up: stats.bookings_trend >= 0 
+              } : undefined}
               loading={statsLoading}
             />
           </motion.div>
@@ -297,12 +292,15 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0.2 }}
           >
             <StatCard
-              title="Revenue"
-              value={`$${((stats?.revenue_captured_estimate ?? 0)).toLocaleString()}`}
+              title="Est. Revenue (7d)"
+              value={`$${(stats?.revenue_estimate ?? 0).toLocaleString()}`}
               icon={DollarSign}
               iconBgColor="bg-violet-100 dark:bg-violet-900/30"
               iconColor="text-violet-600 dark:text-violet-400"
-              trend={{ value: "22%", up: true }}
+              trend={stats?.revenue_trend !== undefined ? { 
+                value: `${Math.abs(stats.revenue_trend)}%`, 
+                up: stats.revenue_trend >= 0 
+              } : undefined}
               loading={statsLoading}
             />
           </motion.div>
@@ -336,7 +334,7 @@ const Dashboard = () => {
               <CardContent>
                 <div className="h-[280px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={weeklyChartData}>
+                    <LineChart data={stats?.daily_data || []}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis 
                         dataKey="name" 
