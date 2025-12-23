@@ -69,27 +69,27 @@ export default function Integrations() {
           animate={{ opacity: 1, y: 0 }}
           className="grid gap-6"
         >
-          {/* Google Calendar Integration */}
+          {/* Google Calendar & Contacts Integration */}
           <Card className={calendarConnection ? '' : 'border-dashed'}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
-                Google Calendar
+                Google Calendar & Contacts
               </CardTitle>
               <CardDescription>
-                Sync your appointments with Google Calendar
+                Sync your appointments and contacts with Google
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                 <div className="space-y-1">
                   <p className="font-medium">
-                    {calendarConnection ? 'Google Calendar Connected' : 'Connect Google Calendar'}
+                    {calendarConnection ? 'Google Account Connected' : 'Connect Google Account'}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {calendarConnection 
                       ? `Connected as ${calendarConnection.connected_email || 'your account'}`
-                      : 'Automatically sync appointments with your calendar'
+                      : 'Automatically sync appointments and contacts with Google'
                     }
                   </p>
                 </div>
