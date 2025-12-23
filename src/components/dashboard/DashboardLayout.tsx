@@ -56,13 +56,13 @@ const sidebarSections = [
     links: [
       { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
       { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
-      { name: "Contacts", href: "/dashboard/contacts", icon: Users },
     ],
   },
   {
     label: "Manage",
     links: [
       { name: "Schedules", href: "/dashboard/schedules", icon: Calendar },
+      { name: "Contacts", href: "/dashboard/contacts", icon: Users },
       { name: "Settings", href: "/dashboard/settings", icon: Settings },
     ],
   },
