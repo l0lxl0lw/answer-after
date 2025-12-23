@@ -361,7 +361,6 @@ const Dashboard = () => {
                         stroke="#0ea5e9"
                         strokeWidth={2}
                         dot={false}
-                        strokeDasharray="5 5"
                       />
                       <Line
                         type="monotone"
