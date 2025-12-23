@@ -12,8 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/use-api';
 
 // Import voice preview audio files
-import liamPreview from '@/assets/voices/liam.mp3';
-import matildaPreview from '@/assets/voices/matilda.mp3';
+import vedaSkyPreview from '@/assets/voices/veda_sky.mp3';
 import laurenPreview from '@/assets/voices/lauren.mp3';
 import michaelPreview from '@/assets/voices/michael.mp3';
 
@@ -23,18 +22,11 @@ const MAX_CONTENT_WORDS = 4000;
 // Hardcoded voices with their ElevenLabs voice IDs
 const VOICES = [
   {
-    id: 'liam',
-    name: 'Liam',
-    elevenlabs_voice_id: 'TX3LPaxmHKxFdv7VOQHJ',
-    description: 'Professional male voice',
-    preview_url: liamPreview,
-  },
-  {
-    id: 'matilda',
-    name: 'Matilda',
-    elevenlabs_voice_id: 'XrExE9yKIg1WjnnlVkGX',
-    description: 'Professional female voice',
-    preview_url: matildaPreview,
+    id: 'veda_sky',
+    name: 'Veda Sky',
+    elevenlabs_voice_id: '625jGFaa0zTLtQfxwc6Q',
+    description: 'Customer care agent voice',
+    preview_url: vedaSkyPreview,
   },
   {
     id: 'lauren',
@@ -63,7 +55,7 @@ export default function MyAgent() {
   
   const [customGreeting, setCustomGreeting] = useState('');
   const [agentContent, setAgentContent] = useState('');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<VoiceId>('lauren');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<VoiceId>('veda_sky');
   const [playingVoiceId, setPlayingVoiceId] = useState<VoiceId | null>(null);
   
   const [isSavingGreeting, setIsSavingGreeting] = useState(false);
@@ -111,11 +103,11 @@ export default function MyAgent() {
             const parsed = JSON.parse(data.context);
             setCustomGreeting(parsed.greeting || '');
             setAgentContent(parsed.content || '');
-            // Load saved voice (defaults to lauren if not set)
+            // Load saved voice (defaults to veda_sky if not set)
             if (parsed.voiceId && VOICES.some(v => v.id === parsed.voiceId)) {
               setSelectedVoiceId(parsed.voiceId);
             } else {
-              setSelectedVoiceId('lauren');
+              setSelectedVoiceId('veda_sky');
             }
           } catch {
             setAgentContent(data.context);
