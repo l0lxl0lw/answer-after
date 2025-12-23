@@ -376,6 +376,7 @@ export type Database = {
       organizations: {
         Row: {
           business_hours_end: string | null
+          business_hours_schedule: Json | null
           business_hours_start: string | null
           created_at: string
           emergency_keywords: string[] | null
@@ -389,6 +390,7 @@ export type Database = {
         }
         Insert: {
           business_hours_end?: string | null
+          business_hours_schedule?: Json | null
           business_hours_start?: string | null
           created_at?: string
           emergency_keywords?: string[] | null
@@ -402,6 +404,7 @@ export type Database = {
         }
         Update: {
           business_hours_end?: string | null
+          business_hours_schedule?: Json | null
           business_hours_start?: string | null
           created_at?: string
           emergency_keywords?: string[] | null
