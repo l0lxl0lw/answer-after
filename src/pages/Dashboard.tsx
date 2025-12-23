@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -18,7 +18,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardStats, useRecentCalls, useOrganization } from "@/hooks/use-api";
+import { useDashboardStats, useRecentCalls, useOrganization, type DashboardPeriod } from "@/hooks/use-api";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
 import { useQuery } from "@tanstack/react-query";
@@ -185,9 +186,12 @@ function RecentCallItem({ call, contactName }: { call: Call; contactName?: strin
 
 
 const Dashboard = () => {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const [period, setPeriod] = useState<DashboardPeriod>('7d');
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(period);
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
   const { data: organization } = useOrganization();
+
+  const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
   // Fetch Google Contacts for name mapping
   const { data: googleContacts } = useQuery({
@@ -243,10 +247,23 @@ const Dashboard = () => {
               Live operational data for {organizationName}.
             </p>
           </div>
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            AI ACTIVE
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              AI ACTIVE
+            </Badge>
+            <ToggleGroup 
+              type="single" 
+              value={period} 
+              onValueChange={(value) => value && setPeriod(value as DashboardPeriod)}
+              className="bg-muted/50 rounded-lg p-1"
+            >
+              <ToggleGroupItem value="7d" className="text-xs px-3 h-7 data-[state=on]:bg-background data-[state=on]:shadow-sm">7d</ToggleGroupItem>
+              <ToggleGroupItem value="30d" className="text-xs px-3 h-7 data-[state=on]:bg-background data-[state=on]:shadow-sm">30d</ToggleGroupItem>
+              <ToggleGroupItem value="3m" className="text-xs px-3 h-7 data-[state=on]:bg-background data-[state=on]:shadow-sm">3m</ToggleGroupItem>
+              <ToggleGroupItem value="6m" className="text-xs px-3 h-7 data-[state=on]:bg-background data-[state=on]:shadow-sm">6m</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </motion.div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -256,8 +273,8 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0 }}
           >
             <StatCard
-              title="Total Calls (7d)"
-              value={stats?.total_calls_week ?? 0}
+              title={`Total Calls (${periodLabel})`}
+              value={stats?.total_calls ?? 0}
               icon={Phone}
               iconBgColor="bg-sky-100 dark:bg-sky-900/30"
               iconColor="text-sky-600 dark:text-sky-400"
@@ -274,8 +291,8 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0.1 }}
           >
             <StatCard
-              title="Bookings (7d)"
-              value={stats?.appointments_booked_week ?? 0}
+              title={`Bookings (${periodLabel})`}
+              value={stats?.appointments_booked ?? 0}
               icon={Calendar}
               iconBgColor="bg-emerald-100 dark:bg-emerald-900/30"
               iconColor="text-emerald-600 dark:text-emerald-400"
@@ -292,7 +309,7 @@ const Dashboard = () => {
             transition={{ duration: 0.4, delay: 0.2 }}
           >
             <StatCard
-              title="Est. Revenue (7d)"
+              title={`Est. Revenue (${periodLabel})`}
               value={`$${(stats?.revenue_estimate ?? 0).toLocaleString()}`}
               icon={DollarSign}
               iconBgColor="bg-violet-100 dark:bg-violet-900/30"
@@ -334,7 +351,7 @@ const Dashboard = () => {
               <CardContent>
                 <div className="h-[280px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={stats?.daily_data || []}>
+                    <LineChart data={stats?.chart_data || []}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis 
                         dataKey="name" 

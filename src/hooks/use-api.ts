@@ -35,79 +35,94 @@ export function useOrganization() {
 
 // ============= Dashboard Hooks =============
 
+export type DashboardPeriod = '7d' | '30d' | '3m' | '6m';
+
 export interface DashboardStats {
-  total_calls_week: number;
-  appointments_booked_week: number;
+  total_calls: number;
+  appointments_booked: number;
   revenue_estimate: number;
   calls_trend: number;
   bookings_trend: number;
   revenue_trend: number;
-  daily_data: Array<{
+  chart_data: Array<{
     name: string;
     calls: number;
     revenue: number;
   }>;
 }
 
-export function useDashboardStats() {
+function getPeriodDays(period: DashboardPeriod): number {
+  switch (period) {
+    case '7d': return 7;
+    case '30d': return 30;
+    case '3m': return 90;
+    case '6m': return 180;
+    default: return 7;
+  }
+}
+
+export function useDashboardStats(period: DashboardPeriod = '7d') {
   const { user } = useAuth();
   
   return useQuery({
-    queryKey: ['dashboard', 'stats', user?.organization_id],
+    queryKey: ['dashboard', 'stats', user?.organization_id, period],
     queryFn: async () => {
       if (!user?.organization_id) return null;
       
+      const periodDays = getPeriodDays(period);
       const today = new Date();
       today.setHours(23, 59, 59, 999);
       
-      // Calculate date ranges
-      const weekStart = new Date(today);
-      weekStart.setDate(weekStart.getDate() - 6);
-      weekStart.setHours(0, 0, 0, 0);
+      // Calculate date ranges for current period
+      const periodStart = new Date(today);
+      periodStart.setDate(periodStart.getDate() - (periodDays - 1));
+      periodStart.setHours(0, 0, 0, 0);
       
-      const prevWeekStart = new Date(weekStart);
-      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+      // Calculate date ranges for previous period (for trend comparison)
+      const prevPeriodEnd = new Date(periodStart);
+      prevPeriodEnd.setMilliseconds(-1);
       
-      const prevWeekEnd = new Date(weekStart);
-      prevWeekEnd.setMilliseconds(-1);
+      const prevPeriodStart = new Date(prevPeriodEnd);
+      prevPeriodStart.setDate(prevPeriodStart.getDate() - (periodDays - 1));
+      prevPeriodStart.setHours(0, 0, 0, 0);
 
-      // Get calls for this week
-      const { data: weekCalls, error: weekError } = await supabase
+      // Get calls for current period
+      const { data: periodCalls, error: periodError } = await supabase
         .from('calls')
         .select('id, outcome, started_at, duration_seconds')
         .eq('organization_id', user.organization_id)
-        .gte('started_at', weekStart.toISOString())
+        .gte('started_at', periodStart.toISOString())
         .lte('started_at', today.toISOString());
       
-      if (weekError) throw weekError;
+      if (periodError) throw periodError;
 
-      // Get calls for previous week (for trend calculation)
-      const { data: prevWeekCalls, error: prevWeekError } = await supabase
+      // Get calls for previous period
+      const { data: prevPeriodCalls, error: prevPeriodError } = await supabase
         .from('calls')
         .select('id, outcome')
         .eq('organization_id', user.organization_id)
-        .gte('started_at', prevWeekStart.toISOString())
-        .lte('started_at', prevWeekEnd.toISOString());
+        .gte('started_at', prevPeriodStart.toISOString())
+        .lte('started_at', prevPeriodEnd.toISOString());
       
-      if (prevWeekError) throw prevWeekError;
+      if (prevPeriodError) throw prevPeriodError;
 
-      // Get appointments for this week
-      const { data: weekAppointments, error: appointmentsError } = await supabase
+      // Get appointments for current period
+      const { data: periodAppointments, error: appointmentsError } = await supabase
         .from('appointments')
         .select('id, created_at')
         .eq('organization_id', user.organization_id)
-        .gte('created_at', weekStart.toISOString())
+        .gte('created_at', periodStart.toISOString())
         .lte('created_at', today.toISOString());
       
       if (appointmentsError) throw appointmentsError;
 
-      // Get appointments for previous week
-      const { data: prevWeekAppointments } = await supabase
+      // Get appointments for previous period
+      const { data: prevPeriodAppointments } = await supabase
         .from('appointments')
         .select('id')
         .eq('organization_id', user.organization_id)
-        .gte('created_at', prevWeekStart.toISOString())
-        .lte('created_at', prevWeekEnd.toISOString());
+        .gte('created_at', prevPeriodStart.toISOString())
+        .lte('created_at', prevPeriodEnd.toISOString());
 
       // Get average service price for revenue estimation
       const { data: services } = await supabase
@@ -120,70 +135,124 @@ export function useDashboardStats() {
         ? services.reduce((sum, s) => sum + s.base_price_cents, 0) / services.length / 100
         : 150; // Default $150 per booking if no services defined
 
-      // Calculate current week stats
-      const totalCallsWeek = weekCalls?.length || 0;
-      const totalBookingsWeek = weekAppointments?.length || 0;
-      const revenueEstimate = totalBookingsWeek * avgServicePrice;
+      // Calculate current period stats
+      const totalCalls = periodCalls?.length || 0;
+      const totalBookings = periodAppointments?.length || 0;
+      const revenueEstimate = totalBookings * avgServicePrice;
 
-      // Calculate previous week stats
-      const prevTotalCalls = prevWeekCalls?.length || 0;
-      const prevTotalBookings = prevWeekAppointments?.length || 0;
+      // Calculate previous period stats
+      const prevTotalCalls = prevPeriodCalls?.length || 0;
+      const prevTotalBookings = prevPeriodAppointments?.length || 0;
       const prevRevenue = prevTotalBookings * avgServicePrice;
 
       // Calculate trends (percentage change)
       const callsTrend = prevTotalCalls > 0 
-        ? Math.round(((totalCallsWeek - prevTotalCalls) / prevTotalCalls) * 100) 
-        : totalCallsWeek > 0 ? 100 : 0;
+        ? Math.round(((totalCalls - prevTotalCalls) / prevTotalCalls) * 100) 
+        : totalCalls > 0 ? 100 : 0;
       
       const bookingsTrend = prevTotalBookings > 0 
-        ? Math.round(((totalBookingsWeek - prevTotalBookings) / prevTotalBookings) * 100) 
-        : totalBookingsWeek > 0 ? 100 : 0;
+        ? Math.round(((totalBookings - prevTotalBookings) / prevTotalBookings) * 100) 
+        : totalBookings > 0 ? 100 : 0;
       
       const revenueTrend = prevRevenue > 0 
         ? Math.round(((revenueEstimate - prevRevenue) / prevRevenue) * 100) 
         : revenueEstimate > 0 ? 100 : 0;
 
-      // Build daily data for chart (last 7 days)
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const dailyData: Array<{ name: string; calls: number; revenue: number }> = [];
+      // Build chart data - aggregate by day for 7d/30d, by week for 3m/6m
+      const chartData: Array<{ name: string; calls: number; revenue: number }> = [];
       
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        date.setHours(0, 0, 0, 0);
-        
-        const nextDate = new Date(date);
-        nextDate.setDate(nextDate.getDate() + 1);
-        
-        const dayName = dayNames[date.getDay()];
-        
-        // Count calls for this day
-        const dayCalls = weekCalls?.filter(call => {
-          const callDate = new Date(call.started_at);
-          return callDate >= date && callDate < nextDate;
-        }).length || 0;
-        
-        // Count bookings for this day and estimate revenue
-        const dayBookings = weekAppointments?.filter(apt => {
-          const aptDate = new Date(apt.created_at);
-          return aptDate >= date && aptDate < nextDate;
-        }).length || 0;
-        
-        dailyData.push({
-          name: dayName,
-          calls: dayCalls,
-          revenue: Math.round(dayBookings * avgServicePrice),
-        });
+      if (period === '7d') {
+        // Daily data for 7 days
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        for (let i = periodDays - 1; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          date.setHours(0, 0, 0, 0);
+          
+          const nextDate = new Date(date);
+          nextDate.setDate(nextDate.getDate() + 1);
+          
+          const dayCalls = periodCalls?.filter(call => {
+            const callDate = new Date(call.started_at);
+            return callDate >= date && callDate < nextDate;
+          }).length || 0;
+          
+          const dayBookings = periodAppointments?.filter(apt => {
+            const aptDate = new Date(apt.created_at);
+            return aptDate >= date && aptDate < nextDate;
+          }).length || 0;
+          
+          chartData.push({
+            name: dayNames[date.getDay()],
+            calls: dayCalls,
+            revenue: Math.round(dayBookings * avgServicePrice),
+          });
+        }
+      } else if (period === '30d') {
+        // Show every 5 days for 30d
+        for (let i = 5; i >= 0; i--) {
+          const endDate = new Date(today);
+          endDate.setDate(endDate.getDate() - (i * 5));
+          endDate.setHours(23, 59, 59, 999);
+          
+          const startDate = new Date(endDate);
+          startDate.setDate(startDate.getDate() - 4);
+          startDate.setHours(0, 0, 0, 0);
+          
+          const rangeCalls = periodCalls?.filter(call => {
+            const callDate = new Date(call.started_at);
+            return callDate >= startDate && callDate <= endDate;
+          }).length || 0;
+          
+          const rangeBookings = periodAppointments?.filter(apt => {
+            const aptDate = new Date(apt.created_at);
+            return aptDate >= startDate && aptDate <= endDate;
+          }).length || 0;
+          
+          chartData.push({
+            name: `${startDate.getMonth() + 1}/${startDate.getDate()}`,
+            calls: rangeCalls,
+            revenue: Math.round(rangeBookings * avgServicePrice),
+          });
+        }
+      } else {
+        // Weekly aggregation for 3m/6m
+        const weeksToShow = period === '3m' ? 12 : 24;
+        for (let i = weeksToShow - 1; i >= 0; i--) {
+          const endDate = new Date(today);
+          endDate.setDate(endDate.getDate() - (i * 7));
+          endDate.setHours(23, 59, 59, 999);
+          
+          const startDate = new Date(endDate);
+          startDate.setDate(startDate.getDate() - 6);
+          startDate.setHours(0, 0, 0, 0);
+          
+          const weekCalls = periodCalls?.filter(call => {
+            const callDate = new Date(call.started_at);
+            return callDate >= startDate && callDate <= endDate;
+          }).length || 0;
+          
+          const weekBookings = periodAppointments?.filter(apt => {
+            const aptDate = new Date(apt.created_at);
+            return aptDate >= startDate && aptDate <= endDate;
+          }).length || 0;
+          
+          chartData.push({
+            name: `${startDate.getMonth() + 1}/${startDate.getDate()}`,
+            calls: weekCalls,
+            revenue: Math.round(weekBookings * avgServicePrice),
+          });
+        }
       }
 
       return {
-        total_calls_week: totalCallsWeek,
-        appointments_booked_week: totalBookingsWeek,
+        total_calls: totalCalls,
+        appointments_booked: totalBookings,
         revenue_estimate: Math.round(revenueEstimate),
         calls_trend: callsTrend,
         bookings_trend: bookingsTrend,
         revenue_trend: revenueTrend,
-        daily_data: dailyData,
+        chart_data: chartData,
       } as DashboardStats;
     },
     enabled: !!user?.organization_id,
