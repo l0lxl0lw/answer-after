@@ -63,7 +63,7 @@ export default function MyAgent() {
   
   const [customGreeting, setCustomGreeting] = useState('');
   const [agentContent, setAgentContent] = useState('');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<VoiceId | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<VoiceId>('lauren');
   const [playingVoiceId, setPlayingVoiceId] = useState<VoiceId | null>(null);
   
   const [isSavingGreeting, setIsSavingGreeting] = useState(false);
@@ -111,9 +111,11 @@ export default function MyAgent() {
             const parsed = JSON.parse(data.context);
             setCustomGreeting(parsed.greeting || '');
             setAgentContent(parsed.content || '');
-            // Load saved voice
+            // Load saved voice (defaults to lauren if not set)
             if (parsed.voiceId && VOICES.some(v => v.id === parsed.voiceId)) {
               setSelectedVoiceId(parsed.voiceId);
+            } else {
+              setSelectedVoiceId('lauren');
             }
           } catch {
             setAgentContent(data.context);
