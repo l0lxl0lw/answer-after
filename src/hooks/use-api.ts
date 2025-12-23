@@ -35,6 +35,20 @@ export function useOrganization() {
 
 // ============= Dashboard Hooks =============
 
+export interface DashboardStats {
+  total_calls_week: number;
+  appointments_booked_week: number;
+  revenue_estimate: number;
+  calls_trend: number;
+  bookings_trend: number;
+  revenue_trend: number;
+  daily_data: Array<{
+    name: string;
+    calls: number;
+    revenue: number;
+  }>;
+}
+
 export function useDashboardStats() {
   const { user } = useAuth();
   
@@ -44,52 +58,133 @@ export function useDashboardStats() {
       if (!user?.organization_id) return null;
       
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayIso = today.toISOString();
+      today.setHours(23, 59, 59, 999);
       
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const weekAgoIso = weekAgo.toISOString();
-
-      // Get calls for today
-      const { data: todayCalls, error: todayError } = await supabase
-        .from('calls')
-        .select('id, outcome, duration_seconds')
-        .eq('organization_id', user.organization_id)
-        .gte('started_at', todayIso);
+      // Calculate date ranges
+      const weekStart = new Date(today);
+      weekStart.setDate(weekStart.getDate() - 6);
+      weekStart.setHours(0, 0, 0, 0);
       
-      if (todayError) throw todayError;
+      const prevWeekStart = new Date(weekStart);
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+      
+      const prevWeekEnd = new Date(weekStart);
+      prevWeekEnd.setMilliseconds(-1);
 
       // Get calls for this week
       const { data: weekCalls, error: weekError } = await supabase
         .from('calls')
-        .select('id')
+        .select('id, outcome, started_at, duration_seconds')
         .eq('organization_id', user.organization_id)
-        .gte('started_at', weekAgoIso);
+        .gte('started_at', weekStart.toISOString())
+        .lte('started_at', today.toISOString());
       
       if (weekError) throw weekError;
 
-      // Get appointments booked today
-      const { data: todayAppointments } = await supabase
+      // Get calls for previous week (for trend calculation)
+      const { data: prevWeekCalls, error: prevWeekError } = await supabase
+        .from('calls')
+        .select('id, outcome')
+        .eq('organization_id', user.organization_id)
+        .gte('started_at', prevWeekStart.toISOString())
+        .lte('started_at', prevWeekEnd.toISOString());
+      
+      if (prevWeekError) throw prevWeekError;
+
+      // Get appointments for this week
+      const { data: weekAppointments, error: appointmentsError } = await supabase
+        .from('appointments')
+        .select('id, created_at')
+        .eq('organization_id', user.organization_id)
+        .gte('created_at', weekStart.toISOString())
+        .lte('created_at', today.toISOString());
+      
+      if (appointmentsError) throw appointmentsError;
+
+      // Get appointments for previous week
+      const { data: prevWeekAppointments } = await supabase
         .from('appointments')
         .select('id')
         .eq('organization_id', user.organization_id)
-        .gte('created_at', todayIso);
+        .gte('created_at', prevWeekStart.toISOString())
+        .lte('created_at', prevWeekEnd.toISOString());
 
-      const totalCalls = todayCalls?.length || 0;
-      const bookedCalls = todayCalls?.filter(c => c.outcome === 'booked').length || 0;
-      const avgDuration = totalCalls > 0 
-        ? Math.round((todayCalls?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0) / totalCalls)
-        : 0;
+      // Get average service price for revenue estimation
+      const { data: services } = await supabase
+        .from('services')
+        .select('base_price_cents')
+        .eq('organization_id', user.organization_id)
+        .eq('is_active', true);
+
+      const avgServicePrice = services && services.length > 0
+        ? services.reduce((sum, s) => sum + s.base_price_cents, 0) / services.length / 100
+        : 150; // Default $150 per booking if no services defined
+
+      // Calculate current week stats
+      const totalCallsWeek = weekCalls?.length || 0;
+      const totalBookingsWeek = weekAppointments?.length || 0;
+      const revenueEstimate = totalBookingsWeek * avgServicePrice;
+
+      // Calculate previous week stats
+      const prevTotalCalls = prevWeekCalls?.length || 0;
+      const prevTotalBookings = prevWeekAppointments?.length || 0;
+      const prevRevenue = prevTotalBookings * avgServicePrice;
+
+      // Calculate trends (percentage change)
+      const callsTrend = prevTotalCalls > 0 
+        ? Math.round(((totalCallsWeek - prevTotalCalls) / prevTotalCalls) * 100) 
+        : totalCallsWeek > 0 ? 100 : 0;
+      
+      const bookingsTrend = prevTotalBookings > 0 
+        ? Math.round(((totalBookingsWeek - prevTotalBookings) / prevTotalBookings) * 100) 
+        : totalBookingsWeek > 0 ? 100 : 0;
+      
+      const revenueTrend = prevRevenue > 0 
+        ? Math.round(((revenueEstimate - prevRevenue) / prevRevenue) * 100) 
+        : revenueEstimate > 0 ? 100 : 0;
+
+      // Build daily data for chart (last 7 days)
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dailyData: Array<{ name: string; calls: number; revenue: number }> = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        
+        const dayName = dayNames[date.getDay()];
+        
+        // Count calls for this day
+        const dayCalls = weekCalls?.filter(call => {
+          const callDate = new Date(call.started_at);
+          return callDate >= date && callDate < nextDate;
+        }).length || 0;
+        
+        // Count bookings for this day and estimate revenue
+        const dayBookings = weekAppointments?.filter(apt => {
+          const aptDate = new Date(apt.created_at);
+          return aptDate >= date && aptDate < nextDate;
+        }).length || 0;
+        
+        dailyData.push({
+          name: dayName,
+          calls: dayCalls,
+          revenue: Math.round(dayBookings * avgServicePrice),
+        });
+      }
 
       return {
-        total_calls_today: totalCalls,
-        total_calls_week: weekCalls?.length || 0,
-        appointments_booked_today: todayAppointments?.length || 0,
-        average_call_duration: avgDuration,
-        answer_rate: 98, // This would come from actual call data
-        revenue_captured_estimate: bookedCalls * 250, // Rough estimate per booking
-      };
+        total_calls_week: totalCallsWeek,
+        appointments_booked_week: totalBookingsWeek,
+        revenue_estimate: Math.round(revenueEstimate),
+        calls_trend: callsTrend,
+        bookings_trend: bookingsTrend,
+        revenue_trend: revenueTrend,
+        daily_data: dailyData,
+      } as DashboardStats;
     },
     enabled: !!user?.organization_id,
     refetchInterval: 30000,
