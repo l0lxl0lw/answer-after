@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { 
   Calendar, 
   Check, 
@@ -106,7 +107,10 @@ export default function Integrations() {
                 Google Calendar & Contacts
               </CardTitle>
               <CardDescription>
-                Sync your appointments and contacts with Google
+                Sync your appointments and contacts with Google.{' '}
+                <Link to="/dashboard/calendar-setup" className="text-primary hover:underline">
+                  How to connect →
+                </Link>
               </CardDescription>
             </CardHeader>
             <CardContent>
