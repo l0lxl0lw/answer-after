@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Phone,
@@ -13,13 +14,22 @@ import {
   CheckCircle,
   XCircle,
   HelpCircle,
+  User,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useConversations, type Conversation } from "@/hooks/use-api";
+import { useConversations, useCalls, type Conversation } from "@/hooks/use-api";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+
+interface GoogleContact {
+  resourceName: string;
+  names?: Array<{ givenName?: string; familyName?: string; displayName?: string }>;
+  phoneNumbers?: Array<{ value: string; type?: string }>;
+}
 
 // Format duration from seconds to MM:SS
 function formatDuration(seconds: number | null): string {
@@ -27,6 +37,11 @@ function formatDuration(seconds: number | null): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+// Normalize phone number for comparison (strip all non-digits)
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '').slice(-10); // Get last 10 digits
 }
 
 // Get status badge based on call success
@@ -45,24 +60,46 @@ function getStatusBadge(status: string, callSuccessful: string | null) {
   }
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "completed":
-      return "text-success";
-    case "failed":
-      return "text-destructive";
-    case "in_progress":
-    case "processing":
-      return "text-info";
-    default:
-      return "text-muted-foreground";
-  }
+// Hook to fetch Google Contacts for phone number matching
+function useGoogleContacts() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ["google-contacts-for-calls", user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return [];
+      
+      const { data, error } = await supabase.functions.invoke("google-contacts", {
+        body: { action: "list", organizationId: user.organization_id },
+      });
+
+      if (error) {
+        console.error("Failed to fetch contacts:", error);
+        return [];
+      }
+      
+      return (data?.contacts || []) as GoogleContact[];
+    },
+    enabled: !!user?.organization_id,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 }
 
-// Conversation Row Component
-function ConversationRow({ conversation }: { conversation: Conversation }) {
+// Conversation Row Component with contact name lookup
+function ConversationRow({ 
+  conversation, 
+  callerPhone,
+  contactName 
+}: { 
+  conversation: Conversation;
+  callerPhone?: string;
+  contactName?: string;
+}) {
   const badge = getStatusBadge(conversation.status, conversation.call_successful);
   const BadgeIcon = badge.icon;
+  
+  const displayName = contactName || callerPhone || "Unknown Caller";
+  const hasContactName = !!contactName;
 
   return (
     <Link
@@ -71,16 +108,22 @@ function ConversationRow({ conversation }: { conversation: Conversation }) {
     >
       <div className="flex items-center gap-4 flex-1 min-w-0">
         <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-primary/10">
-          <PhoneIncoming className="w-6 h-6 text-primary" />
+          {hasContactName ? (
+            <User className="w-6 h-6 text-primary" />
+          ) : (
+            <PhoneIncoming className="w-6 h-6 text-primary" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <p className="font-medium truncate group-hover:text-primary transition-colors">
-              Conversation
+              {displayName}
             </p>
-            <span className="text-xs text-muted-foreground font-mono flex-shrink-0">
-              {conversation.conversation_id.slice(0, 12)}...
-            </span>
+            {hasContactName && callerPhone && (
+              <span className="text-xs text-muted-foreground font-mono flex-shrink-0">
+                {callerPhone}
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground line-clamp-1">
             {conversation.summary || "No summary available"}
@@ -126,9 +169,66 @@ function ConversationRow({ conversation }: { conversation: Conversation }) {
 export default function CallHistory() {
   const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useConversations({
+  const { data: conversationsData, isLoading: conversationsLoading } = useConversations({
     search: search || undefined,
   });
+  
+  const { data: callsData, isLoading: callsLoading } = useCalls();
+  const { data: contacts } = useGoogleContacts();
+  
+  const isLoading = conversationsLoading || callsLoading;
+
+  // Build a map of phone numbers to contact names
+  const phoneToContactName = useMemo(() => {
+    const map = new Map<string, string>();
+    
+    if (contacts) {
+      for (const contact of contacts) {
+        const name = contact.names?.[0]?.displayName || contact.names?.[0]?.givenName;
+        if (name && contact.phoneNumbers) {
+          for (const phone of contact.phoneNumbers) {
+            const normalized = normalizePhone(phone.value);
+            if (normalized.length >= 10) {
+              map.set(normalized, name);
+            }
+          }
+        }
+      }
+    }
+    
+    return map;
+  }, [contacts]);
+
+  // Build a map of conversation times to Twilio call phone numbers
+  // This matches ElevenLabs conversations to Twilio calls by timestamp
+  const conversationToPhone = useMemo(() => {
+    const map = new Map<string, string>();
+    
+    if (callsData?.calls && conversationsData?.conversations) {
+      for (const conv of conversationsData.conversations) {
+        const convTime = new Date(conv.started_at).getTime();
+        
+        // Find a Twilio call that started within 60 seconds of this conversation
+        const matchingCall = callsData.calls.find((call: any) => {
+          const callTime = new Date(call.started_at).getTime();
+          return Math.abs(callTime - convTime) < 60000; // Within 1 minute
+        });
+        
+        if (matchingCall) {
+          map.set(conv.conversation_id, matchingCall.caller_phone);
+        }
+      }
+    }
+    
+    return map;
+  }, [callsData, conversationsData]);
+
+  // Get contact name for a phone number
+  const getContactName = (phone: string | undefined): string | undefined => {
+    if (!phone) return undefined;
+    const normalized = normalizePhone(phone);
+    return phoneToContactName.get(normalized);
+  };
 
   return (
     <DashboardLayout>
@@ -175,8 +275,8 @@ export default function CallHistory() {
               <Skeleton className="h-4 w-32 inline-block" />
             ) : (
               <>
-                Showing <strong>{data?.conversations.length ?? 0}</strong> conversations
-                {data?.meta.has_more && " (more available)"}
+                Showing <strong>{conversationsData?.conversations.length ?? 0}</strong> conversations
+                {conversationsData?.meta.has_more && " (more available)"}
               </>
             )}
           </p>
@@ -193,10 +293,20 @@ export default function CallHistory() {
             [...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-24 w-full rounded-xl" />
             ))
-          ) : data?.conversations && data.conversations.length > 0 ? (
-            data.conversations.map((conv) => (
-              <ConversationRow key={conv.id} conversation={conv} />
-            ))
+          ) : conversationsData?.conversations && conversationsData.conversations.length > 0 ? (
+            conversationsData.conversations.map((conv) => {
+              const callerPhone = conversationToPhone.get(conv.conversation_id);
+              const contactName = getContactName(callerPhone);
+              
+              return (
+                <ConversationRow 
+                  key={conv.id} 
+                  conversation={conv}
+                  callerPhone={callerPhone}
+                  contactName={contactName}
+                />
+              );
+            })
           ) : (
             <Card className="py-12">
               <CardContent className="text-center">
