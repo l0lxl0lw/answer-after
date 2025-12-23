@@ -13,7 +13,7 @@ import { useSubscription } from '@/hooks/use-api';
 
 // Import voice preview audio files
 import vedaSkyPreview from '@/assets/voices/veda_sky.mp3';
-import laurenPreview from '@/assets/voices/lauren.mp3';
+import matildaPreview from '@/assets/voices/matilda.mp3';
 import michaelPreview from '@/assets/voices/michael.mp3';
 
 const MAX_GREETING_WORDS = 100;
@@ -29,11 +29,11 @@ const VOICES = [
     preview_url: vedaSkyPreview,
   },
   {
-    id: 'lauren',
-    name: 'Lauren',
-    elevenlabs_voice_id: 'DODLEQrClDo8wCz460ld',
-    description: 'Warm female voice',
-    preview_url: laurenPreview,
+    id: 'matilda',
+    name: 'Matilda',
+    elevenlabs_voice_id: 'XrExE9yKIg1WjnnlVkGX',
+    description: 'Warm and friendly female voice',
+    preview_url: matildaPreview,
   },
   {
     id: 'michael',
