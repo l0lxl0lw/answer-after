@@ -317,6 +317,9 @@ async function handleCreateAgent(
         first_message: firstMessage,
         prompt: {
           prompt: systemPrompt
+        },
+        llm: {
+          model: 'gemini-2.5-flash-lite'
         }
       },
       tts: {
@@ -528,6 +531,9 @@ async function handleUpdateAgent(
         first_message: firstMessage,
         prompt: {
           prompt: systemPrompt
+        },
+        llm: {
+          model: 'gemini-2.5-flash-lite'
         }
       }
     }
