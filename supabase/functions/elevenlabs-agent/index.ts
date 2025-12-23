@@ -30,7 +30,7 @@ serve(async (req) => {
       }
       
       if (body.action === 'update-agent') {
-        return await handleUpdateAgent(supabase, body.organizationId, body.context);
+        return await handleUpdateAgent(supabase, body.organizationId, body.context, body.voiceId);
       }
       
       if (body.action === 'rename-agent') {
@@ -465,7 +465,8 @@ When you have gathered enough information (name, phone, address, issue descripti
 async function handleUpdateAgent(
   supabase: any,
   organizationId: string,
-  context?: string
+  context?: string,
+  voiceId?: string
 ) {
   const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
   
@@ -515,7 +516,7 @@ async function handleUpdateAgent(
   const agentContext = context || agentRecord?.context || '';
   const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
-  const updateConfig = {
+  const updateConfig: any = {
     conversation_config: {
       agent: {
         first_message: firstMessage,
@@ -525,6 +526,14 @@ async function handleUpdateAgent(
       }
     }
   };
+
+  // Add voice configuration if provided
+  if (voiceId) {
+    updateConfig.conversation_config.tts = {
+      voice_id: voiceId
+    };
+    console.log('Setting voice ID:', voiceId);
+  }
 
   try {
     console.log('Updating ElevenLabs agent:', agentRecord.elevenlabs_agent_id);

@@ -11,16 +11,32 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/use-api';
 
+// Import voice preview audio files
+import liamPreview from '@/assets/voices/liam.mp3';
+import matildaPreview from '@/assets/voices/matilda.mp3';
+
 const MAX_GREETING_WORDS = 100;
 const MAX_CONTENT_WORDS = 4000;
 
-interface ElevenLabsVoice {
-  id: string;
-  name: string;
-  elevenlabs_voice_id: string;
-  description: string | null;
-  preview_url: string | null;
-}
+// Hardcoded voices with their ElevenLabs voice IDs
+const VOICES = [
+  {
+    id: 'male',
+    name: 'Male (Liam)',
+    elevenlabs_voice_id: 'TX3LPaxmHKxFdv7VOQHJ',
+    description: 'Professional male voice',
+    preview_url: liamPreview,
+  },
+  {
+    id: 'female',
+    name: 'Female (Matilda)',
+    elevenlabs_voice_id: 'XrExE9yKIg1WjnnlVkGX',
+    description: 'Professional female voice',
+    preview_url: matildaPreview,
+  },
+] as const;
+
+type VoiceId = typeof VOICES[number]['id'];
 
 // Singleton audio instance for previews
 let previewAudio: HTMLAudioElement | null = null;
@@ -31,9 +47,8 @@ export default function MyAgent() {
   
   const [customGreeting, setCustomGreeting] = useState('');
   const [agentContent, setAgentContent] = useState('');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
-  const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<VoiceId | null>(null);
+  const [playingVoiceId, setPlayingVoiceId] = useState<VoiceId | null>(null);
   
   const [isSavingGreeting, setIsSavingGreeting] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
@@ -63,23 +78,6 @@ export default function MyAgent() {
     checkCustomAgentAccess();
   }, [subscription?.plan]);
 
-  // Fetch available voices
-  useEffect(() => {
-    const fetchVoices = async () => {
-      const { data, error } = await supabase
-        .from('elevenlabs_voices')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      
-      if (!error && data) {
-        setVoices(data);
-      }
-    };
-    
-    fetchVoices();
-  }, []);
-
   // Fetch existing agent data
   useEffect(() => {
     const fetchAgentData = async () => {
@@ -87,7 +85,7 @@ export default function MyAgent() {
       
       const { data, error } = await supabase
         .from('organization_agents')
-        .select('context, voice_id')
+        .select('context')
         .eq('organization_id', user.organization_id)
         .maybeSingle();
       
@@ -97,12 +95,13 @@ export default function MyAgent() {
             const parsed = JSON.parse(data.context);
             setCustomGreeting(parsed.greeting || '');
             setAgentContent(parsed.content || '');
+            // Load saved voice
+            if (parsed.voiceId && VOICES.some(v => v.id === parsed.voiceId)) {
+              setSelectedVoiceId(parsed.voiceId);
+            }
           } catch {
             setAgentContent(data.context);
           }
-        }
-        if (data.voice_id) {
-          setSelectedVoiceId(data.voice_id);
         }
       }
     };
@@ -114,10 +113,10 @@ export default function MyAgent() {
     return text.trim().split(/\s+/).filter(Boolean).length;
   };
 
-  const saveAgentData = async (greeting: string, content: string) => {
+  const saveAgentData = async (greeting: string, content: string, voiceId?: VoiceId | null) => {
     if (!user?.organization_id) return;
     
-    const contextData = JSON.stringify({ greeting, content });
+    const contextData = JSON.stringify({ greeting, content, voiceId: voiceId || selectedVoiceId });
 
     const { data: existingAgent } = await supabase
       .from('organization_agents')
@@ -138,15 +137,32 @@ export default function MyAgent() {
       if (error) throw error;
     }
 
-    // Update ElevenLabs agent if one exists
+    return existingAgent;
+  };
+
+  const updateElevenLabsAgent = async (voiceId?: VoiceId | null) => {
+    if (!user?.organization_id) return;
+    
+    const { data: existingAgent } = await supabase
+      .from('organization_agents')
+      .select('elevenlabs_agent_id')
+      .eq('organization_id', user.organization_id)
+      .maybeSingle();
+
     if (existingAgent?.elevenlabs_agent_id) {
+      const voice = voiceId ? VOICES.find(v => v.id === voiceId) : null;
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
         await supabase.functions.invoke('elevenlabs-agent', {
           body: { 
             action: 'update-agent',
             organizationId: user.organization_id,
-            context: contextData 
+            context: JSON.stringify({ 
+              greeting: customGreeting, 
+              content: agentContent, 
+              voiceId: voiceId || selectedVoiceId 
+            }),
+            voiceId: voice?.elevenlabs_voice_id
           },
           headers: {
             Authorization: `Bearer ${sessionData.session.access_token}`,
@@ -177,7 +193,7 @@ export default function MyAgent() {
       if (customGreeting.trim()) {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData.session) {
-          const { data, error } = await supabase.functions.invoke('generate-greeting-tts', {
+          const { error } = await supabase.functions.invoke('generate-greeting-tts', {
             body: { 
               greeting: customGreeting,
               organizationId: user.organization_id
@@ -195,6 +211,7 @@ export default function MyAgent() {
               variant: 'default' 
             });
           } else {
+            await updateElevenLabsAgent();
             toast({ 
               title: 'Greeting saved', 
               description: 'Your greeting has been saved and audio generated.' 
@@ -202,6 +219,7 @@ export default function MyAgent() {
           }
         }
       } else {
+        await updateElevenLabsAgent();
         toast({ title: 'Greeting saved', description: 'Your custom greeting has been updated.' });
       }
     } catch (error: any) {
@@ -227,6 +245,7 @@ export default function MyAgent() {
     setIsSavingContent(true);
     try {
       await saveAgentData(customGreeting, agentContent);
+      await updateElevenLabsAgent();
       toast({ title: 'Content saved', description: 'Your agent content has been updated.' });
     } catch (error: any) {
       toast({ title: 'Error saving content', description: error.message, variant: 'destructive' });
@@ -240,45 +259,8 @@ export default function MyAgent() {
     
     setIsSavingVoice(true);
     try {
-      const { data: existingAgent } = await supabase
-        .from('organization_agents')
-        .select('id, elevenlabs_agent_id')
-        .eq('organization_id', user.organization_id)
-        .maybeSingle();
-
-      if (existingAgent) {
-        const { error } = await supabase
-          .from('organization_agents')
-          .update({ voice_id: selectedVoiceId })
-          .eq('organization_id', user.organization_id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('organization_agents')
-          .insert({ organization_id: user.organization_id, voice_id: selectedVoiceId });
-        if (error) throw error;
-      }
-
-      // Update ElevenLabs agent if one exists
-      if (existingAgent?.elevenlabs_agent_id) {
-        const selectedVoice = voices.find(v => v.id === selectedVoiceId);
-        if (selectedVoice) {
-          const { data: sessionData } = await supabase.auth.getSession();
-          if (sessionData.session) {
-            await supabase.functions.invoke('elevenlabs-agent', {
-              body: { 
-                action: 'update-agent',
-                organizationId: user.organization_id,
-                voiceId: selectedVoice.elevenlabs_voice_id
-              },
-              headers: {
-                Authorization: `Bearer ${sessionData.session.access_token}`,
-              },
-            });
-          }
-        }
-      }
-
+      await saveAgentData(customGreeting, agentContent, selectedVoiceId);
+      await updateElevenLabsAgent(selectedVoiceId);
       toast({ title: 'Voice saved', description: 'Your agent voice has been updated.' });
     } catch (error: any) {
       toast({ title: 'Error saving voice', description: error.message, variant: 'destructive' });
@@ -287,14 +269,12 @@ export default function MyAgent() {
     }
   };
 
-  const handlePreviewVoice = (voice: ElevenLabsVoice) => {
-    if (!voice.preview_url) {
-      toast({ title: 'No preview available', description: 'Preview audio is not available for this voice.', variant: 'destructive' });
-      return;
-    }
+  const handlePreviewVoice = (voiceId: VoiceId) => {
+    const voice = VOICES.find(v => v.id === voiceId);
+    if (!voice) return;
 
     // If currently playing this voice, stop it
-    if (playingVoiceId === voice.id) {
+    if (playingVoiceId === voiceId) {
       if (previewAudio) {
         previewAudio.pause();
         previewAudio.currentTime = 0;
@@ -318,7 +298,7 @@ export default function MyAgent() {
     };
     
     previewAudio.play();
-    setPlayingVoiceId(voice.id);
+    setPlayingVoiceId(voiceId);
   };
 
   if (isLoading) {
@@ -408,18 +388,16 @@ export default function MyAgent() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Select value={selectedVoiceId || ''} onValueChange={setSelectedVoiceId}>
+              <Select value={selectedVoiceId || ''} onValueChange={(value) => setSelectedVoiceId(value as VoiceId)}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a voice" />
                 </SelectTrigger>
                 <SelectContent>
-                  {voices.map((voice) => (
+                  {VOICES.map((voice) => (
                     <SelectItem key={voice.id} value={voice.id}>
                       <div className="flex flex-col">
                         <span>{voice.name}</span>
-                        {voice.description && (
-                          <span className="text-xs text-muted-foreground">{voice.description}</span>
-                        )}
+                        <span className="text-xs text-muted-foreground">{voice.description}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -430,11 +408,7 @@ export default function MyAgent() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => {
-                      const voice = voices.find(v => v.id === selectedVoiceId);
-                      if (voice) handlePreviewVoice(voice);
-                    }}
-                    disabled={!voices.find(v => v.id === selectedVoiceId)?.preview_url}
+                    onClick={() => handlePreviewVoice(selectedVoiceId)}
                   >
                     {playingVoiceId === selectedVoiceId ? (
                       <>
