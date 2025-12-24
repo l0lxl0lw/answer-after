@@ -114,7 +114,7 @@ export default function Contacts() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: calendarConnection, isLoading: isConnectionLoading } = useGoogleCalendarConnection();
+  const { data: connection, isLoading: isConnectionLoading } = useGoogleCalendarConnection();
   const { checkGoogleError } = useGoogleConnectionGuard();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -149,7 +149,7 @@ export default function Contacts() {
         return { contacts: [], needsReconnect: false };
       }
     },
-    enabled: !!user?.organization_id && !!calendarConnection,
+    enabled: !!user?.organization_id && !!connection,
     retry: false,
   });
 
@@ -257,8 +257,8 @@ export default function Contacts() {
     );
   }
 
-  // Not connected - show connect page
-  if (!calendarConnection) {
+  // Show message if no Google connection
+  if (!connection) {
     return (
       <DashboardLayout>
         <Card className="max-w-lg mx-auto mt-12">
