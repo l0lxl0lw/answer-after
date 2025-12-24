@@ -37,8 +37,11 @@ export function Pricing() {
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
             Simple, Transparent Pricing
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-muted-foreground mb-3">
             Plans that grow with your business. No hidden fees.
+          </p>
+          <p className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 text-accent font-semibold text-sm">
+            🎉 Get your first month for just $1 on any plan
           </p>
         </motion.div>
 
