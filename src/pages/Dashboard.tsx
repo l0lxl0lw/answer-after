@@ -219,7 +219,7 @@ const Dashboard = () => {
         return [];
       }
     },
-    enabled: !!organization?.id,
+    enabled: !!organization?.id && !!calendarConnection, // Only fetch if Google is connected
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     retry: false, // Don't retry if Google isn't connected
   });
