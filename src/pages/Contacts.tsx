@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
 
 interface GoogleContact {
   resourceName: string;
@@ -114,6 +115,7 @@ export default function Contacts() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: connection, isLoading: isConnectionLoading } = useGoogleCalendarConnection();
+  const { handleGoogleError } = useGoogleConnectionGuard();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -122,21 +124,37 @@ export default function Contacts() {
   const [newContact, setNewContact] = useState({ name: "", phone: "", notes: "" });
   const [editForm, setEditForm] = useState({ name: "", phone: "", notes: "" });
 
+  // Redirect to integrations if no connection
+  useEffect(() => {
+    if (!isConnectionLoading && !connection) {
+      navigate('/dashboard/integrations', { state: { showGooglePrompt: true } });
+    }
+  }, [isConnectionLoading, connection, navigate]);
+
   // Fetch contacts
   const { data: contactsData, isLoading: isContactsLoading, error: contactsError, refetch } = useQuery({
     queryKey: ["google-contacts", user?.organization_id],
     queryFn: async () => {
       if (!user?.organization_id) return { contacts: [], needsReconnect: false };
       
-      const { data, error } = await supabase.functions.invoke("google-contacts", {
-        body: { action: "list", organizationId: user.organization_id },
-      });
+      try {
+        const { data, error } = await supabase.functions.invoke("google-contacts", {
+          body: { action: "list", organizationId: user.organization_id },
+        });
 
-      if (error) {
-        // Check if it's a scope error - user needs to reconnect
-        throw error;
+        // Check for Google connection error and redirect
+        if (handleGoogleError(error, data)) {
+          return { contacts: [], needsReconnect: false };
+        }
+
+        if (error) {
+          throw error;
+        }
+        return data as { contacts: GoogleContact[], needsReconnect?: boolean };
+      } catch (e) {
+        console.error("Failed to fetch contacts:", e);
+        return { contacts: [], needsReconnect: false };
       }
-      return data as { contacts: GoogleContact[], needsReconnect?: boolean };
     },
     enabled: !!user?.organization_id && !!connection,
     retry: false,
