@@ -114,6 +114,7 @@ export default function Subscriptions() {
               const isCurrentPlan = tier.plan_id === currentPlan;
               const isUpgrade = getPlanIndex(tier.plan_id) > currentPlanIndex;
               const isDowngrade = getPlanIndex(tier.plan_id) < currentPlanIndex;
+              const isEnterprise = tier.plan_id === "enterprise";
 
               return (
                 <motion.div
@@ -121,95 +122,108 @@ export default function Subscriptions() {
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className={cn(
-                    "relative rounded-3xl p-6 transition-all",
-                    isCurrentPlan
-                      ? "bg-primary/5 border-2 border-primary shadow-glow ring-2 ring-primary/20"
-                      : tier.is_popular
-                        ? "bg-card border-2 border-accent/50"
-                        : "bg-card border border-border"
-                  )}
+                  className="relative flex flex-col"
                 >
-                  {/* Current Plan Badge */}
-                  {isCurrentPlan && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-hero text-sm font-semibold text-primary-foreground">
-                        <Crown className="w-4 h-4" />
-                        Current Plan
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Popular Badge (only show if not current plan) */}
-                  {tier.is_popular && !isCurrentPlan && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-accent text-sm font-semibold text-accent-foreground">
-                        <Sparkles className="w-4 h-4" />
-                        Most Popular
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Plan Header */}
-                  <div className={cn("mb-4", (isCurrentPlan || tier.is_popular) && "mt-2")}>
-                    <h3 className="font-display font-semibold text-xl mb-1">{tier.name}</h3>
-                    <p className="text-muted-foreground text-sm">{tier.description}</p>
+                  {/* Banner */}
+                  <div className={cn(
+                    "text-center py-2.5 px-4 rounded-t-2xl text-sm font-semibold",
+                    isCurrentPlan
+                      ? "bg-primary text-primary-foreground"
+                      : tier.is_popular
+                        ? "bg-accent text-accent-foreground"
+                        : isEnterprise
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-accent/20 text-foreground"
+                  )}>
+                    {isCurrentPlan 
+                      ? "Current Plan" 
+                      : isEnterprise 
+                        ? "Custom pricing" 
+                        : "$1/month for your first month"}
                   </div>
-
-                  {/* Price */}
-                  <div className="mb-4">
-                    <span className="font-display text-3xl font-bold">{formatPrice(tier.price_cents)}</span>
-                    <span className="text-muted-foreground">{tier.period}</span>
-                  </div>
-
-                  {/* Credits Info */}
-                  <div className="mb-4 p-3 rounded-lg bg-muted/50">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Credits included</span>
-                      <span className="font-semibold">{formatCredits(tier.credits)}</span>
-                    </div>
-                    {formatCreditsCost(tier.credits_cost_per_thousand) && (
-                      <div className="flex justify-between items-center text-sm mt-1">
-                        <span className="text-muted-foreground">Additional credits</span>
-                        <span className="font-medium text-primary">{formatCreditsCost(tier.credits_cost_per_thousand)}</span>
+                  
+                  <div className={cn(
+                    "flex-1 flex flex-col rounded-b-2xl p-6",
+                    isCurrentPlan
+                      ? "bg-primary/5 border-2 border-primary border-t-0 shadow-glow"
+                      : tier.is_popular
+                        ? "bg-card border-2 border-accent border-t-0"
+                        : "bg-card border border-border border-t-0"
+                  )}>
+                    {/* Plan Header */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-display font-semibold text-xl">{tier.name}</h3>
+                        {tier.is_popular && !isCurrentPlan && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs font-semibold">
+                            <Sparkles className="w-3 h-3" />
+                            Most Popular
+                          </span>
+                        )}
                       </div>
+                      <p className="text-muted-foreground text-sm">{tier.description}</p>
+                    </div>
+
+                    {/* Price */}
+                    <div className="mb-4">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-display text-4xl font-bold">{formatPrice(tier.price_cents)}</span>
+                        {tier.period && <span className="text-muted-foreground">{tier.period}</span>}
+                      </div>
+                      {!isEnterprise && (
+                        <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
+                      )}
+                    </div>
+
+                    {/* Credits Info */}
+                    <div className="mb-4 p-3 rounded-lg bg-muted/50">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Credits included</span>
+                        <span className="font-semibold">{formatCredits(tier.credits)}</span>
+                      </div>
+                      {formatCreditsCost(tier.credits_cost_per_thousand) && (
+                        <div className="flex justify-between items-center text-sm mt-1">
+                          <span className="text-muted-foreground">Additional credits</span>
+                          <span className="font-medium text-primary">{formatCreditsCost(tier.credits_cost_per_thousand)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Features */}
+                    <ul className="space-y-2.5 mb-6 flex-1">
+                      {tier.features.filter((f: string) => !f.includes("$1")).map((feature: string, idx: number) => (
+                        <li key={idx} className="flex items-start gap-2.5">
+                          <div className="w-5 h-5 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <Check className="w-3 h-3 text-success" />
+                          </div>
+                          <span className="text-sm text-foreground">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* CTA */}
+                    {isCurrentPlan ? (
+                      <Button 
+                        variant="outline" 
+                        size="lg" 
+                        className="w-full pointer-events-none opacity-70"
+                        disabled
+                      >
+                        Current Plan
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant={isUpgrade || tier.is_popular ? "hero" : "outline"} 
+                        size="lg" 
+                        className="w-full"
+                        asChild
+                      >
+                        <Link to="/dashboard/settings">
+                          {isEnterprise ? "Contact Sales" : isUpgrade ? "Upgrade" : isDowngrade ? "Downgrade" : "Select"}
+                        </Link>
+                      </Button>
                     )}
                   </div>
-
-                  {/* Features */}
-                  <ul className="space-y-2.5 mb-6">
-                    {tier.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <div className="w-4 h-4 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Check className="w-2.5 h-2.5 text-success" />
-                        </div>
-                        <span className="text-sm text-foreground">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA */}
-                  {isCurrentPlan ? (
-                    <Button 
-                      variant="outline" 
-                      size="lg" 
-                      className="w-full pointer-events-none opacity-70"
-                      disabled
-                    >
-                      Current Plan
-                    </Button>
-                  ) : (
-                    <Button 
-                      variant={isUpgrade ? "hero" : "outline"} 
-                      size="lg" 
-                      className="w-full"
-                      asChild
-                    >
-                      <Link to="/dashboard/settings">
-                        {isUpgrade ? "Upgrade" : isDowngrade ? "Downgrade" : "Select"}
-                      </Link>
-                    </Button>
-                  )}
                 </motion.div>
               );
             })}
