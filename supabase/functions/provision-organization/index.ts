@@ -180,7 +180,7 @@ serve(async (req) => {
 
     logStep('Subscription created', { plan: 'starter', status: 'trial' });
 
-    // 5. Create organization_agents record
+    // 5. Create organization_agents record (placeholder - agent created after payment)
     const agentContext = JSON.stringify({
       orgName: organizationName,
       businessType: 'Service Business',
@@ -198,65 +198,20 @@ serve(async (req) => {
       logStep('Error creating agent record', { error: agentError });
       // Non-fatal, continue
     } else {
-      logStep('Organization agent record created');
+      logStep('Organization agent record created (agent will be created after payment)');
     }
 
-    // 6. Create ElevenLabs agent
-    try {
-      logStep('Creating ElevenLabs agent...');
-      const elevenLabsResponse = await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          action: 'create-agent',
-          organizationId: newOrg.id,
-          context: agentContext,
-        }),
-      });
-
-      const elevenLabsResult = await elevenLabsResponse.json();
-      if (elevenLabsResult.success) {
-        logStep('ElevenLabs agent created', { agentId: elevenLabsResult.agent_id });
-      } else {
-        logStep('ElevenLabs agent creation failed', { error: elevenLabsResult.error });
-      }
-    } catch (elevenLabsError) {
-      logStep('ElevenLabs agent setup error (non-fatal)', { error: String(elevenLabsError) });
-      // Non-fatal, agent can be created later
-    }
-
-    // 7. Setup Twilio (shared phone for starter/trial)
-    try {
-      const twilioResponse = await fetch(`${SUPABASE_URL}/functions/v1/setup-twilio-subaccount`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          organizationId: newOrg.id,
-          subscriptionPlan: 'starter',
-          organizationName: organizationName,
-        }),
-      });
-
-      const twilioResult = await twilioResponse.json();
-      logStep('Twilio setup result', twilioResult);
-    } catch (twilioError) {
-      logStep('Twilio setup error (non-fatal)', { error: String(twilioError) });
-      // Non-fatal, they can set up phone later
-    }
+    // Note: Twilio subaccount, phone number, and ElevenLabs agent are now created
+    // via the run-onboarding function after Stripe payment completes
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Organization provisioned successfully',
+        message: 'Organization provisioned successfully. Complete payment to activate phone and agent.',
         organizationId: newOrg.id,
         organization: newOrg,
         subscription,
+        nextStep: 'Complete payment to provision phone number and AI agent'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
