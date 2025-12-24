@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Check, Sparkles, Crown, Loader2 } from "lucide-react";
+import { Check, Loader2, ArrowRight } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
@@ -11,14 +11,14 @@ import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle
 export default function Subscriptions() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
-  const currentPlan = subscription?.plan?.toLowerCase() || "starter";
+  const currentPlan = subscription?.plan?.toLowerCase() || "core";
   const isLoading = subscriptionLoading || tiersLoading;
 
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
-    return `$${priceCents / 100}`;
+    return Math.floor(priceCents / 100);
   };
 
   const getDisplayPrice = (tier: SubscriptionTier) => {
@@ -27,27 +27,15 @@ export default function Subscriptions() {
   };
 
   const formatCredits = (credits: number) => {
-    if (credits < 0) return "Unlimited";
+    if (credits <= 0) return "Custom";
     return credits.toLocaleString();
-  };
-
-  const formatCreditsCost = (cost: number | null) => {
-    if (!cost) return null;
-    return `$${cost.toFixed(2)}/1000`;
-  };
-
-  const formatPhoneLines = (lines: number) => {
-    if (lines < 0) return "Unlimited";
-    return lines.toString();
-  };
-
-  const formatCallTime = (credits: number) => {
-    if (credits < 0) return "Unlimited";
-    return `~${Math.round(credits / 60)} min`;
   };
 
   const getPlanIndex = (planId: string) => tiers?.findIndex(t => t.plan_id === planId) ?? -1;
   const currentPlanIndex = getPlanIndex(currentPlan);
+
+  const isEnterprise = (planId: string) => planId === "enterprise";
+  const isBusiness = (planId: string) => planId === "business";
 
   return (
     <DashboardLayout>
@@ -57,13 +45,13 @@ export default function Subscriptions() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-center max-w-3xl mx-auto mb-12"
+          className="text-center max-w-3xl mx-auto mb-10"
         >
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-4">
-            Choose Your <span className="text-gradient">Plan</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3">
+            Choose Your Plan
           </h1>
-          <p className="text-lg text-muted-foreground">
-            Pay only for what you use. 1 credit = 1 second of call time.
+          <p className="text-muted-foreground">
+            Plans that grow with your business. No hidden fees.
           </p>
         </motion.div>
 
@@ -72,7 +60,7 @@ export default function Subscriptions() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.05 }}
-          className="flex justify-center mb-10"
+          className="flex justify-center mb-8"
         >
           <BillingToggle value={billingPeriod} onChange={setBillingPeriod} discountPercent={25} />
         </motion.div>
@@ -90,9 +78,9 @@ export default function Subscriptions() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-10 p-6 rounded-2xl bg-card border border-border max-w-md mx-auto"
+            className="mb-8 p-5 rounded-xl bg-card border border-border max-w-md mx-auto"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-muted-foreground">Current Usage</span>
               <span className="text-sm font-medium capitalize">{subscription.plan} Plan</span>
             </div>
@@ -127,96 +115,125 @@ export default function Subscriptions() {
 
         {/* Pricing Cards */}
         {!isLoading && tiers && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {tiers.map((tier, index) => {
               const isCurrentPlan = tier.plan_id === currentPlan;
               const isUpgrade = getPlanIndex(tier.plan_id) > currentPlanIndex;
               const isDowngrade = getPlanIndex(tier.plan_id) < currentPlanIndex;
-              const isEnterprise = tier.plan_id === "enterprise";
 
               return (
                 <motion.div
                   key={tier.plan_id}
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  transition={{ duration: 0.5, delay: index * 0.08 }}
                   className="relative flex flex-col"
                 >
-                  {/* Banner */}
                   <div className={cn(
-                    "text-center py-2.5 px-4 rounded-t-2xl text-sm font-semibold",
+                    "flex-1 flex flex-col rounded-xl p-4 transition-all",
                     isCurrentPlan
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-primary/10 border-2 border-primary"
                       : tier.is_popular
-                        ? "bg-accent text-accent-foreground"
-                        : isEnterprise
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-accent/20 text-foreground"
+                        ? "bg-primary text-primary-foreground ring-2 ring-primary shadow-lg"
+                        : isBusiness(tier.plan_id)
+                          ? "bg-card border-2 border-accent"
+                          : "bg-card border border-border"
                   )}>
-                    {isCurrentPlan 
-                      ? "Current Plan" 
-                      : isEnterprise 
-                        ? "Custom pricing" 
-                        : "$1/month for your first month"}
-                  </div>
-                  
-                  <div className={cn(
-                    "flex-1 flex flex-col rounded-b-2xl p-6",
-                    isCurrentPlan
-                      ? "bg-primary/5 border-2 border-primary border-t-0 shadow-glow"
-                      : tier.is_popular
-                        ? "bg-card border-2 border-accent border-t-0"
-                        : "bg-card border border-border border-t-0"
-                  )}>
-                    {/* Plan Header */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-display font-semibold text-xl">{tier.name}</h3>
-                        {tier.is_popular && !isCurrentPlan && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs font-semibold">
-                            <Sparkles className="w-3 h-3" />
-                            Most Popular
-                          </span>
-                        )}
+                    {/* Badges */}
+                    {isCurrentPlan && (
+                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                        <span className="inline-block px-3 py-0.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+                          Current Plan
+                        </span>
                       </div>
-                      <p className="text-muted-foreground text-sm">{tier.description}</p>
+                    )}
+                    {tier.is_popular && !isCurrentPlan && (
+                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                        <span className="inline-block px-3 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-semibold">
+                          Most Popular
+                        </span>
+                      </div>
+                    )}
+                    {isBusiness(tier.plan_id) && !isCurrentPlan && (
+                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                        <span className="inline-block px-3 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-semibold whitespace-nowrap">
+                          Best for High Volume
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Plan Header */}
+                    <div className="mb-3 mt-2">
+                      <h3 className={cn(
+                        "font-display font-semibold text-base mb-0.5",
+                        tier.is_popular && !isCurrentPlan ? "text-primary-foreground" : "text-foreground"
+                      )}>
+                        {tier.name}
+                      </h3>
+                      <p className={cn(
+                        "text-xs",
+                        tier.is_popular && !isCurrentPlan ? "text-primary-foreground/80" : "text-muted-foreground"
+                      )}>
+                        {tier.description}
+                      </p>
                     </div>
 
                     {/* Price */}
                     <div className="mb-4">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-display text-4xl font-bold">{formatPrice(getDisplayPrice(tier))}</span>
-                        <span className="text-muted-foreground">
-                          {isEnterprise ? "" : billingPeriod === "yearly" ? "/mo billed yearly" : "/month"}
-                        </span>
-                      </div>
-                      {!isEnterprise && (
-                        <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
-                      )}
-                    </div>
-
-                    {/* Credits Info */}
-                    <div className="mb-4 p-3 rounded-lg bg-muted/50">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Credits included</span>
-                        <span className="font-semibold">{formatCredits(tier.credits)}</span>
-                      </div>
-                      {formatCreditsCost(tier.credits_cost_per_thousand) && (
-                        <div className="flex justify-between items-center text-sm mt-1">
-                          <span className="text-muted-foreground">Additional credits</span>
-                          <span className="font-medium text-primary">{formatCreditsCost(tier.credits_cost_per_thousand)}</span>
+                      {isEnterprise(tier.plan_id) ? (
+                        <div className={cn(
+                          "font-display text-xl font-bold",
+                          tier.is_popular && !isCurrentPlan ? "text-primary-foreground" : "text-foreground"
+                        )}>
+                          Custom
                         </div>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-0.5">
+                            <span className={cn(
+                              "font-display text-2xl font-bold",
+                              tier.is_popular && !isCurrentPlan ? "text-primary-foreground" : "text-foreground"
+                            )}>
+                              ${formatPrice(getDisplayPrice(tier))}
+                            </span>
+                            <span className={cn(
+                              "text-xs",
+                              tier.is_popular && !isCurrentPlan ? "text-primary-foreground/70" : "text-muted-foreground"
+                            )}>
+                              /mo
+                            </span>
+                          </div>
+                          {billingPeriod === "yearly" && (
+                            <p className={cn(
+                              "text-xs",
+                              tier.is_popular && !isCurrentPlan ? "text-primary-foreground/70" : "text-muted-foreground"
+                            )}>
+                              billed annually
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
 
                     {/* Features */}
-                    <ul className="space-y-2.5 mb-6 flex-1">
-                      {tier.features.filter((f: string) => !f.includes("$1")).map((feature: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-2.5">
-                          <div className="w-5 h-5 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <Check className="w-3 h-3 text-success" />
+                    <ul className="space-y-2 mb-4 flex-1">
+                      {tier.features.map((feature: string, idx: number) => (
+                        <li key={idx} className="flex items-start gap-1.5">
+                          <div className={cn(
+                            "w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                            tier.is_popular && !isCurrentPlan ? "bg-primary-foreground/20" : "bg-success/10"
+                          )}>
+                            <Check className={cn(
+                              "w-2 h-2",
+                              tier.is_popular && !isCurrentPlan ? "text-primary-foreground" : "text-success"
+                            )} />
                           </div>
-                          <span className="text-sm text-foreground">{feature}</span>
+                          <span className={cn(
+                            "text-xs",
+                            tier.is_popular && !isCurrentPlan ? "text-primary-foreground/90" : "text-foreground"
+                          )}>
+                            {feature}
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -225,7 +242,7 @@ export default function Subscriptions() {
                     {isCurrentPlan ? (
                       <Button 
                         variant="outline" 
-                        size="lg" 
+                        size="sm" 
                         className="w-full pointer-events-none opacity-70"
                         disabled
                       >
@@ -233,13 +250,17 @@ export default function Subscriptions() {
                       </Button>
                     ) : (
                       <Button 
-                        variant={isUpgrade || tier.is_popular ? "hero" : "outline"} 
-                        size="lg" 
-                        className="w-full"
+                        variant={tier.is_popular ? "secondary" : isEnterprise(tier.plan_id) ? "outline" : "default"}
+                        size="sm" 
+                        className={cn(
+                          "w-full",
+                          tier.is_popular && "bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+                        )}
                         asChild
                       >
-                        <Link to="/dashboard/settings">
-                          {isEnterprise ? "Contact Sales" : isUpgrade ? "Upgrade" : isDowngrade ? "Downgrade" : "Select"}
+                        <Link to={isEnterprise(tier.plan_id) ? "mailto:sales@answerafter.com" : "/dashboard/settings"}>
+                          {isEnterprise(tier.plan_id) ? "Contact Sales" : isUpgrade ? "Upgrade" : isDowngrade ? "Downgrade" : "Select"}
+                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
                         </Link>
                       </Button>
                     )}
@@ -250,7 +271,22 @@ export default function Subscriptions() {
           </div>
         )}
 
-        {/* Tier Breakdown Table */}
+        {/* Extra Credits Note */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="mt-10 text-center max-w-xl mx-auto"
+        >
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h4 className="font-semibold text-foreground mb-2">Need more usage?</h4>
+            <p className="text-muted-foreground text-sm">
+              Additional credits available at $10 for 150 credits. Purchase anytime from your dashboard.
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Plan Comparison Table */}
         {!isLoading && tiers && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -259,23 +295,23 @@ export default function Subscriptions() {
             className="mt-12"
           >
             <h3 className="font-display text-xl font-semibold text-center mb-6">Plan Comparison</h3>
-            <div className="rounded-2xl border border-border overflow-hidden bg-card">
+            <div className="rounded-xl border border-border overflow-hidden bg-card">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
-                      <th className="text-left p-4 font-semibold">Feature</th>
+                      <th className="text-left p-3 font-semibold">Feature</th>
                       {tiers.map((tier) => (
                         <th 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4 font-semibold min-w-[120px]",
+                            "text-center p-3 font-semibold min-w-[100px]",
                             tier.plan_id === currentPlan && "bg-primary/10"
                           )}
                         >
                           {tier.name}
                           {tier.plan_id === currentPlan && (
-                            <span className="block text-xs font-normal text-primary mt-1">Current</span>
+                            <span className="block text-xs font-normal text-primary mt-0.5">Current</span>
                           )}
                         </th>
                       ))}
@@ -283,26 +319,26 @@ export default function Subscriptions() {
                   </thead>
                   <tbody>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">{billingPeriod === "yearly" ? "Price (billed yearly)" : "Monthly Price"}</td>
+                      <td className="p-3 font-medium">Monthly Price</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {formatPrice(getDisplayPrice(tier))}{tier.plan_id !== "enterprise" ? (billingPeriod === "yearly" ? "/mo" : "/month") : ""}
+                          {isEnterprise(tier.plan_id) ? "Custom" : `$${formatPrice(getDisplayPrice(tier))}/mo`}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Credits Included</td>
+                      <td className="p-3 font-medium">Monthly Credits</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
@@ -311,54 +347,54 @@ export default function Subscriptions() {
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Approx. Call Time</td>
+                      <td className="p-3 font-medium">Phone Numbers</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {formatCallTime(tier.credits)}
+                          {tier.phone_lines <= 0 ? "Custom" : tier.phone_lines}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Additional Credit Cost</td>
+                      <td className="p-3 font-medium">Define Services</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {formatCreditsCost(tier.credits_cost_per_thousand) || "—"}
+                          {tier.has_custom_agent ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Phone Lines</td>
+                      <td className="p-3 font-medium">Reminder Rules</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {formatPhoneLines(tier.phone_lines)}
+                          {tier.has_outbound_reminders ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Custom AI Training</td>
+                      <td className="p-3 font-medium">Agent Context</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
@@ -367,70 +403,26 @@ export default function Subscriptions() {
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Call Recordings</td>
+                      <td className="p-3 font-medium">Priority Support</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {tier.has_call_recordings ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-4 font-medium">API Access</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-4",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_api_access ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Priority Support</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-4",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_priority_support ? (
-                            tier.support_level === "dedicated_24_7" ? "24/7 Dedicated" : <Check className="w-4 h-4 text-success mx-auto" />
-                          ) : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-4 font-medium">HIPAA Compliance</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-4",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_hipaa_compliance ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
+                          {tier.has_priority_support ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
                         </td>
                       ))}
                     </tr>
                     <tr>
-                      <td className="p-4 font-medium">SLA Guarantee</td>
+                      <td className="p-3 font-medium">SLA Guarantee</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
                           className={cn(
-                            "text-center p-4",
+                            "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
@@ -444,22 +436,6 @@ export default function Subscriptions() {
             </div>
           </motion.div>
         )}
-
-        {/* Credit Explanation */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="mt-12 text-center max-w-2xl mx-auto"
-        >
-          <div className="p-6 rounded-2xl bg-card border border-border">
-            <h4 className="font-display font-semibold text-lg mb-2">How Credits Work</h4>
-            <p className="text-muted-foreground text-sm">
-              Each second of AI call handling uses 1 credit. A typical 5-minute call uses 300 credits. 
-              Credits reset monthly on paid plans. Unused credits don't roll over.
-            </p>
-          </div>
-        </motion.div>
       </div>
     </DashboardLayout>
   );

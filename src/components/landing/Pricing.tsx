@@ -2,17 +2,17 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Check, Sparkles, Loader2 } from "lucide-react";
+import { Check, Loader2, ArrowRight } from "lucide-react";
 import { useSubscriptionTiers } from "@/hooks/use-api";
 import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle";
 
 export function Pricing() {
   const { data: tiers, isLoading } = useSubscriptionTiers();
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
-    return `$${priceCents / 100}`;
+    return Math.floor(priceCents / 100);
   };
 
   const getDisplayPrice = (tier: NonNullable<typeof tiers>[number]) => {
@@ -20,22 +20,11 @@ export function Pricing() {
     return billingPeriod === "yearly" ? tier.yearly_price_cents : tier.price_cents;
   };
 
-  const getButtonVariant = (planId: string, isPopular: boolean) => {
-    if (isPopular) return "hero" as const;
-    return "outline" as const;
-  };
-
-  const getCta = (planId: string) => {
-    if (planId === "enterprise") return "Contact Sales";
-    return "Start for $1";
-  };
-
   const isEnterprise = (planId: string) => planId === "enterprise";
+  const isBusiness = (planId: string) => planId === "business";
 
   return (
-    <section id="pricing" className="py-24 lg:py-32 relative">
-      <div className="absolute inset-0 bg-gradient-subtle" />
-      
+    <section id="pricing" className="py-24 lg:py-32 relative bg-muted/30">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
         <motion.div
@@ -43,19 +32,13 @@ export function Pricing() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="text-center max-w-3xl mx-auto mb-16 lg:mb-20"
+          className="text-center max-w-3xl mx-auto mb-12"
         >
-          <span className="inline-block px-4 py-2 rounded-full bg-accent/10 text-accent text-sm font-semibold mb-4">
-            Pricing
-          </span>
-          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold mb-6">
-            Simple, Transparent{" "}
-            <span className="text-gradient">Pricing</span>
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
+            Simple, Transparent Pricing
           </h2>
           <p className="text-lg text-muted-foreground">
-            No free tier. No clutter. Just plans that grow with your business.
-            <br />
-            <span className="font-medium text-foreground">Try any plan for just $1 your first month.</span>
+            Plans that grow with your business. No hidden fees.
           </p>
         </motion.div>
 
@@ -79,79 +62,119 @@ export function Pricing() {
 
         {/* Pricing Cards */}
         {!isLoading && tiers && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 max-w-7xl mx-auto">
             {tiers.map((tier, index) => (
               <motion.div
                 key={tier.plan_id}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
+                transition={{ duration: 0.5, delay: index * 0.08 }}
                 className="relative flex flex-col"
               >
-                {/* $1 First Month Banner or Enterprise Banner */}
-                <div className={`text-center py-2.5 px-4 rounded-t-2xl text-sm font-semibold ${
-                  tier.is_popular 
-                    ? "bg-primary text-primary-foreground" 
-                    : isEnterprise(tier.plan_id)
-                    ? "bg-muted text-muted-foreground"
-                    : "bg-accent/20 text-foreground"
-                }`}>
-                  {isEnterprise(tier.plan_id) ? "Custom pricing" : "$1/month for your first month"}
-                </div>
-                
-                <div className={`flex-1 flex flex-col rounded-b-2xl p-6 ${
+                <div className={`flex-1 flex flex-col rounded-2xl p-5 transition-all ${
                   tier.is_popular
-                    ? "bg-card border-2 border-primary shadow-glow"
+                    ? "bg-primary text-primary-foreground ring-2 ring-primary shadow-lg scale-[1.02]"
+                    : isBusiness(tier.plan_id)
+                    ? "bg-card border-2 border-accent"
                     : "bg-card border border-border"
                 }`}>
-                  {/* Plan Header */}
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-display font-semibold text-xl">{tier.name}</h3>
-                      {tier.is_popular && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                          <Sparkles className="w-3 h-3" />
-                          Most Popular
-                        </span>
-                      )}
+                  {/* Popular Badge */}
+                  {tier.is_popular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="inline-block px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-semibold">
+                        Most Popular
+                      </span>
                     </div>
-                    <p className="text-muted-foreground text-sm">{tier.description}</p>
+                  )}
+
+                  {/* Best for High Volume Badge */}
+                  {isBusiness(tier.plan_id) && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="inline-block px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-semibold whitespace-nowrap">
+                        Best for High Volume
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Plan Header */}
+                  <div className="mb-4 mt-2">
+                    <h3 className={`font-display font-semibold text-lg mb-1 ${
+                      tier.is_popular ? "text-primary-foreground" : "text-foreground"
+                    }`}>
+                      {tier.name}
+                    </h3>
+                    <p className={`text-sm ${
+                      tier.is_popular ? "text-primary-foreground/80" : "text-muted-foreground"
+                    }`}>
+                      {tier.description}
+                    </p>
                   </div>
 
                   {/* Price */}
-                  <div className="mb-6">
-                    <div className="flex items-baseline gap-1">
-                      <span className="font-display text-4xl font-bold">{formatPrice(getDisplayPrice(tier))}</span>
-                      <span className="text-muted-foreground">
-                        {isEnterprise(tier.plan_id) ? "" : billingPeriod === "yearly" ? "/mo billed yearly" : "/month"}
-                      </span>
-                    </div>
-                    {!isEnterprise(tier.plan_id) && (
-                      <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
+                  <div className="mb-5">
+                    {isEnterprise(tier.plan_id) ? (
+                      <div className={`font-display text-2xl font-bold ${
+                        tier.is_popular ? "text-primary-foreground" : "text-foreground"
+                      }`}>
+                        Custom
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-baseline gap-1">
+                          <span className={`font-display text-3xl font-bold ${
+                            tier.is_popular ? "text-primary-foreground" : "text-foreground"
+                          }`}>
+                            ${formatPrice(getDisplayPrice(tier))}
+                          </span>
+                          <span className={`text-sm ${
+                            tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
+                          }`}>
+                            /mo
+                          </span>
+                        </div>
+                        {billingPeriod === "yearly" && (
+                          <p className={`text-xs mt-1 ${
+                            tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
+                          }`}>
+                            billed annually
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
 
                   {/* Features */}
-                  <ul className="space-y-3 mb-6 flex-1">
-                    {tier.features.filter((f: string) => !f.includes("$1")).map((feature: string, idx: number) => (
-                      <li key={idx} className="flex items-start gap-2.5">
-                        <div className="w-5 h-5 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Check className="w-3 h-3 text-success" />
+                  <ul className="space-y-2.5 mb-5 flex-1">
+                    {tier.features.map((feature: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          tier.is_popular ? "bg-primary-foreground/20" : "bg-success/10"
+                        }`}>
+                          <Check className={`w-2.5 h-2.5 ${
+                            tier.is_popular ? "text-primary-foreground" : "text-success"
+                          }`} />
                         </div>
-                        <span className="text-sm text-foreground">{feature}</span>
+                        <span className={`text-sm ${
+                          tier.is_popular ? "text-primary-foreground/90" : "text-foreground"
+                        }`}>
+                          {feature}
+                        </span>
                       </li>
                     ))}
                   </ul>
 
                   {/* CTA */}
                   <Button 
-                    variant={getButtonVariant(tier.plan_id, tier.is_popular)} 
-                    size="lg"
-                    className="w-full"
+                    variant={tier.is_popular ? "secondary" : isEnterprise(tier.plan_id) ? "outline" : "default"}
+                    size="sm"
+                    className={`w-full ${tier.is_popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`}
                     asChild
                   >
-                    <Link to="/auth">{getCta(tier.plan_id)}</Link>
+                    <Link to={isEnterprise(tier.plan_id) ? "mailto:sales@answerafter.com" : "/auth"}>
+                      {isEnterprise(tier.plan_id) ? "Contact Sales" : "Get Started"}
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </Link>
                   </Button>
                 </div>
               </motion.div>
@@ -159,7 +182,7 @@ export function Pricing() {
           </div>
         )}
 
-        {/* Bottom Note */}
+        {/* Extra Credits Note */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -167,10 +190,24 @@ export function Pricing() {
           transition={{ duration: 0.5, delay: 0.4 }}
           className="mt-12 text-center max-w-2xl mx-auto"
         >
+          <div className="bg-card border border-border rounded-xl p-6">
+            <h4 className="font-semibold text-foreground mb-2">Need more usage?</h4>
+            <p className="text-muted-foreground text-sm">
+              Additional credits available at $10 for 150 credits. Purchase anytime from your dashboard.
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Bottom Note */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="mt-8 text-center"
+        >
           <p className="text-muted-foreground text-sm">
-            All plans include 24/7 AI call answering, appointment booking, and reminder calls.
-            <br />
-            Annual discounts available after your first month.
+            All plans include 24/7 AI call answering and appointment booking.
           </p>
         </motion.div>
       </div>
