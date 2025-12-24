@@ -518,6 +518,13 @@ const Auth = () => {
                   )}
                 </div>
 
+                {/* $1 First Month Promo */}
+                <div className="bg-accent/10 border border-accent/20 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-accent mb-1">🎉 $1 First Month</p>
+                  <p className="text-xs text-muted-foreground">
+                    Start with your first month for just $1. Cancel anytime.
+                  </p>
+                </div>
 
                 {/* Terms */}
                 <p className="text-sm text-muted-foreground">
