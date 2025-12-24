@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay, parseISO } from 'date-fns';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { WeekSchedule } from '@/components/settings/BusinessHoursSchedule';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useGoogleConnectionGuard } from '@/hooks/useGoogleConnectionGuard';
 
 interface CalendarEvent {
   id: string;
@@ -76,6 +78,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  const { handleGoogleError } = useGoogleConnectionGuard();
   
   // Memoize weekStart to prevent unnecessary re-renders
   const weekStart = useMemo(() => 
@@ -116,6 +119,11 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
 
         if (cancelled) return;
 
+        // Check for Google connection error and redirect
+        if (handleGoogleError(error, data)) {
+          return;
+        }
+
         if (error) {
           console.error('Error fetching events:', error);
           return;
@@ -137,7 +145,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
     return () => {
       cancelled = true;
     };
-  }, [user?.organization_id, weekKey]);
+  }, [user?.organization_id, weekKey, handleGoogleError]);
 
   const isHourAvailable = (dayIndex: number, hour: number): boolean => {
     if (!businessHours) return true;

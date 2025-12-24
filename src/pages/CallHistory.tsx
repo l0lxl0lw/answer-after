@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +24,7 @@ import { useConversations, useCalls, type Conversation } from "@/hooks/use-api";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
 
 interface GoogleContact {
   resourceName: string;
@@ -63,25 +64,37 @@ function getStatusBadge(status: string, callSuccessful: string | null) {
 // Hook to fetch Google Contacts for phone number matching
 function useGoogleContacts() {
   const { user } = useAuth();
+  const { handleGoogleError } = useGoogleConnectionGuard();
   
   return useQuery({
     queryKey: ["google-contacts-for-calls", user?.organization_id],
     queryFn: async () => {
       if (!user?.organization_id) return [];
       
-      const { data, error } = await supabase.functions.invoke("google-contacts", {
-        body: { action: "list", organizationId: user.organization_id },
-      });
+      try {
+        const { data, error } = await supabase.functions.invoke("google-contacts", {
+          body: { action: "list", organizationId: user.organization_id },
+        });
 
-      if (error) {
-        console.error("Failed to fetch contacts:", error);
+        // Check for Google connection error and redirect
+        if (handleGoogleError(error, data)) {
+          return [];
+        }
+
+        if (error) {
+          console.error("Failed to fetch contacts:", error);
+          return [];
+        }
+        
+        return (data?.contacts || []) as GoogleContact[];
+      } catch (e) {
+        console.error("Failed to fetch contacts:", e);
         return [];
       }
-      
-      return (data?.contacts || []) as GoogleContact[];
     },
     enabled: !!user?.organization_id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: false,
   });
 }
 

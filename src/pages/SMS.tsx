@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/use-api";
+import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
 
 interface SMSMessage {
   id: string;
@@ -127,6 +129,7 @@ function SMSItem({ message }: { message: SMSMessage }) {
 const SMS = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const { data: organization } = useOrganization();
+  const { handleGoogleError } = useGoogleConnectionGuard();
 
   // Fetch SMS messages from Twilio
   const { data: smsData, isLoading, refetch, isRefetching } = useQuery({
@@ -145,14 +148,29 @@ const SMS = () => {
     queryKey: ['google-contacts-sms', organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
-      const { data, error } = await supabase.functions.invoke('google-contacts', {
-        body: { action: 'list', organizationId: organization.id }
-      });
-      if (error) throw error;
-      return data?.contacts as RawGoogleContact[] || [];
+      try {
+        const { data, error } = await supabase.functions.invoke('google-contacts', {
+          body: { action: 'list', organizationId: organization.id }
+        });
+        
+        // Check for Google connection error and redirect
+        if (handleGoogleError(error, data)) {
+          return [];
+        }
+        
+        if (error) {
+          console.log('Google contacts not available:', error);
+          return [];
+        }
+        return data?.contacts as RawGoogleContact[] || [];
+      } catch (e) {
+        console.log('Google contacts fetch failed:', e);
+        return [];
+      }
     },
     enabled: !!organization?.id,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   // Build phone-to-name map
