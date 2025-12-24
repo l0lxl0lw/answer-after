@@ -41,7 +41,7 @@ export function CTA() {
           </h2>
           
           <p className="text-lg sm:text-xl text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
-            Start your 14-day free trial today. No credit card required. 
+            Get started for just $1 your first month. No long-term contracts. 
             Set up in minutes and see results immediately.
           </p>
 
@@ -51,8 +51,8 @@ export function CTA() {
               className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 font-semibold"
               asChild
             >
-              <Link to="/dashboard">
-                Start Free Trial
+              <Link to="/auth">
+                Get Started for $1
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
