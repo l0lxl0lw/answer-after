@@ -194,14 +194,45 @@ const Auth = () => {
       
       toast({
         title: "Account created!",
-        description: "Redirecting to setup your payment method...",
+        description: "Setting up your organization...",
       });
 
-      // Get session for checkout
+      // Get session for provisioning
       const { data: sessionData } = await supabase.auth.getSession();
       
       if (sessionData.session) {
-        // Redirect to Stripe Checkout with trial
+        // First, provision the organization (creates org, subscription, role, Twilio)
+        const { data: provisionData, error: provisionError } = await supabase.functions.invoke(
+          'provision-organization',
+          {
+            headers: {
+              Authorization: `Bearer ${sessionData.session.access_token}`,
+            },
+            body: {
+              organizationName: data.organizationName,
+            },
+          }
+        );
+
+        if (provisionError) {
+          console.error('Provisioning error:', provisionError);
+          toast({
+            title: "Setup issue",
+            description: "There was an issue setting up your organization. Please contact support.",
+            variant: "destructive",
+          });
+          navigate(from, { replace: true });
+          return;
+        }
+
+        console.log('Organization provisioned:', provisionData);
+
+        toast({
+          title: "Organization ready!",
+          description: "Redirecting to setup your payment method...",
+        });
+
+        // Now redirect to Stripe Checkout with trial
         const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
           'create-checkout-with-trial',
           {
