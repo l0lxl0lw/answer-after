@@ -12,11 +12,7 @@ import {
   Clock,
   Loader2,
   Check,
-  ExternalLink,
-  Settings2,
-  Eye,
-  EyeOff,
-  RefreshCw
+  ExternalLink
 } from 'lucide-react';
 import { BusinessHoursSchedule, WeekSchedule } from '@/components/settings/BusinessHoursSchedule';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
@@ -89,15 +85,6 @@ export default function Settings() {
   });
 
   const [newKeyword, setNewKeyword] = useState('');
-  
-  // Twilio credentials state
-  const [twilioCredentials, setTwilioCredentials] = useState({
-    subaccount_sid: '',
-    auth_token: '',
-  });
-  const [showAuthToken, setShowAuthToken] = useState(false);
-  const [isSavingTwilio, setIsSavingTwilio] = useState(false);
-  const [isRunningOnboarding, setIsRunningOnboarding] = useState(false);
 
   // US Timezones list
   const usTimezones = [
@@ -110,7 +97,7 @@ export default function Settings() {
     { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST - no DST)' },
   ];
 
-  // Handle organization data
+  // Handle checkout success redirect
   useEffect(() => {
     if (organization) {
       // Parse business_hours_schedule from organization or use default
@@ -123,13 +110,6 @@ export default function Settings() {
         notification_email: organization.notification_email || '',
         notification_phone: organization.notification_phone || '',
         emergency_keywords: organization.emergency_keywords || [],
-      });
-
-      // Set Twilio credentials
-      const org = organization as any;
-      setTwilioCredentials({
-        subaccount_sid: org.twilio_subaccount_sid || '',
-        auth_token: org.twilio_subaccount_auth_token || '',
       });
     }
   }, [organization]);
@@ -417,73 +397,6 @@ export default function Settings() {
     }
   };
 
-  const handleSaveTwilioCredentials = async () => {
-    if (!user?.organization_id) return;
-    
-    setIsSavingTwilio(true);
-    try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({
-          twilio_subaccount_sid: twilioCredentials.subaccount_sid || null,
-          twilio_subaccount_auth_token: twilioCredentials.auth_token || null,
-        })
-        .eq('id', user.organization_id);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Twilio credentials saved',
-        description: 'Your Twilio credentials have been updated.',
-      });
-    } catch (error: any) {
-      console.error('Error saving Twilio credentials:', error);
-      toast({
-        title: 'Error saving credentials',
-        description: error.message || 'Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSavingTwilio(false);
-    }
-  };
-
-  const handleRunOnboarding = async () => {
-    if (!user?.organization_id) return;
-    
-    setIsRunningOnboarding(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('run-onboarding', {
-        body: {
-          organizationId: user.organization_id,
-          subscriptionPlan: subscription?.plan || 'core',
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.success) {
-        toast({
-          title: 'Setup complete',
-          description: 'Twilio subaccount and phone number have been configured.',
-        });
-        // Refresh to get new credentials
-        window.location.reload();
-      } else {
-        throw new Error(data?.error || 'Onboarding failed');
-      }
-    } catch (error: any) {
-      console.error('Error running onboarding:', error);
-      toast({
-        title: 'Setup failed',
-        description: error.message || 'Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsRunningOnboarding(false);
-    }
-  };
-
   return (
     <DashboardLayout>
       <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -500,7 +413,7 @@ export default function Settings() {
 
         {/* Tabs */}
         <Tabs defaultValue="organization" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 bg-muted/50">
+          <TabsList className="grid w-full grid-cols-4 bg-muted/50">
             <TabsTrigger value="organization" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Organization</span>
@@ -508,10 +421,6 @@ export default function Settings() {
             <TabsTrigger value="phones" className="flex items-center gap-2">
               <Phone className="h-4 w-4" />
               <span className="hidden sm:inline">Phone Numbers</span>
-            </TabsTrigger>
-            <TabsTrigger value="integrations" className="flex items-center gap-2">
-              <Settings2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Integrations</span>
             </TabsTrigger>
             <TabsTrigger value="notifications" className="flex items-center gap-2">
               <Bell className="h-4 w-4" />
@@ -846,178 +755,6 @@ export default function Settings() {
                   )}
                 </CardContent>
               </Card>
-            </motion.div>
-          </TabsContent>
-
-          {/* Integrations Tab */}
-          <TabsContent value="integrations">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
-            >
-              {/* Twilio Integration */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Phone className="h-5 w-5" />
-                    Twilio Integration
-                  </CardTitle>
-                  <CardDescription>
-                    Manage your Twilio subaccount credentials for phone call handling
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {twilioCredentials.subaccount_sid ? (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="twilio-sid">Account SID</Label>
-                        <Input
-                          id="twilio-sid"
-                          value={twilioCredentials.subaccount_sid}
-                          onChange={(e) => setTwilioCredentials({ ...twilioCredentials, subaccount_sid: e.target.value })}
-                          placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="twilio-token">Auth Token</Label>
-                        <div className="relative">
-                          <Input
-                            id="twilio-token"
-                            type={showAuthToken ? 'text' : 'password'}
-                            value={twilioCredentials.auth_token}
-                            onChange={(e) => setTwilioCredentials({ ...twilioCredentials, auth_token: e.target.value })}
-                            placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                            className="pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                            onClick={() => setShowAuthToken(!showAuthToken)}
-                          >
-                            {showAuthToken ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2 pt-2">
-                        <Button
-                          variant="outline"
-                          onClick={handleRunOnboarding}
-                          disabled={isRunningOnboarding}
-                        >
-                          {isRunningOnboarding ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                          )}
-                          Re-run Setup
-                        </Button>
-                        <Button onClick={handleSaveTwilioCredentials} disabled={isSavingTwilio}>
-                          {isSavingTwilio ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Save className="h-4 w-4 mr-2" />
-                          )}
-                          Save Credentials
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-8 space-y-4">
-                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-                        <Phone className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Twilio not configured</p>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Run the setup process to create a Twilio subaccount and provision a phone number
-                        </p>
-                      </div>
-                      <Button onClick={handleRunOnboarding} disabled={isRunningOnboarding}>
-                        {isRunningOnboarding ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Setting up...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Run Setup
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Manual Twilio Entry */}
-              {!twilioCredentials.subaccount_sid && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Manual Configuration</CardTitle>
-                    <CardDescription>
-                      Already have Twilio credentials? Enter them manually
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="manual-twilio-sid">Account SID</Label>
-                      <Input
-                        id="manual-twilio-sid"
-                        value={twilioCredentials.subaccount_sid}
-                        onChange={(e) => setTwilioCredentials({ ...twilioCredentials, subaccount_sid: e.target.value })}
-                        placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="manual-twilio-token">Auth Token</Label>
-                      <div className="relative">
-                        <Input
-                          id="manual-twilio-token"
-                          type={showAuthToken ? 'text' : 'password'}
-                          value={twilioCredentials.auth_token}
-                          onChange={(e) => setTwilioCredentials({ ...twilioCredentials, auth_token: e.target.value })}
-                          placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                          className="pr-10"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                          onClick={() => setShowAuthToken(!showAuthToken)}
-                        >
-                          {showAuthToken ? (
-                            <EyeOff className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <Eye className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex justify-end pt-2">
-                      <Button 
-                        onClick={handleSaveTwilioCredentials} 
-                        disabled={isSavingTwilio || !twilioCredentials.subaccount_sid}
-                      >
-                        {isSavingTwilio ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4 mr-2" />
-                        )}
-                        Save Credentials
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </motion.div>
           </TabsContent>
 
