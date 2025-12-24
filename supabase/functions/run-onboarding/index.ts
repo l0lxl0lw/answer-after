@@ -365,6 +365,21 @@ serve(async (req) => {
       });
     }
 
+    // Update organization onboarding status
+    const { error: orgOnboardingError } = await supabase
+      .from('organizations')
+      .update({
+        is_onboarding_complete: true,
+        onboarding_completed_at: new Date().toISOString()
+      })
+      .eq('id', organizationId);
+
+    if (orgOnboardingError) {
+      logStep('Failed to update onboarding status', { error: orgOnboardingError });
+    } else {
+      logStep('Onboarding status updated');
+    }
+
     // Calculate overall success
     const allSuccess = results.every(r => r.success);
     const criticalStepsSuccess = results
