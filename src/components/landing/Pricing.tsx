@@ -8,7 +8,7 @@ import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle
 
 export function Pricing() {
   const { data: tiers, isLoading } = useSubscriptionTiers();
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
 
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
