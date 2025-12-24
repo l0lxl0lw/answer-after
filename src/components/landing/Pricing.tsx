@@ -171,7 +171,7 @@ export function Pricing() {
                     className={`w-full ${tier.is_popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`}
                     asChild
                   >
-                    <Link to={isEnterprise(tier.plan_id) ? "mailto:sales@answerafter.com" : "/auth"}>
+                    <Link to={isEnterprise(tier.plan_id) ? "mailto:sales@answerafter.com" : "/auth?signup=true"}>
                       {isEnterprise(tier.plan_id) ? "Contact Sales" : "Get Started"}
                       <ArrowRight className="w-4 h-4 ml-1" />
                     </Link>

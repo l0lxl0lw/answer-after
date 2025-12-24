@@ -41,8 +41,7 @@ export function CTA() {
           </h2>
           
           <p className="text-lg sm:text-xl text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
-            Get started for just $1 your first month. No long-term contracts. 
-            Set up in minutes and see results immediately.
+            No long-term contracts. Set up in minutes and see results immediately.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -51,7 +50,7 @@ export function CTA() {
               className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 font-semibold"
               asChild
             >
-              <Link to="/auth">
+              <Link to="/auth?signup=true">
                 Get Started
                 <ArrowRight className="w-5 h-5" />
               </Link>
