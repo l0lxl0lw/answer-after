@@ -6,7 +6,7 @@ const steps = [
     icon: PhoneIncoming,
     step: "01",
     title: "Customer Calls",
-    description: "After your business hours end, calls are automatically routed to our AI system.",
+    description: "Every incoming call is answered instantly by your AI front desk — 24 hours a day, 7 days a week.",
   },
   {
     icon: MessageSquare,
@@ -23,8 +23,8 @@ const steps = [
   {
     icon: BellRing,
     step: "04",
-    title: "You're Notified",
-    description: "Receive instant alerts for new bookings and daily summaries of all appointments.",
+    title: "Automated Reminders",
+    description: "AI sends reminder calls and texts before appointments, capturing confirmations automatically.",
   },
 ];
 
@@ -50,7 +50,7 @@ export function HowItWorks() {
             <span className="text-gradient">Powerful Results</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Get started in minutes and let AI handle your after-hours calls while you focus on running your business.
+            Get started in minutes and let your AI front desk handle calls around the clock while you focus on running your business.
           </p>
         </motion.div>
 
