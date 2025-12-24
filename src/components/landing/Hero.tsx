@@ -62,7 +62,7 @@ export function Hero() {
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
           >
             <Button variant="hero" size="xl" asChild>
-              <Link to="/auth">
+              <Link to="/auth?signup=true">
                 Get Started
                 <ArrowRight className="w-5 h-5" />
               </Link>

@@ -64,15 +64,20 @@ type LoginFormData = z.infer<typeof loginSchema>;
 type SignupFormData = z.infer<typeof signupSchema>;
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   const { login, signup, isAuthenticated } = useAuth();
+
+  // Check for signup query param
+  const searchParams = new URLSearchParams(location.search);
+  const shouldSignup = searchParams.get('signup') === 'true';
+
+  const [isLogin, setIsLogin] = useState(!shouldSignup);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/dashboard";
 

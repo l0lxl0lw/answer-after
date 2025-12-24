@@ -56,7 +56,7 @@ export function Navbar() {
               <Link to="/auth">Log In</Link>
             </Button>
             <Button variant="hero" asChild>
-              <Link to="/auth">Get Started</Link>
+              <Link to="/auth?signup=true">Get Started</Link>
             </Button>
           </div>
 
@@ -97,7 +97,7 @@ export function Navbar() {
                   <Link to="/auth">Log In</Link>
                 </Button>
                 <Button variant="hero" asChild>
-                  <Link to="/auth">Get Started</Link>
+                  <Link to="/auth?signup=true">Get Started</Link>
                 </Button>
               </div>
             </div>
