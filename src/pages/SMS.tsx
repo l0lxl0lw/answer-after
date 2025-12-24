@@ -129,7 +129,7 @@ function SMSItem({ message }: { message: SMSMessage }) {
 const SMS = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const { data: organization } = useOrganization();
-  const { handleGoogleError } = useGoogleConnectionGuard();
+  const { checkGoogleError } = useGoogleConnectionGuard();
 
   // Fetch SMS messages from Twilio
   const { data: smsData, isLoading, refetch, isRefetching } = useQuery({
@@ -154,7 +154,7 @@ const SMS = () => {
         });
         
         // Check for Google connection error and redirect
-        if (handleGoogleError(error, data)) {
+        if (checkGoogleError(error, data)) {
           return [];
         }
         

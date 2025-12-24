@@ -78,7 +78,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
-  const { handleGoogleError } = useGoogleConnectionGuard();
+  const { checkGoogleError } = useGoogleConnectionGuard();
   
   // Memoize weekStart to prevent unnecessary re-renders
   const weekStart = useMemo(() => 
@@ -120,7 +120,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
         if (cancelled) return;
 
         // Check for Google connection error and redirect
-        if (handleGoogleError(error, data)) {
+        if (checkGoogleError(error, data)) {
           return;
         }
 
@@ -145,7 +145,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
     return () => {
       cancelled = true;
     };
-  }, [user?.organization_id, weekKey, handleGoogleError]);
+  }, [user?.organization_id, weekKey, checkGoogleError]);
 
   const isHourAvailable = (dayIndex: number, hour: number): boolean => {
     if (!businessHours) return true;

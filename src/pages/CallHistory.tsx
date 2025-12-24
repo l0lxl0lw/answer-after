@@ -64,7 +64,7 @@ function getStatusBadge(status: string, callSuccessful: string | null) {
 // Hook to fetch Google Contacts for phone number matching
 function useGoogleContacts() {
   const { user } = useAuth();
-  const { handleGoogleError } = useGoogleConnectionGuard();
+  const { checkGoogleError } = useGoogleConnectionGuard();
   
   return useQuery({
     queryKey: ["google-contacts-for-calls", user?.organization_id],
@@ -77,7 +77,7 @@ function useGoogleContacts() {
         });
 
         // Check for Google connection error and redirect
-        if (handleGoogleError(error, data)) {
+        if (checkGoogleError(error, data)) {
           return [];
         }
 

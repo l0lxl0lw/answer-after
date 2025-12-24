@@ -115,7 +115,7 @@ export default function Contacts() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: connection, isLoading: isConnectionLoading } = useGoogleCalendarConnection();
-  const { handleGoogleError } = useGoogleConnectionGuard();
+  const { checkGoogleError } = useGoogleConnectionGuard();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -143,7 +143,7 @@ export default function Contacts() {
         });
 
         // Check for Google connection error and redirect
-        if (handleGoogleError(error, data)) {
+        if (checkGoogleError(error, data)) {
           return { contacts: [], needsReconnect: false };
         }
 
