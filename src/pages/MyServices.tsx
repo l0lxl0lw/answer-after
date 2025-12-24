@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -12,6 +12,7 @@ import {
   Zap,
   Settings2,
   Loader2,
+  Crown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,9 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/hooks/use-api";
 import { z } from "zod";
+import { useNavigate } from "react-router-dom";
 
 // Validation schema
 const serviceSchema = z.object({
@@ -95,12 +98,33 @@ const categoryConfig = {
 
 const MyServices = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: subscription, isLoading: subLoading } = useSubscription();
+  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [formData, setFormData] = useState<FormData>(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Check if plan has custom agent (services) access
+  const { data: tierData, isLoading: tierLoading } = useQuery({
+    queryKey: ['subscription-tier-services', subscription?.plan],
+    queryFn: async () => {
+      if (!subscription?.plan) return null;
+      const { data } = await supabase
+        .from('subscription_tiers')
+        .select('has_custom_agent')
+        .eq('plan_id', subscription.plan)
+        .single();
+      return data;
+    },
+    enabled: !!subscription?.plan,
+  });
+
+  const hasServicesAccess = tierData?.has_custom_agent === true;
+  const isCheckingAccess = subLoading || tierLoading;
 
   // Fetch services
   const { data: services = [], isLoading } = useQuery({
@@ -113,7 +137,7 @@ const MyServices = () => {
       if (error) throw error;
       return data as Service[];
     },
-    enabled: !!user,
+    enabled: !!user && hasServicesAccess,
   });
 
   // Create mutation
@@ -241,6 +265,44 @@ const MyServices = () => {
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  // Loading state
+  if (isCheckingAccess) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Feature gate - show upgrade prompt
+  if (!hasServicesAccess) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+            <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">My Services</h1>
+            <p className="text-muted-foreground">Define the services your AI agent can offer</p>
+          </motion.div>
+
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <Crown className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Upgrade to Define Services</h3>
+              <p className="text-muted-foreground max-w-md mb-6">
+                Define custom services for your AI agent on Growth plans and above. Help the AI understand what you offer and validate customer requests.
+              </p>
+              <Button onClick={() => navigate("/dashboard/subscriptions")}>
+                View Plans
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -485,7 +547,7 @@ const MyServices = () => {
               </Button>
               <Button onClick={handleSave} disabled={isSaving}>
                 {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {selectedService ? "Save Changes" : "Add Service"}
+                {selectedService ? "Save Changes" : "Create Service"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -495,9 +557,9 @@ const MyServices = () => {
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Service?</AlertDialogTitle>
+              <AlertDialogTitle>Delete Service</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete "{selectedService?.name}". This action cannot be undone.
+                Are you sure you want to delete "{selectedService?.name}"? This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
