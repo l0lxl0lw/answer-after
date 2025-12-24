@@ -75,8 +75,8 @@ export function Features() {
             <span className="text-gradient">Capture Revenue</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            A complete solution for service businesses that want to convert every after-hours 
-            call into scheduled appointments and satisfied customers.
+            A complete AI receptionist that answers calls, books appointments, and sends 
+            automated reminders — so you never miss an opportunity.
           </p>
         </motion.div>
 

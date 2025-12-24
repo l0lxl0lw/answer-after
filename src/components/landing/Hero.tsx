@@ -39,9 +39,8 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6"
           >
-            Never Miss an{" "}
-            <span className="text-gradient">After-Hours</span>{" "}
-            Call Again
+            Your{" "}
+            <span className="text-gradient">24/7 AI Front Desk</span>
           </motion.h1>
 
           {/* Subheadline */}
@@ -51,8 +50,8 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto mb-10"
           >
-            Answer After uses intelligent AI to handle customer calls when you're closed, 
-            schedule appointments, and capture every revenue opportunity — automatically.
+            Answer After is like having a tireless receptionist that answers every call, 
+            books appointments, and sends reminder calls & texts — automatically capturing confirmations around the clock.
           </motion.p>
 
           {/* CTA Buttons */}
