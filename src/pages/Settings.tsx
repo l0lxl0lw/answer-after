@@ -575,12 +575,78 @@ export default function Settings() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
+              {/* Plan Phone Line Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Phone className="h-5 w-5" />
+                    Your Phone Line
+                  </CardTitle>
+                  <CardDescription>
+                    Phone line allocation based on your subscription plan
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {subLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading plan info...
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Phone className="h-6 w-6 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-lg">
+                              {subscription?.plan === 'free' ? 'Shared Phone Line' : 'Dedicated Phone Line'}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {subscription?.plan === 'free' 
+                                ? 'Your calls are handled on a shared line with other free users'
+                                : `You have ${
+                                    subscription?.plan === 'starter' ? '1 dedicated phone line' :
+                                    subscription?.plan === 'pro' ? '2 dedicated phone lines' :
+                                    subscription?.plan === 'business' ? '5 dedicated phone lines' :
+                                    'dedicated phone lines'
+                                  } for your business`
+                              }
+                            </p>
+                          </div>
+                        </div>
+                        <Badge 
+                          variant={subscription?.plan === 'free' ? 'secondary' : 'default'}
+                          className="text-sm px-3 py-1"
+                        >
+                          {subscription?.plan === 'free' ? 'Shared' : 'Dedicated'}
+                        </Badge>
+                      </div>
+                      
+                      {subscription?.plan === 'free' && (
+                        <div className="p-4 rounded-lg border border-primary/20 bg-primary/5">
+                          <p className="text-sm text-muted-foreground">
+                            <strong className="text-foreground">Want a dedicated phone line?</strong>{' '}
+                            Upgrade to the Starter plan or higher to get your own dedicated phone number for your business.
+                          </p>
+                          <Button variant="outline" size="sm" className="mt-3" onClick={() => window.location.href = '/dashboard/subscriptions'}>
+                            View Plans
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Additional Phone Numbers */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Phone Numbers</CardTitle>
+                    <CardTitle>Additional Phone Numbers</CardTitle>
                     <CardDescription>
-                      Manage your after-hours phone numbers
+                      Configure additional phone numbers for call handling
                     </CardDescription>
                   </div>
                   <Dialog open={addPhoneOpen} onOpenChange={setAddPhoneOpen}>
@@ -645,9 +711,9 @@ export default function Settings() {
                     <div className="text-center py-8 text-muted-foreground">
                       Loading phone numbers...
                     </div>
-                  ) : (
+                  ) : phoneNumbers && phoneNumbers.length > 0 ? (
                     <div className="space-y-4">
-                      {phoneNumbers?.map((phone) => (
+                      {phoneNumbers.map((phone) => (
                         <div
                           key={phone.id}
                           className="flex items-center justify-between p-4 rounded-lg border bg-card"
@@ -680,6 +746,12 @@ export default function Settings() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Phone className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No additional phone numbers configured</p>
+                      <p className="text-sm">Click "Add Number" to add a phone number for call handling</p>
                     </div>
                   )}
                 </CardContent>
