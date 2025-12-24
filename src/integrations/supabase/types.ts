@@ -381,9 +381,11 @@ export type Database = {
           created_at: string
           emergency_keywords: string[] | null
           id: string
+          is_onboarding_complete: boolean
           name: string
           notification_email: string | null
           notification_phone: string | null
+          onboarding_completed_at: string | null
           slug: string
           timezone: string
           twilio_subaccount_auth_token: string | null
@@ -397,9 +399,11 @@ export type Database = {
           created_at?: string
           emergency_keywords?: string[] | null
           id?: string
+          is_onboarding_complete?: boolean
           name: string
           notification_email?: string | null
           notification_phone?: string | null
+          onboarding_completed_at?: string | null
           slug: string
           timezone?: string
           twilio_subaccount_auth_token?: string | null
@@ -413,9 +417,11 @@ export type Database = {
           created_at?: string
           emergency_keywords?: string[] | null
           id?: string
+          is_onboarding_complete?: boolean
           name?: string
           notification_email?: string | null
           notification_phone?: string | null
+          onboarding_completed_at?: string | null
           slug?: string
           timezone?: string
           twilio_subaccount_auth_token?: string | null
