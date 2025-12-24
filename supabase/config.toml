@@ -48,12 +48,6 @@ verify_jwt = true
 [functions.google-calendar-events]
 verify_jwt = true
 
-[functions.setup-twilio-subaccount]
-verify_jwt = true
-
-[functions.init-free-tier-pool]
-verify_jwt = true
-
 [functions.provision-organization]
 verify_jwt = true
 
