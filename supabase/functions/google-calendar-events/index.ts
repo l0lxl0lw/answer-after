@@ -10,6 +10,46 @@ const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+// Helper function to validate user belongs to organization
+async function validateUserOrganization(req: Request, organizationId: string): Promise<{ valid: boolean; error?: string; userId?: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return { valid: false, error: "Missing authorization header" };
+  }
+
+  // Create client with user's token to validate their identity
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  });
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    console.error("Failed to get user:", userError);
+    return { valid: false, error: "Invalid authentication" };
+  }
+
+  // Use service role to check user's organization
+  const serviceSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const { data: profile, error: profileError } = await serviceSupabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile) {
+    console.error("Failed to get user profile:", profileError);
+    return { valid: false, error: "User profile not found" };
+  }
+
+  if (profile.organization_id !== organizationId) {
+    console.error("User organization mismatch:", { userOrg: profile.organization_id, requestedOrg: organizationId });
+    return { valid: false, error: "Unauthorized - user does not belong to this organization" };
+  }
+
+  return { valid: true, userId: user.id };
+}
 
 async function getValidAccessToken(supabase: any, organizationId: string): Promise<string | null> {
   const { data: connection, error } = await supabase
@@ -94,6 +134,18 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        // SECURITY: Validate user belongs to this organization
+        const validation = await validateUserOrganization(req, organizationId);
+        if (!validation.valid) {
+          console.error("Organization validation failed:", validation.error);
+          return new Response(JSON.stringify({ error: validation.error, events: [] }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        console.log("User validated for organization:", organizationId);
 
         const accessToken = await getValidAccessToken(supabase, organizationId);
         if (!accessToken) {
