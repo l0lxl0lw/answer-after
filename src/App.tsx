@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { PasswordGate } from "@/components/PasswordGate";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import CallHistory from "./pages/CallHistory";
@@ -28,8 +27,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <PasswordGate>
-    <QueryClientProvider client={queryClient}>
+  <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
         <Toaster />
@@ -59,9 +57,8 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
-  </PasswordGate>
+    </AuthProvider>
+  </QueryClientProvider>
 );
 
 export default App;
