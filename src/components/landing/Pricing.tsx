@@ -12,14 +12,17 @@ export function Pricing() {
     return `$${priceCents / 100}`;
   };
 
-  const getButtonVariant = (isPopular: boolean) => {
+  const getButtonVariant = (planId: string, isPopular: boolean) => {
     if (isPopular) return "hero" as const;
     return "outline" as const;
   };
 
   const getCta = (planId: string) => {
+    if (planId === "enterprise") return "Contact Sales";
     return "Start for $1";
   };
+
+  const isEnterprise = (planId: string) => planId === "enterprise";
 
   return (
     <section id="pricing" className="py-24 lg:py-32 relative">
@@ -57,7 +60,7 @@ export function Pricing() {
 
         {/* Pricing Cards */}
         {!isLoading && tiers && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
             {tiers.map((tier, index) => (
               <motion.div
                 key={tier.plan_id}
@@ -67,13 +70,15 @@ export function Pricing() {
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 className="relative flex flex-col"
               >
-                {/* $1 First Month Banner */}
+                {/* $1 First Month Banner or Enterprise Banner */}
                 <div className={`text-center py-2.5 px-4 rounded-t-2xl text-sm font-semibold ${
                   tier.is_popular 
                     ? "bg-primary text-primary-foreground" 
+                    : isEnterprise(tier.plan_id)
+                    ? "bg-muted text-muted-foreground"
                     : "bg-accent/20 text-foreground"
                 }`}>
-                  $1/month for your first month
+                  {isEnterprise(tier.plan_id) ? "Custom pricing" : "$1/month for your first month"}
                 </div>
                 
                 <div className={`flex-1 flex flex-col rounded-b-2xl p-6 ${
@@ -99,9 +104,11 @@ export function Pricing() {
                   <div className="mb-6">
                     <div className="flex items-baseline gap-1">
                       <span className="font-display text-4xl font-bold">{formatPrice(tier.price_cents)}</span>
-                      <span className="text-muted-foreground">{tier.period}</span>
+                      {tier.period && <span className="text-muted-foreground">{tier.period}</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
+                    {!isEnterprise(tier.plan_id) && (
+                      <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
+                    )}
                   </div>
 
                   {/* Features */}
@@ -118,8 +125,8 @@ export function Pricing() {
 
                   {/* CTA */}
                   <Button 
-                    variant={getButtonVariant(tier.is_popular)} 
-                    size="lg" 
+                    variant={getButtonVariant(tier.plan_id, tier.is_popular)} 
+                    size="lg"
                     className="w-full"
                     asChild
                   >
