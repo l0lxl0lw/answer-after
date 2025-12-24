@@ -1,24 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   Calendar, 
   Check, 
   Loader2,
-  Puzzle
+  Puzzle,
+  AlertCircle
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useGoogleCalendarConnection } from '@/hooks/useGoogleCalendarConnection';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Integrations() {
+  const location = useLocation();
   const { data: calendarConnection, isLoading: calendarLoading, refetch: refetchCalendar } = useGoogleCalendarConnection();
   const [isDisconnectingCalendar, setIsDisconnectingCalendar] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showGooglePrompt, setShowGooglePrompt] = useState(false);
+
+  // Check if we were redirected here with a prompt to connect Google
+  useEffect(() => {
+    if (location.state?.showGooglePrompt) {
+      setShowGooglePrompt(true);
+      // Clear the state so it doesn't persist on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleConnectGoogle = async () => {
     setIsConnecting(true);
@@ -93,6 +106,21 @@ export default function Integrations() {
           </p>
         </motion.div>
 
+        {/* Google Connection Required Banner */}
+        {showGooglePrompt && !calendarConnection && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <Alert className="border-primary/50 bg-primary/5">
+              <AlertCircle className="h-4 w-4 text-primary" />
+              <AlertDescription className="text-foreground">
+                <strong>Connect your Google account to get started.</strong> We need access to your calendar and contacts to manage appointments and identify callers.
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+
         {/* Integrations Grid */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -100,7 +128,7 @@ export default function Integrations() {
           className="grid gap-6"
         >
           {/* Google Calendar & Contacts Integration */}
-          <Card className={calendarConnection ? '' : 'border-dashed'}>
+          <Card className={calendarConnection ? '' : showGooglePrompt ? 'border-primary ring-2 ring-primary/20' : 'border-dashed'}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />

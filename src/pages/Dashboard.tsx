@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Phone,
@@ -186,10 +186,36 @@ function RecentCallItem({ call, contactName }: { call: Call; contactName?: strin
 
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<DashboardPeriod>('7d');
   const { data: stats, isLoading: statsLoading } = useDashboardStats(period);
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
-  const { data: organization } = useOrganization();
+  const { data: organization, isLoading: orgLoading } = useOrganization();
+
+  // Check if Google Calendar is connected
+  const { data: googleCalendarConnection, isLoading: gcLoading } = useQuery({
+    queryKey: ['google-calendar-connection-check', organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return null;
+      const { data, error } = await supabase
+        .from('google_calendar_connections')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organization?.id,
+  });
+
+  // Redirect to integrations if Google Calendar not connected
+  useEffect(() => {
+    if (!gcLoading && !orgLoading && organization?.id && googleCalendarConnection === null) {
+      navigate('/dashboard/integrations', { 
+        state: { showGooglePrompt: true } 
+      });
+    }
+  }, [gcLoading, orgLoading, organization?.id, googleCalendarConnection, navigate]);
 
   const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
