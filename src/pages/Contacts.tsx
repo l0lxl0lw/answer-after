@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,7 +114,7 @@ export default function Contacts() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: connection, isLoading: isConnectionLoading } = useGoogleCalendarConnection();
+  const { data: calendarConnection, isLoading: isConnectionLoading } = useGoogleCalendarConnection();
   const { checkGoogleError } = useGoogleConnectionGuard();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -123,13 +123,6 @@ export default function Contacts() {
   const [editingContact, setEditingContact] = useState<GoogleContact | null>(null);
   const [newContact, setNewContact] = useState({ name: "", phone: "", notes: "" });
   const [editForm, setEditForm] = useState({ name: "", phone: "", notes: "" });
-
-  // Redirect to integrations if no connection
-  useEffect(() => {
-    if (!isConnectionLoading && !connection) {
-      navigate('/dashboard/integrations', { state: { showGooglePrompt: true } });
-    }
-  }, [isConnectionLoading, connection, navigate]);
 
   // Fetch contacts
   const { data: contactsData, isLoading: isContactsLoading, error: contactsError, refetch } = useQuery({
@@ -156,7 +149,7 @@ export default function Contacts() {
         return { contacts: [], needsReconnect: false };
       }
     },
-    enabled: !!user?.organization_id && !!connection,
+    enabled: !!user?.organization_id && !!calendarConnection,
     retry: false,
   });
 
@@ -257,16 +250,15 @@ export default function Contacts() {
   if (isConnectionLoading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-64 w-full" />
+        <div className="flex items-center justify-center h-64">
+          <Skeleton className="h-8 w-48" />
         </div>
       </DashboardLayout>
     );
   }
 
-  // Show message if no Google connection
-  if (!connection) {
+  // Not connected - show connect page
+  if (!calendarConnection) {
     return (
       <DashboardLayout>
         <Card className="max-w-lg mx-auto mt-12">
