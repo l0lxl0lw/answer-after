@@ -11,7 +11,7 @@ import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle
 export default function Subscriptions() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
 
   const currentPlan = subscription?.plan?.toLowerCase() || "core";
   const isLoading = subscriptionLoading || tiersLoading;
