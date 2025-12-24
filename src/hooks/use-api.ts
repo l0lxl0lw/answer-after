@@ -619,6 +619,8 @@ export interface SubscriptionTier {
   name: string;
   description: string;
   price_cents: number;
+  yearly_price_cents: number;
+  yearly_discount_percent: number;
   period: string;
   credits: number;
   credits_cost_per_thousand: number | null;
@@ -637,6 +639,8 @@ export interface SubscriptionTier {
   is_active: boolean;
   is_visible: boolean;
   display_order: number;
+  stripe_monthly_price_id: string | null;
+  stripe_yearly_price_id: string | null;
 }
 
 export function useSubscriptionTiers() {

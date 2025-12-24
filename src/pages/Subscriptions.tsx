@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -5,10 +6,12 @@ import { Check, Sparkles, Crown, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle";
 
 export default function Subscriptions() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
 
   const currentPlan = subscription?.plan?.toLowerCase() || "starter";
   const isLoading = subscriptionLoading || tiersLoading;
@@ -16,6 +19,11 @@ export default function Subscriptions() {
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
     return `$${priceCents / 100}`;
+  };
+
+  const getDisplayPrice = (tier: SubscriptionTier) => {
+    if (tier.plan_id === "enterprise") return tier.price_cents;
+    return billingPeriod === "yearly" ? tier.yearly_price_cents : tier.price_cents;
   };
 
   const formatCredits = (credits: number) => {
@@ -57,6 +65,16 @@ export default function Subscriptions() {
           <p className="text-lg text-muted-foreground">
             Pay only for what you use. 1 credit = 1 second of call time.
           </p>
+        </motion.div>
+
+        {/* Billing Toggle */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.05 }}
+          className="flex justify-center mb-10"
+        >
+          <BillingToggle value={billingPeriod} onChange={setBillingPeriod} discountPercent={25} />
         </motion.div>
 
         {/* Loading State */}
@@ -167,8 +185,10 @@ export default function Subscriptions() {
                     {/* Price */}
                     <div className="mb-4">
                       <div className="flex items-baseline gap-1">
-                        <span className="font-display text-4xl font-bold">{formatPrice(tier.price_cents)}</span>
-                        {tier.period && <span className="text-muted-foreground">{tier.period}</span>}
+                        <span className="font-display text-4xl font-bold">{formatPrice(getDisplayPrice(tier))}</span>
+                        <span className="text-muted-foreground">
+                          {isEnterprise ? "" : billingPeriod === "yearly" ? "/mo billed yearly" : "/month"}
+                        </span>
                       </div>
                       {!isEnterprise && (
                         <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
@@ -263,7 +283,7 @@ export default function Subscriptions() {
                   </thead>
                   <tbody>
                     <tr className="border-b border-border">
-                      <td className="p-4 font-medium">Monthly Price</td>
+                      <td className="p-4 font-medium">{billingPeriod === "yearly" ? "Price (billed yearly)" : "Monthly Price"}</td>
                       {tiers.map((tier) => (
                         <td 
                           key={tier.plan_id} 
@@ -272,7 +292,7 @@ export default function Subscriptions() {
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {formatPrice(tier.price_cents)}{tier.period}
+                          {formatPrice(getDisplayPrice(tier))}{tier.plan_id !== "enterprise" ? (billingPeriod === "yearly" ? "/mo" : "/month") : ""}
                         </td>
                       ))}
                     </tr>
