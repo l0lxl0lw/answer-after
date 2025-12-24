@@ -57,5 +57,8 @@ verify_jwt = true
 [functions.provision-organization]
 verify_jwt = true
 
+[functions.run-onboarding]
+verify_jwt = false
+
 [functions.sync-stripe-products]
 verify_jwt = false

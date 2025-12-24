@@ -61,6 +61,67 @@ serve(async (req) => {
     logStep("Processing event", { type: event.type });
 
     switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        logStep("Checkout session completed", { sessionId: session.id, customerId: session.customer });
+
+        // Get customer email and metadata
+        const customerId = session.customer as string;
+        const customer = await stripe.customers.retrieve(customerId);
+        
+        if (customer.deleted || !('email' in customer) || !customer.email) {
+          logStep("Customer has no email, skipping");
+          break;
+        }
+
+        // Find the profile by email to get organization_id
+        const { data: profile, error: profileError } = await supabaseClient
+          .from("profiles")
+          .select("organization_id")
+          .eq("email", customer.email)
+          .single();
+
+        if (profileError || !profile?.organization_id) {
+          logStep("Profile not found for checkout", { email: customer.email, error: profileError });
+          break;
+        }
+
+        const organizationId = profile.organization_id;
+
+        // Determine plan from metadata or price
+        const planFromMetadata = session.metadata?.plan || 'core';
+        
+        logStep("Triggering onboarding flow", { organizationId, plan: planFromMetadata });
+
+        // Trigger the onboarding flow
+        const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+        const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+        try {
+          const onboardingResponse = await fetch(`${SUPABASE_URL}/functions/v1/run-onboarding`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              organizationId: organizationId,
+              subscriptionPlan: planFromMetadata,
+            }),
+          });
+
+          const onboardingResult = await onboardingResponse.json();
+          logStep("Onboarding result", onboardingResult);
+
+          if (!onboardingResult.success) {
+            logStep("Onboarding had issues", { steps: onboardingResult.steps });
+          }
+        } catch (onboardingError) {
+          logStep("Onboarding error (non-fatal)", { error: String(onboardingError) });
+        }
+        break;
+      }
+
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
@@ -87,12 +148,20 @@ serve(async (req) => {
 
         const organizationId = profile.organization_id;
 
-        // Determine subscription status and plan
+        // Determine subscription status and plan from price metadata
         let status = subscription.status;
         if (subscription.status === "trialing") {
           status = "trialing";
         } else if (subscription.status === "active") {
           status = "active";
+        }
+
+        // Get plan from subscription item price metadata
+        let plan = "core";
+        const priceId = subscription.items.data[0]?.price?.id;
+        if (priceId) {
+          const price = await stripe.prices.retrieve(priceId);
+          plan = (price.metadata?.plan_id) || "core";
         }
 
         // Update or insert subscription in database
@@ -102,7 +171,7 @@ serve(async (req) => {
             organization_id: organizationId,
             stripe_subscription_id: subscription.id,
             stripe_customer_id: customerId,
-            plan: "starter",
+            plan: plan,
             status: status,
             current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
             current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
@@ -114,7 +183,7 @@ serve(async (req) => {
         if (upsertError) {
           logStep("Error upserting subscription", { error: upsertError });
         } else {
-          logStep("Subscription synced", { organizationId, status, subscriptionId: subscription.id });
+          logStep("Subscription synced", { organizationId, status, plan, subscriptionId: subscription.id });
         }
         break;
       }
