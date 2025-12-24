@@ -198,15 +198,21 @@ const Dashboard = () => {
     queryKey: ['google-contacts-dashboard', organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
-      const { data, error } = await supabase.functions.invoke('google-contacts', {
-        body: { action: 'list', organizationId: organization.id }
-      });
-      // If no Google connection, return empty array (not an error)
-      if (error || data?.error) {
-        console.log('Google contacts not available:', data?.error || error);
+      try {
+        const { data, error } = await supabase.functions.invoke('google-contacts', {
+          body: { action: 'list', organizationId: organization.id }
+        });
+        // If no Google connection, return empty array (not an error)
+        if (error || data?.error) {
+          console.log('Google contacts not available:', data?.error || error);
+          return [];
+        }
+        return data?.contacts as RawGoogleContact[] || [];
+      } catch (e) {
+        // Catch any thrown errors (e.g., 400 responses)
+        console.log('Google contacts fetch failed:', e);
         return [];
       }
-      return data?.contacts as RawGoogleContact[] || [];
     },
     enabled: !!organization?.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
