@@ -42,7 +42,6 @@ export default function Settings() {
   const [newPhone, setNewPhone] = useState({
     phone_number: '',
     friendly_name: '',
-    is_after_hours_only: true,
   });
 
   const defaultSchedule: WeekSchedule = {
@@ -217,7 +216,6 @@ export default function Settings() {
           organization_id: user.organization_id,
           phone_number: newPhone.phone_number,
           friendly_name: newPhone.friendly_name || newPhone.phone_number,
-          is_after_hours_only: newPhone.is_after_hours_only,
           is_active: true,
         });
 
@@ -228,7 +226,7 @@ export default function Settings() {
         description: 'The phone number has been added successfully.',
       });
 
-      setNewPhone({ phone_number: '', friendly_name: '', is_after_hours_only: true });
+      setNewPhone({ phone_number: '', friendly_name: '' });
       setAddPhoneOpen(false);
       refetchPhones();
     } catch (error: any) {
@@ -660,7 +658,7 @@ export default function Settings() {
                       <DialogHeader>
                         <DialogTitle>Add Phone Number</DialogTitle>
                         <DialogDescription>
-                          Add a new phone number for after-hours call handling.
+                          Add a new phone number for call handling.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
@@ -683,14 +681,6 @@ export default function Settings() {
                             placeholder="Main Line"
                             value={newPhone.friendly_name}
                             onChange={(e) => setNewPhone({ ...newPhone, friendly_name: e.target.value })}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="after-hours">After Hours Only</Label>
-                          <Switch
-                            id="after-hours"
-                            checked={newPhone.is_after_hours_only}
-                            onCheckedChange={(checked) => setNewPhone({ ...newPhone, is_after_hours_only: checked })}
                           />
                         </div>
                       </div>
@@ -729,9 +719,6 @@ export default function Settings() {
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
-                              {phone.is_after_hours_only && (
-                                <Badge variant="outline">After Hours Only</Badge>
-                              )}
                               <Badge variant={phone.is_active ? 'default' : 'secondary'}>
                                 {phone.is_active ? 'Active' : 'Inactive'}
                               </Badge>
