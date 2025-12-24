@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Save, Loader2, MessageCircle, FileText, Mic, Play, Square } from 'lucide-react';
+import { Bot, Save, Loader2, MessageCircle, FileText, Mic, Play, Square, Crown } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,8 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/use-api';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 
 // Import voice preview audio files
 import vedaSkyPreview from '@/assets/voices/veda_sky.mp3';
@@ -51,6 +53,7 @@ let previewAudio: HTMLAudioElement | null = null;
 
 export default function MyAgent() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data: subscription } = useSubscription();
   
   const [customGreeting, setCustomGreeting] = useState('');
@@ -63,6 +66,24 @@ export default function MyAgent() {
   const [isSavingVoice, setIsSavingVoice] = useState(false);
   const [hasCustomAgentAccess, setHasCustomAgentAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Check tier for context access (Pro+)
+  const { data: tierData } = useQuery({
+    queryKey: ['subscription-tier-agent', subscription?.plan],
+    queryFn: async () => {
+      if (!subscription?.plan) return null;
+      const { data } = await supabase
+        .from('subscription_tiers')
+        .select('has_custom_agent, has_outbound_reminders')
+        .eq('plan_id', subscription.plan)
+        .single();
+      return data;
+    },
+    enabled: !!subscription?.plan,
+  });
+
+  // Context editing requires Pro+ (has_outbound_reminders is true for Pro+)
+  const hasContextAccess = tierData?.has_outbound_reminders === true;
 
   // Check if user has custom agent access based on subscription tier
   useEffect(() => {
@@ -335,7 +356,7 @@ export default function MyAgent() {
               <Bot className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">Upgrade to Customize Your Agent</h3>
               <p className="text-muted-foreground max-w-md mb-6">
-                Custom AI agent configuration is available on Pro plans and above. Upgrade to personalize how your agent greets callers and handles conversations.
+                Custom AI agent configuration is available on Growth plans and above. Upgrade to personalize how your agent greets callers and handles conversations.
               </p>
               <Button asChild>
                 <a href="/dashboard/subscriptions">View Plans</a>
@@ -443,21 +464,22 @@ export default function MyAgent() {
             </CardContent>
           </Card>
 
-          {/* Agent Content */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Agent Knowledge & Instructions
-              </CardTitle>
-              <CardDescription>
-                Provide details about your business, services, pricing, and how the agent should handle calls
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                className="min-h-[300px] resize-y"
-                placeholder="Example:
+          {/* Agent Content - Gated for Pro+ */}
+          {hasContextAccess ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Agent Knowledge & Instructions
+                </CardTitle>
+                <CardDescription>
+                  Provide details about your business, services, pricing, and how the agent should handle calls
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  className="min-h-[300px] resize-y"
+                  placeholder="Example:
 About the business:
 We are ABC Plumbing, serving the Dallas area since 1985.
 
@@ -470,20 +492,45 @@ How to handle calls:
 - Always be friendly and professional
 - Ask for caller's name and phone number
 - For emergencies, collect address immediately"
-                value={agentContent}
-                onChange={(e) => setAgentContent(e.target.value)}
-              />
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${getWordCount(agentContent) > MAX_CONTENT_WORDS ? 'text-destructive' : 'text-muted-foreground'}`}>
-                  {getWordCount(agentContent)} / {MAX_CONTENT_WORDS} words
-                </span>
-                <Button onClick={handleSaveContent} disabled={isSavingContent}>
-                  {isSavingContent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  Save Content
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  value={agentContent}
+                  onChange={(e) => setAgentContent(e.target.value)}
+                />
+                <div className="flex items-center justify-between">
+                  <span className={`text-sm ${getWordCount(agentContent) > MAX_CONTENT_WORDS ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {getWordCount(agentContent)} / {MAX_CONTENT_WORDS} words
+                  </span>
+                  <Button onClick={handleSaveContent} disabled={isSavingContent}>
+                    {isSavingContent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Content
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Agent Knowledge & Instructions
+                </CardTitle>
+                <CardDescription>
+                  Provide details about your business, services, pricing, and how the agent should handle calls
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-6">
+                  <Crown className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <h3 className="font-medium mb-1">Define Custom Context</h3>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+                    Train your AI agent with custom business knowledge, pricing information, and call handling instructions. Available on Pro plans and above.
+                  </p>
+                  <Button variant="outline" onClick={() => navigate('/dashboard/subscriptions')}>
+                    Upgrade to Pro
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </motion.div>
       </div>
     </DashboardLayout>
