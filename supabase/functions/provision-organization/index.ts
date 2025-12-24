@@ -180,16 +180,18 @@ serve(async (req) => {
 
     logStep('Subscription created', { plan: 'starter', status: 'trial' });
 
-    // 5. Create organization_agents record (empty, agent created on first use)
+    // 5. Create organization_agents record
+    const agentContext = JSON.stringify({
+      orgName: organizationName,
+      businessType: 'Service Business',
+      services: [],
+    });
+
     const { error: agentError } = await supabaseAdmin
       .from('organization_agents')
       .insert({
         organization_id: newOrg.id,
-        context: JSON.stringify({
-          orgName: organizationName,
-          businessType: 'Service Business',
-          services: [],
-        })
+        context: agentContext
       });
 
     if (agentError) {
@@ -199,7 +201,34 @@ serve(async (req) => {
       logStep('Organization agent record created');
     }
 
-    // 6. Setup Twilio (shared phone for starter/trial)
+    // 6. Create ElevenLabs agent
+    try {
+      logStep('Creating ElevenLabs agent...');
+      const elevenLabsResponse = await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          action: 'create-agent',
+          organizationId: newOrg.id,
+          context: agentContext,
+        }),
+      });
+
+      const elevenLabsResult = await elevenLabsResponse.json();
+      if (elevenLabsResult.success) {
+        logStep('ElevenLabs agent created', { agentId: elevenLabsResult.agent_id });
+      } else {
+        logStep('ElevenLabs agent creation failed', { error: elevenLabsResult.error });
+      }
+    } catch (elevenLabsError) {
+      logStep('ElevenLabs agent setup error (non-fatal)', { error: String(elevenLabsError) });
+      // Non-fatal, agent can be created later
+    }
+
+    // 7. Setup Twilio (shared phone for starter/trial)
     try {
       const twilioResponse = await fetch(`${SUPABASE_URL}/functions/v1/setup-twilio-subaccount`, {
         method: 'POST',
