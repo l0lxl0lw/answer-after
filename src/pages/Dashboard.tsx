@@ -193,7 +193,7 @@ const Dashboard = () => {
 
   const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
-  // Fetch Google Contacts for name mapping
+  // Fetch Google Contacts for name mapping (only if Google is connected)
   const { data: googleContacts } = useQuery({
     queryKey: ['google-contacts-dashboard', organization?.id],
     queryFn: async () => {
@@ -201,11 +201,16 @@ const Dashboard = () => {
       const { data, error } = await supabase.functions.invoke('google-contacts', {
         body: { action: 'list', organizationId: organization.id }
       });
-      if (error) throw error;
+      // If no Google connection, return empty array (not an error)
+      if (error || data?.error) {
+        console.log('Google contacts not available:', data?.error || error);
+        return [];
+      }
       return data?.contacts as RawGoogleContact[] || [];
     },
     enabled: !!organization?.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: false, // Don't retry if Google isn't connected
   });
 
   // Build phone-to-name map with multiple phone formats per contact
