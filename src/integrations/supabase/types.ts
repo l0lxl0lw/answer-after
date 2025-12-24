@@ -656,8 +656,12 @@ export type Database = {
           phone_lines: number
           plan_id: string
           price_cents: number
+          stripe_monthly_price_id: string | null
+          stripe_yearly_price_id: string | null
           support_level: string
           updated_at: string
+          yearly_discount_percent: number | null
+          yearly_price_cents: number | null
         }
         Insert: {
           created_at?: string
@@ -683,8 +687,12 @@ export type Database = {
           phone_lines?: number
           plan_id: string
           price_cents?: number
+          stripe_monthly_price_id?: string | null
+          stripe_yearly_price_id?: string | null
           support_level?: string
           updated_at?: string
+          yearly_discount_percent?: number | null
+          yearly_price_cents?: number | null
         }
         Update: {
           created_at?: string
@@ -710,8 +718,12 @@ export type Database = {
           phone_lines?: number
           plan_id?: string
           price_cents?: number
+          stripe_monthly_price_id?: string | null
+          stripe_yearly_price_id?: string | null
           support_level?: string
           updated_at?: string
+          yearly_discount_percent?: number | null
+          yearly_price_cents?: number | null
         }
         Relationships: []
       }

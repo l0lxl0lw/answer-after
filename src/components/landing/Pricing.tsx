@@ -1,15 +1,23 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Check, Sparkles, Loader2 } from "lucide-react";
 import { useSubscriptionTiers } from "@/hooks/use-api";
+import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle";
 
 export function Pricing() {
   const { data: tiers, isLoading } = useSubscriptionTiers();
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
 
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
     return `$${priceCents / 100}`;
+  };
+
+  const getDisplayPrice = (tier: NonNullable<typeof tiers>[number]) => {
+    if (tier.plan_id === "enterprise") return tier.price_cents;
+    return billingPeriod === "yearly" ? tier.yearly_price_cents : tier.price_cents;
   };
 
   const getButtonVariant = (planId: string, isPopular: boolean) => {
@@ -49,6 +57,17 @@ export function Pricing() {
             <br />
             <span className="font-medium text-foreground">Try any plan for just $1 your first month.</span>
           </p>
+        </motion.div>
+
+        {/* Billing Toggle */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="flex justify-center mb-12"
+        >
+          <BillingToggle value={billingPeriod} onChange={setBillingPeriod} discountPercent={25} />
         </motion.div>
 
         {/* Loading State */}
@@ -103,8 +122,10 @@ export function Pricing() {
                   {/* Price */}
                   <div className="mb-6">
                     <div className="flex items-baseline gap-1">
-                      <span className="font-display text-4xl font-bold">{formatPrice(tier.price_cents)}</span>
-                      {tier.period && <span className="text-muted-foreground">{tier.period}</span>}
+                      <span className="font-display text-4xl font-bold">{formatPrice(getDisplayPrice(tier))}</span>
+                      <span className="text-muted-foreground">
+                        {isEnterprise(tier.plan_id) ? "" : billingPeriod === "yearly" ? "/mo billed yearly" : "/month"}
+                      </span>
                     </div>
                     {!isEnterprise(tier.plan_id) && (
                       <p className="text-xs text-muted-foreground mt-1">(after first month)</p>
