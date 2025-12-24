@@ -62,8 +62,8 @@ export function Hero() {
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
           >
             <Button variant="hero" size="xl" asChild>
-              <Link to="/dashboard">
-                Start Free Trial
+              <Link to="/auth">
+                Get Started for $1
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
