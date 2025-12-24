@@ -41,8 +41,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     enabled: !!user?.organization_id && !hasIncompleteSignup,
   });
 
-  // Check if user needs to complete subscription setup
-  const needsSubscription = isAuthenticated && user?.organization_id && !isLoadingSubscription && !subscription;
+  // Check if user needs to complete subscription setup (no Stripe subscription ID means checkout wasn't completed)
+  const needsStripeCheckout = isAuthenticated && user?.organization_id && !isLoadingSubscription && 
+    subscription && !subscription.stripe_subscription_id;
 
   // Handle incomplete signup (no organization)
   useEffect(() => {
@@ -96,16 +97,16 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     completeSignup();
   }, [hasIncompleteSignup, isProvisioning, provisioningComplete, session]);
 
-  // Handle missing subscription (has org but no subscription)
+  // Handle missing Stripe subscription (has org but checkout wasn't completed)
   useEffect(() => {
-    const handleMissingSubscription = async () => {
-      if (!needsSubscription || redirectingToCheckout || !session) return;
+    const handleMissingStripeSubscription = async () => {
+      if (!needsStripeCheckout || redirectingToCheckout || !session) return;
       
       await redirectToStripeCheckout();
     };
 
-    handleMissingSubscription();
-  }, [needsSubscription, redirectingToCheckout, session]);
+    handleMissingStripeSubscription();
+  }, [needsStripeCheckout, redirectingToCheckout, session]);
 
   const redirectToStripeCheckout = async () => {
     if (!session) return;
