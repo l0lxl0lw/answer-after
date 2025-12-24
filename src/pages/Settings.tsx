@@ -715,21 +715,33 @@ export default function Settings() {
                             <div>
                               <p className="font-medium">{phone.friendly_name}</p>
                               <p className="text-sm text-muted-foreground">{phone.phone_number}</p>
+                              {phone.provisioned_at && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Provisioned: {new Date(phone.provisioned_at).toLocaleDateString()}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
+                              {phone.is_shared && (
+                                <Badge variant="outline" className="text-xs">
+                                  Shared
+                                </Badge>
+                              )}
                               <Badge variant={phone.is_active ? 'default' : 'secondary'}>
                                 {phone.is_active ? 'Active' : 'Inactive'}
                               </Badge>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => handleDeletePhoneNumber(phone.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                            </Button>
+                            {!phone.is_shared && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => handleDeletePhoneNumber(phone.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))}

@@ -291,6 +291,42 @@ export type Database = {
           },
         ]
       }
+      free_tier_phone_pool: {
+        Row: {
+          assigned_count: number
+          created_at: string
+          friendly_name: string | null
+          id: string
+          is_available: boolean
+          max_assignments: number
+          phone_number: string
+          twilio_sid: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_count?: number
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          is_available?: boolean
+          max_assignments?: number
+          phone_number: string
+          twilio_sid?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_count?: number
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          is_available?: boolean
+          max_assignments?: number
+          phone_number?: string
+          twilio_sid?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       google_calendar_connections: {
         Row: {
           access_token: string
@@ -386,6 +422,8 @@ export type Database = {
           notification_phone: string | null
           slug: string
           timezone: string
+          twilio_subaccount_auth_token: string | null
+          twilio_subaccount_sid: string | null
           updated_at: string
         }
         Insert: {
@@ -400,6 +438,8 @@ export type Database = {
           notification_phone?: string | null
           slug: string
           timezone?: string
+          twilio_subaccount_auth_token?: string | null
+          twilio_subaccount_sid?: string | null
           updated_at?: string
         }
         Update: {
@@ -414,6 +454,8 @@ export type Database = {
           notification_phone?: string | null
           slug?: string
           timezone?: string
+          twilio_subaccount_auth_token?: string | null
+          twilio_subaccount_sid?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -425,8 +467,10 @@ export type Database = {
           id: string
           is_active: boolean
           is_after_hours_only: boolean
+          is_shared: boolean
           organization_id: string
           phone_number: string
+          provisioned_at: string | null
           twilio_sid: string | null
           updated_at: string
         }
@@ -436,8 +480,10 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_after_hours_only?: boolean
+          is_shared?: boolean
           organization_id: string
           phone_number: string
+          provisioned_at?: string | null
           twilio_sid?: string | null
           updated_at?: string
         }
@@ -447,8 +493,10 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_after_hours_only?: boolean
+          is_shared?: boolean
           organization_id?: string
           phone_number?: string
+          provisioned_at?: string | null
           twilio_sid?: string | null
           updated_at?: string
         }
