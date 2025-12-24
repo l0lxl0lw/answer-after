@@ -513,17 +513,6 @@ const Auth = () => {
                   )}
                 </div>
 
-                {/* Trial Info */}
-                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CreditCard className="w-4 h-4 text-primary" />
-                    <span className="font-medium text-sm">30-Day Free Trial</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Start with a 30-day free trial. We'll collect your payment details to ensure uninterrupted service. 
-                    You'll receive a reminder 3 days before your trial ends. Cancel anytime.
-                  </p>
-                </div>
 
                 {/* Terms */}
                 <p className="text-sm text-muted-foreground">
@@ -535,7 +524,7 @@ const Auth = () => {
                   <a href="#" className="text-primary hover:underline">
                     Privacy Policy
                   </a>
-                  . After your trial, you'll be billed $99/month.
+                  .
                 </p>
 
                 {/* Submit */}
@@ -553,7 +542,7 @@ const Auth = () => {
                     </>
                   ) : (
                     <>
-                      Start Free Trial
+                      Create Account
                       <ArrowRight className="w-5 h-5" />
                     </>
                   )}
@@ -569,7 +558,7 @@ const Auth = () => {
               onClick={() => setIsLogin(!isLogin)}
               className="text-primary font-medium hover:underline"
             >
-              {isLogin ? "Sign up for free" : "Log in"}
+              {isLogin ? "Sign up" : "Log in"}
             </button>
           </p>
         </motion.div>
