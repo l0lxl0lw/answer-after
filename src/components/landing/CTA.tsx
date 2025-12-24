@@ -52,7 +52,7 @@ export function CTA() {
               asChild
             >
               <Link to="/auth">
-                Get Started for $1
+                Get Started
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
