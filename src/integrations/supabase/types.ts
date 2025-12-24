@@ -291,42 +291,6 @@ export type Database = {
           },
         ]
       }
-      free_tier_phone_pool: {
-        Row: {
-          assigned_count: number
-          created_at: string
-          friendly_name: string | null
-          id: string
-          is_available: boolean
-          max_assignments: number
-          phone_number: string
-          twilio_sid: string | null
-          updated_at: string
-        }
-        Insert: {
-          assigned_count?: number
-          created_at?: string
-          friendly_name?: string | null
-          id?: string
-          is_available?: boolean
-          max_assignments?: number
-          phone_number: string
-          twilio_sid?: string | null
-          updated_at?: string
-        }
-        Update: {
-          assigned_count?: number
-          created_at?: string
-          friendly_name?: string | null
-          id?: string
-          is_available?: boolean
-          max_assignments?: number
-          phone_number?: string
-          twilio_sid?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       google_calendar_connections: {
         Row: {
           access_token: string
