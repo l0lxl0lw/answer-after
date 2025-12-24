@@ -40,7 +40,7 @@ export function Hero() {
             className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6"
           >
             Your{" "}
-            <span className="text-gradient">24/7 AI Front Desk</span>
+            <span className="text-gradient">24/7 AI Receptionist</span>
           </motion.h1>
 
           {/* Subheadline */}

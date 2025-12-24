@@ -6,7 +6,7 @@ const steps = [
     icon: PhoneIncoming,
     step: "01",
     title: "Customer Calls",
-    description: "Every incoming call is answered instantly by your AI front desk — 24 hours a day, 7 days a week.",
+    description: "Every incoming call is answered instantly by your AI receptionist — 24 hours a day, 7 days a week.",
   },
   {
     icon: MessageSquare,
@@ -50,7 +50,7 @@ export function HowItWorks() {
             <span className="text-gradient">Powerful Results</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Get started in minutes and let your AI front desk handle calls around the clock while you focus on running your business.
+            Get started in minutes and let your AI receptionist handle calls around the clock while you focus on running your business.
           </p>
         </motion.div>
 
