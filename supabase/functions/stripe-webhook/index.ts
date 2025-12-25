@@ -88,6 +88,29 @@ serve(async (req) => {
 
         const organizationId = profile.organization_id;
 
+        // Check if this is a credit top-up purchase
+        if (session.metadata?.type === 'credit_topup') {
+          const creditsAmount = parseInt(session.metadata?.credits_amount || '300', 10);
+          
+          // Insert purchased credits
+          const { error: insertError } = await supabaseClient
+            .from("purchased_credits")
+            .insert({
+              organization_id: organizationId,
+              credits_purchased: creditsAmount,
+              credits_remaining: creditsAmount,
+              price_cents: session.amount_total || 1000,
+              stripe_payment_intent_id: session.payment_intent as string,
+            });
+
+          if (insertError) {
+            logStep("Error inserting purchased credits", { error: insertError });
+          } else {
+            logStep("Credit top-up recorded", { organizationId, credits: creditsAmount });
+          }
+          break;
+        }
+
         // Determine plan from metadata or price
         const planFromMetadata = session.metadata?.plan || 'core';
         

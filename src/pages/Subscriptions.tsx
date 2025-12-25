@@ -2,19 +2,29 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2, ArrowRight } from "lucide-react";
+import { Check, Loader2, ArrowRight, Plus } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
+import { useCreateCreditTopup, useTotalAvailableCredits } from "@/hooks/use-credits";
 import { cn } from "@/lib/utils";
 import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle";
 
 export default function Subscriptions() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
+  const { purchasedCredits } = useTotalAvailableCredits();
+  const createTopup = useCreateCreditTopup();
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
 
   const currentPlan = subscription?.plan?.toLowerCase() || "core";
   const isLoading = subscriptionLoading || tiersLoading;
+
+  const handleTopup = async () => {
+    const result = await createTopup.mutateAsync();
+    if (result?.url) {
+      window.location.href = result.url;
+    }
+  };
 
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
@@ -86,11 +96,17 @@ export default function Subscriptions() {
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Credits Used</span>
+                <span>Plan Credits</span>
                 <span className="font-semibold">
-                  {subscription.used_credits?.toLocaleString()} / {subscription.total_credits?.toLocaleString()}
+                  {((subscription.total_credits || 0) - (subscription.used_credits || 0)).toLocaleString()} remaining
                 </span>
               </div>
+              {purchasedCredits > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span>Purchased Credits</span>
+                  <span className="font-semibold text-success">+{purchasedCredits.toLocaleString()}</span>
+                </div>
+              )}
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div 
                   className={cn(
@@ -106,9 +122,27 @@ export default function Subscriptions() {
                   }}
                 />
               </div>
-              <p className="text-xs text-muted-foreground text-center">
-                {((subscription.total_credits || 0) - (subscription.used_credits || 0)).toLocaleString()} credits remaining
-              </p>
+              <div className="flex justify-between items-center pt-1">
+                <p className="text-xs text-muted-foreground">
+                  {((subscription.total_credits || 0) - (subscription.used_credits || 0) + purchasedCredits).toLocaleString()} total available
+                </p>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-7 text-xs"
+                  onClick={handleTopup}
+                  disabled={createTopup.isPending}
+                >
+                  {createTopup.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="w-3 h-3 mr-1" />
+                      Top Up
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -279,10 +313,24 @@ export default function Subscriptions() {
           className="mt-10 text-center max-w-xl mx-auto"
         >
           <div className="bg-card border border-border rounded-xl p-5">
-            <h4 className="font-semibold text-foreground mb-2">Need more usage?</h4>
-            <p className="text-muted-foreground text-sm">
-              Additional credits available at $10 for 150 credits. Purchase anytime from your dashboard.
+            <h4 className="font-semibold text-foreground mb-2">Need more capacity?</h4>
+            <p className="text-muted-foreground text-sm mb-4">
+              Top up anytime with 300 credits for just $10. Credits never expire and are used first.
             </p>
+            <Button 
+              onClick={handleTopup}
+              disabled={createTopup.isPending}
+              className="gap-2"
+            >
+              {createTopup.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Buy 300 Credits for $10
+                </>
+              )}
+            </Button>
           </div>
         </motion.div>
 

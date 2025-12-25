@@ -291,6 +291,33 @@ export type Database = {
           },
         ]
       }
+      credit_config: {
+        Row: {
+          config_key: string
+          config_value: number
+          created_at: string
+          description: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          config_key: string
+          config_value: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          config_key?: string
+          config_value?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       google_calendar_connections: {
         Row: {
           access_token: string
@@ -559,6 +586,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      purchased_credits: {
+        Row: {
+          created_at: string
+          credits_purchased: number
+          credits_remaining: number
+          id: string
+          organization_id: string
+          price_cents: number
+          purchased_at: string
+          stripe_payment_intent_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          credits_purchased: number
+          credits_remaining: number
+          id?: string
+          organization_id: string
+          price_cents: number
+          purchased_at?: string
+          stripe_payment_intent_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          credits_purchased?: number
+          credits_remaining?: number
+          id?: string
+          organization_id?: string
+          price_cents?: number
+          purchased_at?: string
+          stripe_payment_intent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchased_credits_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       services: {
         Row: {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useSubscription } from "@/hooks/use-api";
+import { useTotalAvailableCredits, useCreateCreditTopup } from "@/hooks/use-credits";
 import {
   Popover,
   PopoverContent,
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Settings, CreditCard, Sparkles, LogOut, Palette, ChevronRight, Monitor, Moon, Sun, Check } from "lucide-react";
+import { Settings, CreditCard, LogOut, Palette, ChevronRight, Monitor, Moon, Sun, Check, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -54,6 +55,8 @@ interface CreditsIndicatorProps {
 
 export function CreditsIndicator({ collapsed, organizationName, onClose }: CreditsIndicatorProps) {
   const { data: subscription } = useSubscription();
+  const { purchasedCredits } = useTotalAvailableCredits();
+  const createTopup = useCreateCreditTopup();
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -62,9 +65,14 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
 
   const totalCredits = subscription?.total_credits ?? 1000;
   const usedCredits = subscription?.used_credits ?? 0;
-  const remainingCredits = totalCredits - usedCredits;
+  const subscriptionRemaining = totalCredits - usedCredits;
+  const remainingCredits = subscriptionRemaining + purchasedCredits;
   const percentageUsed = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
   const percentageRemaining = 100 - percentageUsed;
+  
+  // Warning thresholds
+  const isLowBalance = percentageRemaining <= 25;
+  const isCriticalBalance = percentageRemaining <= 10;
 
   // SVG circle calculations
   const size = 40;
@@ -78,6 +86,13 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
     onClose?.();
     await logout();
     navigate('/');
+  };
+
+  const handleTopup = async () => {
+    const result = await createTopup.mutateAsync();
+    if (result?.url) {
+      window.location.href = result.url;
+    }
   };
 
   const handleMenuItemClick = () => {
@@ -164,24 +179,57 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
         sideOffset={8}
       >
         {/* Balance Section */}
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CircularProgress />
               <span className="font-medium">Balance</span>
             </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
-              <Link to="/dashboard/subscriptions" onClick={handleMenuItemClick}>
-                Upgrade
-              </Link>
-            </Button>
+            <div className="flex gap-1">
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-7 text-xs px-2"
+                onClick={handleTopup}
+                disabled={createTopup.isPending}
+              >
+                {createTopup.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="w-3 h-3 mr-1" />
+                    Top Up
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 text-sm pl-12">
-            <span className="text-muted-foreground">Total</span>
-            <span className="text-right font-medium">{totalCredits.toLocaleString()} credits</span>
-            <span className="text-muted-foreground">Remaining</span>
-            <span className="text-right font-medium">{remainingCredits.toLocaleString()}</span>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm pl-12">
+            <span className="text-muted-foreground">Plan credits</span>
+            <span className={cn(
+              "text-right font-medium",
+              isCriticalBalance && "text-destructive",
+              isLowBalance && !isCriticalBalance && "text-warning"
+            )}>
+              {subscriptionRemaining.toLocaleString()}
+            </span>
+            {purchasedCredits > 0 && (
+              <>
+                <span className="text-muted-foreground">Purchased</span>
+                <span className="text-right font-medium text-success">+{purchasedCredits.toLocaleString()}</span>
+              </>
+            )}
+            <span className="text-muted-foreground font-medium">Total</span>
+            <span className="text-right font-semibold">{remainingCredits.toLocaleString()}</span>
           </div>
+          {isLowBalance && (
+            <p className={cn(
+              "text-xs pl-12",
+              isCriticalBalance ? "text-destructive" : "text-warning"
+            )}>
+              {isCriticalBalance ? "Credits running low!" : "Consider upgrading or topping up"}
+            </p>
+          )}
         </div>
 
         <Separator />
