@@ -134,7 +134,7 @@ const signupSchema = z
 type LoginFormData = z.infer<typeof loginSchema>;
 type SignupFormData = z.infer<typeof signupSchema>;
 
-type SignupStep = 'form' | 'verify-email' | 'verify-phone' | 'complete';
+type SignupStep = 'form' | 'verify-email' | 'complete';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -156,7 +156,6 @@ const Auth = () => {
   const [signupStep, setSignupStep] = useState<SignupStep>('form');
   const [signupData, setSignupData] = useState<SignupFormData | null>(null);
   const [emailCode, setEmailCode] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
@@ -336,21 +335,11 @@ const Auth = () => {
     
     const verified = await verifyCode('email', emailCode, signupData.email);
     if (verified) {
-      // Now verify phone
-      await sendVerificationCode('phone', getPhoneDigits(signupData.phone));
-      setSignupStep('verify-phone');
-    }
-  };
-
-  const handlePhoneVerification = async () => {
-    if (!signupData || phoneCode.length !== 6) return;
-    
-    const verified = await verifyCode('phone', phoneCode, getPhoneDigits(signupData.phone));
-    if (verified) {
-      // Both verified, complete signup
+      // Email verified, complete signup (no phone verification needed)
       await completeSignup();
     }
   };
+
 
   const completeSignup = async () => {
     if (!signupData) return;
@@ -576,9 +565,7 @@ const Auth = () => {
                   ? "Create your account"
                   : signupStep === 'verify-email'
                     ? "Verify your email"
-                    : signupStep === 'verify-phone'
-                      ? "Verify your phone"
-                      : "Almost done!"
+                    : "Almost done!"
               }
             </h1>
             <p className="text-muted-foreground">
@@ -620,8 +607,7 @@ const Auth = () => {
           {/* Progress indicator for signup */}
           {!isLogin && signupStep !== 'form' && (
             <div className="flex items-center gap-2 mb-8">
-              <div className={`flex-1 h-1 rounded-full ${signupStep === 'verify-email' || signupStep === 'verify-phone' || signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
-              <div className={`flex-1 h-1 rounded-full ${signupStep === 'verify-phone' || signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
+              <div className={`flex-1 h-1 rounded-full ${signupStep === 'verify-email' || signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
               <div className={`flex-1 h-1 rounded-full ${signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
             </div>
           )}
@@ -917,8 +903,6 @@ const Auth = () => {
               </motion.form>
             ) : signupStep === 'verify-email' && signupData ? (
               renderVerificationStep('email', emailCode, setEmailCode, handleEmailVerification, signupData.email)
-            ) : signupStep === 'verify-phone' && signupData ? (
-              renderVerificationStep('phone', phoneCode, setPhoneCode, handlePhoneVerification, signupData.phone)
             ) : null}
           </AnimatePresence>
 
