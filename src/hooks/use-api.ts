@@ -619,28 +619,23 @@ export interface SubscriptionTier {
   name: string;
   description: string;
   price_cents: number;
-  yearly_price_cents: number;
-  yearly_discount_percent: number;
-  period: string;
   credits: number;
-  credits_cost_per_thousand: number | null;
-  phone_lines: number;
   features: string[];
-  has_call_recordings: boolean;
+  phone_lines: number;
   has_custom_agent: boolean;
   has_outbound_reminders: boolean;
   has_priority_support: boolean;
   has_api_access: boolean;
-  has_custom_ai_training: boolean;
-  has_hipaa_compliance: boolean;
+  has_call_recordings: boolean;
   has_sla_guarantee: boolean;
+  has_hipaa_compliance: boolean;
+  has_custom_ai_training: boolean;
   support_level: string;
   is_popular: boolean;
   is_active: boolean;
   is_visible: boolean;
   display_order: number;
   stripe_monthly_price_id: string | null;
-  stripe_yearly_price_id: string | null;
 }
 
 export function useSubscriptionTiers() {

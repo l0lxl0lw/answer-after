@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,14 +6,12 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
 import { useCreateCreditTopup, useTotalAvailableCredits } from "@/hooks/use-credits";
 import { cn } from "@/lib/utils";
-import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle";
 
 export default function Subscriptions() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
   const { purchasedCredits } = useTotalAvailableCredits();
   const createTopup = useCreateCreditTopup();
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
 
   const currentPlan = subscription?.plan?.toLowerCase() || "core";
   const isLoading = subscriptionLoading || tiersLoading;
@@ -29,11 +26,6 @@ export default function Subscriptions() {
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
     return Math.floor(priceCents / 100);
-  };
-
-  const getDisplayPrice = (tier: SubscriptionTier) => {
-    if (tier.plan_id === "enterprise") return tier.price_cents;
-    return billingPeriod === "yearly" ? tier.yearly_price_cents : tier.price_cents;
   };
 
   const formatCredits = (credits: number) => {
@@ -63,16 +55,6 @@ export default function Subscriptions() {
           <p className="text-muted-foreground">
             Plans that grow with your business. No hidden fees.
           </p>
-        </motion.div>
-
-        {/* Billing Toggle */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.05 }}
-          className="flex justify-center mb-8"
-        >
-          <BillingToggle value={billingPeriod} onChange={setBillingPeriod} discountPercent={25} />
         </motion.div>
 
         {/* Loading State */}
@@ -228,7 +210,7 @@ export default function Subscriptions() {
                               "font-display text-2xl font-bold",
                               tier.is_popular && !isCurrentPlan ? "text-primary-foreground" : "text-foreground"
                             )}>
-                              ${formatPrice(getDisplayPrice(tier))}
+                              ${formatPrice(tier.price_cents)}
                             </span>
                             <span className={cn(
                               "text-xs",
@@ -237,14 +219,12 @@ export default function Subscriptions() {
                               /mo
                             </span>
                           </div>
-                          {billingPeriod === "yearly" && (
-                            <p className={cn(
-                              "text-xs",
-                              tier.is_popular && !isCurrentPlan ? "text-primary-foreground/70" : "text-muted-foreground"
-                            )}>
-                              billed annually
-                            </p>
-                          )}
+                          <p className={cn(
+                            "text-xs",
+                            tier.is_popular && !isCurrentPlan ? "text-primary-foreground/70" : "text-muted-foreground"
+                          )}>
+                            billed monthly
+                          </p>
                         </>
                       )}
                     </div>
@@ -376,7 +356,7 @@ export default function Subscriptions() {
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {isEnterprise(tier.plan_id) ? "Custom" : `$${formatPrice(getDisplayPrice(tier))}/mo`}
+                          {isEnterprise(tier.plan_id) ? "Custom" : `$${formatPrice(tier.price_cents)}/mo`}
                         </td>
                       ))}
                     </tr>
@@ -408,76 +388,48 @@ export default function Subscriptions() {
                         </td>
                       ))}
                     </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-3 font-medium">Define Services</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-3",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_custom_agent ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-3 font-medium">Reminder Rules</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-3",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_outbound_reminders ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-3 font-medium">Agent Context</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-3",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_custom_ai_training ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-border">
-                      <td className="p-3 font-medium">Priority Support</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-3",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_priority_support ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td className="p-3 font-medium">SLA Guarantee</td>
-                      {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
-                          className={cn(
-                            "text-center p-3",
-                            tier.plan_id === currentPlan && "bg-primary/5"
-                          )}
-                        >
-                          {tier.has_sla_guarantee ? <Check className="w-4 h-4 text-success mx-auto" /> : "—"}
-                        </td>
-                      ))}
-                    </tr>
+                    <ComparisonRow 
+                      label="Custom AI Agent" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_custom_agent} 
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow 
+                      label="Outbound Reminders" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_outbound_reminders} 
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow 
+                      label="Call Recordings" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_call_recordings} 
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow 
+                      label="Priority Support" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_priority_support} 
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow 
+                      label="API Access" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_api_access} 
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow 
+                      label="SLA Guarantee" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_sla_guarantee} 
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow 
+                      label="HIPAA Compliance" 
+                      tiers={tiers} 
+                      getValue={(t) => t.has_hipaa_compliance} 
+                      currentPlan={currentPlan}
+                    />
                   </tbody>
                 </table>
               </div>
@@ -486,5 +438,38 @@ export default function Subscriptions() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+function ComparisonRow({ 
+  label, 
+  tiers, 
+  getValue, 
+  currentPlan 
+}: { 
+  label: string; 
+  tiers: SubscriptionTier[]; 
+  getValue: (tier: SubscriptionTier) => boolean; 
+  currentPlan: string;
+}) {
+  return (
+    <tr className="border-b border-border">
+      <td className="p-3 font-medium">{label}</td>
+      {tiers.map((tier) => (
+        <td 
+          key={tier.plan_id} 
+          className={cn(
+            "text-center p-3",
+            tier.plan_id === currentPlan && "bg-primary/5"
+          )}
+        >
+          {getValue(tier) ? (
+            <Check className="w-4 h-4 text-success mx-auto" />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
+      ))}
+    </tr>
   );
 }
