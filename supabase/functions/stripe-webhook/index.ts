@@ -145,7 +145,103 @@ serve(async (req) => {
         break;
       }
 
-      case "customer.subscription.created":
+      case "customer.subscription.created": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+        
+        // Get customer email to find organization
+        const customer = await stripe.customers.retrieve(customerId);
+        if (customer.deleted || !('email' in customer) || !customer.email) {
+          logStep("Customer has no email, skipping");
+          break;
+        }
+
+        // Find the profile by email to get organization_id
+        const { data: profileCreate, error: profileErrorCreate } = await supabaseClient
+          .from("profiles")
+          .select("organization_id")
+          .eq("email", customer.email)
+          .single();
+
+        if (profileErrorCreate || !profileCreate?.organization_id) {
+          logStep("Profile not found", { email: customer.email, error: profileErrorCreate });
+          break;
+        }
+
+        const organizationIdCreate = profileCreate.organization_id;
+
+        // Check if this is a $1 first month subscription that needs schedule setup
+        const switchToRegular = subscription.metadata?.switch_to_regular === 'true';
+        const regularPriceId = subscription.metadata?.regular_price_id;
+        
+        if (switchToRegular && regularPriceId) {
+          logStep("Setting up subscription schedule for $1 promo", { 
+            subscriptionId: subscription.id, 
+            regularPriceId 
+          });
+          
+          try {
+            // Create a subscription schedule from this subscription
+            const schedule = await stripe.subscriptionSchedules.create({
+              from_subscription: subscription.id,
+            });
+            
+            // Update the schedule with phases:
+            // Phase 1 (current): $1 for 1 month
+            // Phase 2: Regular pricing ongoing
+            const currentPhaseEnd = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
+            
+            await stripe.subscriptionSchedules.update(schedule.id, {
+              phases: [
+                {
+                  items: [{ price: subscription.items.data[0].price.id, quantity: 1 }],
+                  end_date: currentPhaseEnd,
+                },
+                {
+                  items: [{ price: regularPriceId, quantity: 1 }],
+                  iterations: undefined, // Ongoing
+                },
+              ],
+              end_behavior: 'release', // Release to regular subscription after phases complete
+            });
+            
+            logStep("Subscription schedule created", { 
+              scheduleId: schedule.id, 
+              phaseEndDate: new Date(currentPhaseEnd * 1000).toISOString() 
+            });
+          } catch (scheduleError) {
+            logStep("Error creating subscription schedule", { error: String(scheduleError) });
+          }
+        }
+
+        // Determine subscription status and plan
+        let statusCreate = subscription.status;
+        let planCreate = subscription.metadata?.plan_id || "core";
+
+        // Update or insert subscription in database
+        const { error: upsertErrorCreate } = await supabaseClient
+          .from("subscriptions")
+          .upsert({
+            organization_id: organizationIdCreate,
+            stripe_subscription_id: subscription.id,
+            stripe_customer_id: customerId,
+            plan: planCreate,
+            status: statusCreate,
+            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            cancel_at_period_end: subscription.cancel_at_period_end,
+          }, {
+            onConflict: "organization_id",
+          });
+
+        if (upsertErrorCreate) {
+          logStep("Error upserting subscription", { error: upsertErrorCreate });
+        } else {
+          logStep("Subscription synced", { organizationId: organizationIdCreate, status: statusCreate, plan: planCreate });
+        }
+        break;
+      }
+
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
@@ -165,29 +261,30 @@ serve(async (req) => {
           .single();
 
         if (profileError || !profile?.organization_id) {
-          logStep("Profile not found", { email: customer.email, error: profileError });
+          logStep("Profile not found", { email: profileError });
           break;
         }
 
         const organizationId = profile.organization_id;
 
-        // Determine subscription status and plan from price metadata
+        // Determine subscription status and plan from metadata or price
         let status = subscription.status;
-        if (subscription.status === "trialing") {
-          status = "trialing";
-        } else if (subscription.status === "active") {
-          status = "active";
+        let plan = subscription.metadata?.plan_id || "core";
+
+        // Fallback: get plan from price metadata
+        if (!subscription.metadata?.plan_id) {
+          const priceId = subscription.items.data[0]?.price?.id;
+          if (priceId) {
+            try {
+              const price = await stripe.prices.retrieve(priceId);
+              plan = price.metadata?.plan_id || "core";
+            } catch {
+              // Use default
+            }
+          }
         }
 
-        // Get plan from subscription item price metadata
-        let plan = "core";
-        const priceId = subscription.items.data[0]?.price?.id;
-        if (priceId) {
-          const price = await stripe.prices.retrieve(priceId);
-          plan = (price.metadata?.plan_id) || "core";
-        }
-
-        // Update or insert subscription in database
+        // Update subscription in database
         const { error: upsertError } = await supabaseClient
           .from("subscriptions")
           .upsert({
