@@ -118,20 +118,14 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
-    // For the $1 first month promo:
-    // Use a coupon that discounts the first period to $1 (not a trial which shows as "free")
+    // Strategy: Use a simple monthly subscription for first month at $1
+    // Then after checkout, we'll use subscription schedule to transition to regular pricing
+    // This shows clearly: "$1.00 today, then $X/mo (or $X/year) after 30 days"
     
-    // Calculate pricing
-    // For yearly: charge full annual amount after first month
-    // For monthly: charge monthly amount after first month
-    
-    // First month is always $1, charged as monthly
-    // After 1 month, regular billing kicks in (monthly or yearly)
     const firstMonthPrice = 100; // $1
     const regularAmount = billingPeriod === 'yearly' 
-      ? planConfig.yearlyPrice * 12  // e.g., $29 × 12 = $348 annually
-      : planConfig.monthlyPrice;     // e.g., $37 monthly
-    const interval = billingPeriod === 'yearly' ? 'year' : 'month';
+      ? planConfig.yearlyPrice * 12  // e.g., $199 × 12 = $2388 annually
+      : planConfig.monthlyPrice;     // e.g., $249 monthly
     
     logStep("Pricing calculated", { 
       billingPeriod, 
@@ -139,53 +133,67 @@ serve(async (req) => {
       regularAmount, 
       yearlyPerMonth: planConfig.yearlyPrice,
       monthlyPrice: planConfig.monthlyPrice,
-      annualTotal: planConfig.yearlyPrice * 12,
     });
 
-    // Create a coupon that discounts the first period to $1
-    // Discount amount = regular price - $1
-    const discountAmount = regularAmount - firstMonthPrice;
+    // Create a product for this plan if it doesn't exist
+    const productName = `AnswerAfter ${planConfig.name}`;
+    const products = await stripe.products.list({ limit: 100 });
+    let product = products.data.find((p: Stripe.Product) => p.name === productName && p.active);
     
-    const dynamicCoupon = await stripe.coupons.create({
-      amount_off: discountAmount,
+    if (!product) {
+      product = await stripe.products.create({
+        name: productName,
+        description: planConfig.description,
+        metadata: {
+          plan_id: planId,
+          credits: planConfig.credits.toString(),
+        }
+      });
+      logStep("Created product", { productId: product.id });
+    }
+
+    // Create the $1 first month price
+    const firstMonthPriceObj = await stripe.prices.create({
+      product: product.id,
+      unit_amount: firstMonthPrice,
       currency: 'usd',
-      duration: 'once',
-      name: `$1 First Month - ${planConfig.name}`,
+      recurring: {
+        interval: 'month',
+        interval_count: 1,
+      },
       metadata: {
         type: 'first_month_promo',
+        plan_id: planId,
+      }
+    });
+    logStep("Created first month price", { priceId: firstMonthPriceObj.id });
+
+    // Create the regular price
+    const regularPriceObj = await stripe.prices.create({
+      product: product.id,
+      unit_amount: regularAmount,
+      currency: 'usd',
+      recurring: {
+        interval: billingPeriod === 'yearly' ? 'year' : 'month',
+        interval_count: 1,
+      },
+      metadata: {
+        type: 'regular',
         plan_id: planId,
         billing_period: billingPeriod,
       }
     });
-    logStep("Created coupon", { couponId: dynamicCoupon.id, discountAmount });
+    logStep("Created regular price", { priceId: regularPriceObj.id });
 
-    // Create checkout session with coupon applied to first period
+    // Use checkout session with subscription_data to set up a subscription schedule
+    // This creates a clear flow: pay $1 now, regular billing starts after 1 month
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
         {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `AnswerAfter ${planConfig.name}`,
-              description: planConfig.description,
-              metadata: {
-                plan_id: planId,
-                credits: planConfig.credits.toString(),
-              }
-            },
-            unit_amount: regularAmount,
-            recurring: {
-              interval: interval as 'month' | 'year',
-            },
-          },
+          price: firstMonthPriceObj.id,
           quantity: 1,
         },
-      ],
-      discounts: [
-        {
-          coupon: dynamicCoupon.id,
-        }
       ],
       mode: "subscription",
       subscription_data: {
@@ -194,7 +202,10 @@ serve(async (req) => {
           plan_id: planId,
           billing_period: billingPeriod,
           credits: planConfig.credits.toString(),
+          regular_price_id: regularPriceObj.id, // Store for webhook to use
+          switch_to_regular: 'true', // Flag for webhook
         },
+        description: `$1 first month, then $${(regularAmount / 100).toFixed(0)}/${billingPeriod === 'yearly' ? 'year' : 'month'} after 30 days`,
       },
       success_url: `${origin}/onboarding/phone?checkout=success`,
       cancel_url: `${origin}/onboarding/select-plan?checkout=cancelled`,
@@ -203,6 +214,7 @@ serve(async (req) => {
         supabase_user_id: user.id,
         plan: planId,
         billing_period: billingPeriod,
+        regular_price_id: regularPriceObj.id,
       },
     });
 
