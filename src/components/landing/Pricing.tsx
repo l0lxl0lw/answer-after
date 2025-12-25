@@ -194,9 +194,9 @@ export function Pricing() {
           className="mt-12 text-center max-w-2xl mx-auto"
         >
           <div className="bg-card border border-border rounded-xl p-6">
-            <h4 className="font-semibold text-foreground mb-2">Need more usage?</h4>
+            <h4 className="font-semibold text-foreground mb-2">Need more capacity?</h4>
             <p className="text-muted-foreground text-sm">
-              Additional credits available at $10 for 150 credits. Purchase anytime from your dashboard.
+              Top up anytime with 300 credits for just $10. Credits never expire and are used first.
             </p>
           </div>
         </motion.div>

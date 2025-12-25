@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.verify-code]
 verify_jwt = false
+
+[functions.create-credit-topup]
+verify_jwt = true
