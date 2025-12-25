@@ -378,6 +378,7 @@ const Auth = () => {
             body: {
               organizationName: signupData.organizationName,
               notificationPhone: getPhoneDigits(signupData.phone),
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             },
           }
         );
