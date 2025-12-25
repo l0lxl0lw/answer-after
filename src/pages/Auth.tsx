@@ -398,30 +398,11 @@ const Auth = () => {
 
         toast({
           title: "Organization ready!",
-          description: "Redirecting to setup your payment method...",
+          description: "Let's choose your plan...",
         });
 
-        // Now redirect to Stripe Checkout with trial
-        const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
-          'create-checkout-with-trial',
-          {
-            headers: {
-              Authorization: `Bearer ${sessionData.session.access_token}`,
-            },
-          }
-        );
-
-        if (checkoutError || !checkoutData?.url) {
-          console.error('Checkout error:', checkoutError);
-          toast({
-            title: "Payment setup skipped",
-            description: "You can set up your payment method later in settings.",
-          });
-          navigate(from, { replace: true });
-        } else {
-          // Redirect to Stripe Checkout
-          window.location.href = checkoutData.url;
-        }
+        // Redirect to plan selection page
+        navigate('/onboarding/select-plan', { replace: true });
       } else {
         navigate(from, { replace: true });
       }
