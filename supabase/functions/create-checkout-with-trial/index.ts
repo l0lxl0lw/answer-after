@@ -116,32 +116,23 @@ serve(async (req) => {
       logStep("Created new customer", { customerId });
     }
 
-    // Create or get the $1 first month coupon
-    let couponId = 'FIRST_MONTH_1_DOLLAR';
-    try {
-      await stripe.coupons.retrieve(couponId);
-      logStep("Coupon exists", { couponId });
-    } catch {
-      // Coupon doesn't exist, create it
-      // This creates a coupon that discounts to $1 for the first month
-      // We'll use amount_off instead since percent_off won't work for varying prices
-      // Actually, we need to use a promotion code approach or calculate dynamically
-      logStep("Coupon will be applied via trial with $1 payment");
-    }
-
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
-    // Calculate the unit amount based on billing period
-    // For yearly: charge the full annual amount upfront (monthly rate × 12)
-    // For monthly: charge the monthly amount
-    const unitAmount = billingPeriod === 'yearly' 
+    // For the $1 first month promo:
+    // - Monthly billing: $1 first month, then regular monthly price
+    // - Yearly billing: $1 first month trial, then full annual amount after trial ends
+    
+    // Calculate pricing
+    // For yearly: after trial, charge full annual amount
+    // For monthly: after trial, charge monthly amount
+    const regularAmount = billingPeriod === 'yearly' 
       ? planConfig.yearlyPrice * 12  // e.g., $29 × 12 = $348 annually
       : planConfig.monthlyPrice;     // e.g., $37 monthly
     const interval = billingPeriod === 'yearly' ? 'year' : 'month';
     
     logStep("Pricing calculated", { 
       billingPeriod, 
-      unitAmount, 
+      regularAmount, 
       yearlyPerMonth: planConfig.yearlyPrice,
       monthlyPrice: planConfig.monthlyPrice,
       annualTotal: planConfig.yearlyPrice * 12,
@@ -149,26 +140,10 @@ serve(async (req) => {
       savings: (planConfig.monthlyPrice * 12) - (planConfig.yearlyPrice * 12)
     });
 
-    // Create a dynamic coupon for $1 first period promo
-    // Discount is the full amount minus $1
-    const discountAmount = unitAmount - 100; // Price minus $1 (100 cents)
+    // Strategy: Use a setup fee of $1 + trial period of 1 month
+    // This way: customer pays $1 now, then after 1 month trial, regular billing kicks in
     
-    const dynamicCoupon = await stripe.coupons.create({
-      amount_off: discountAmount,
-      currency: 'usd',
-      duration: 'once',
-      name: billingPeriod === 'yearly' 
-        ? `First Year $1 - ${planConfig.name}` 
-        : `First Month $1 - ${planConfig.name}`,
-      metadata: {
-        type: 'first_period_promo',
-        plan_id: planId,
-        billing_period: billingPeriod,
-      }
-    });
-    logStep("Created dynamic coupon", { couponId: dynamicCoupon.id, discountAmount });
-
-    // Create checkout session with the coupon applied
+    // Create the main product/price for recurring billing
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
@@ -183,21 +158,30 @@ serve(async (req) => {
                 credits: planConfig.credits.toString(),
               }
             },
-            unit_amount: unitAmount,
+            unit_amount: regularAmount,
             recurring: {
               interval: interval as 'month' | 'year',
             },
           },
           quantity: 1,
         },
-      ],
-      discounts: [
+        // Add a one-time $1 setup fee that's charged immediately
         {
-          coupon: dynamicCoupon.id,
-        }
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `First Month Trial - ${planConfig.name}`,
+              description: '$1 for your first month',
+            },
+            unit_amount: 100, // $1
+          },
+          quantity: 1,
+        },
       ],
       mode: "subscription",
       subscription_data: {
+        // 1 month trial - customer already paid $1 setup fee
+        trial_period_days: 30,
         metadata: {
           supabase_user_id: user.id,
           plan_id: planId,
@@ -220,8 +204,9 @@ serve(async (req) => {
       url: session.url,
       planId,
       billingPeriod,
-      firstMonthCharge: 100, // $1
-      regularPrice: unitAmount
+      trialFee: 100, // $1
+      regularPrice: regularAmount,
+      trialDays: 30
     });
 
     return new Response(JSON.stringify({ url: session.url }), {
