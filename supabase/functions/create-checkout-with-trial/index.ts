@@ -119,12 +119,15 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
     // For the $1 first month promo:
-    // - Monthly billing: $1 first month, then regular monthly price
-    // - Yearly billing: $1 first month trial, then full annual amount after trial ends
+    // Use a coupon that discounts the first period to $1 (not a trial which shows as "free")
     
     // Calculate pricing
-    // For yearly: after trial, charge full annual amount
-    // For monthly: after trial, charge monthly amount
+    // For yearly: charge full annual amount after first month
+    // For monthly: charge monthly amount after first month
+    
+    // First month is always $1, charged as monthly
+    // After 1 month, regular billing kicks in (monthly or yearly)
+    const firstMonthPrice = 100; // $1
     const regularAmount = billingPeriod === 'yearly' 
       ? planConfig.yearlyPrice * 12  // e.g., $29 × 12 = $348 annually
       : planConfig.monthlyPrice;     // e.g., $37 monthly
@@ -132,18 +135,31 @@ serve(async (req) => {
     
     logStep("Pricing calculated", { 
       billingPeriod, 
+      firstMonthPrice,
       regularAmount, 
       yearlyPerMonth: planConfig.yearlyPrice,
       monthlyPrice: planConfig.monthlyPrice,
       annualTotal: planConfig.yearlyPrice * 12,
-      monthlyAnnualTotal: planConfig.monthlyPrice * 12,
-      savings: (planConfig.monthlyPrice * 12) - (planConfig.yearlyPrice * 12)
     });
 
-    // Strategy: Use a setup fee of $1 + trial period of 1 month
-    // This way: customer pays $1 now, then after 1 month trial, regular billing kicks in
+    // Create a coupon that discounts the first period to $1
+    // Discount amount = regular price - $1
+    const discountAmount = regularAmount - firstMonthPrice;
     
-    // Create the main product/price for recurring billing
+    const dynamicCoupon = await stripe.coupons.create({
+      amount_off: discountAmount,
+      currency: 'usd',
+      duration: 'once',
+      name: `$1 First Month - ${planConfig.name}`,
+      metadata: {
+        type: 'first_month_promo',
+        plan_id: planId,
+        billing_period: billingPeriod,
+      }
+    });
+    logStep("Created coupon", { couponId: dynamicCoupon.id, discountAmount });
+
+    // Create checkout session with coupon applied to first period
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
@@ -165,23 +181,14 @@ serve(async (req) => {
           },
           quantity: 1,
         },
-        // Add a one-time $1 setup fee that's charged immediately
+      ],
+      discounts: [
         {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `First Month Trial - ${planConfig.name}`,
-              description: '$1 for your first month',
-            },
-            unit_amount: 100, // $1
-          },
-          quantity: 1,
-        },
+          coupon: dynamicCoupon.id,
+        }
       ],
       mode: "subscription",
       subscription_data: {
-        // 1 month trial - customer already paid $1 setup fee
-        trial_period_days: 30,
         metadata: {
           supabase_user_id: user.id,
           plan_id: planId,
@@ -204,9 +211,8 @@ serve(async (req) => {
       url: session.url,
       planId,
       billingPeriod,
-      trialFee: 100, // $1
+      firstMonthCharge: firstMonthPrice,
       regularPrice: regularAmount,
-      trialDays: 30
     });
 
     return new Response(JSON.stringify({ url: session.url }), {
