@@ -65,3 +65,9 @@ verify_jwt = false
 
 [functions.create-credit-topup]
 verify_jwt = true
+
+[functions.search-phone-numbers]
+verify_jwt = true
+
+[functions.purchase-phone-number]
+verify_jwt = true
