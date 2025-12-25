@@ -21,7 +21,7 @@ const footerLinks = {
     { name: "Status", href: "#" },
   ],
   legal: [
-    { name: "Privacy", href: "#" },
+    { name: "Privacy", href: "/privacy", isRoute: true },
     { name: "Terms", href: "#" },
     { name: "Security", href: "#" },
     { name: "HIPAA", href: "#" },
@@ -103,12 +103,21 @@ export function Footer() {
             <ul className="space-y-3">
               {footerLinks.legal.map((link) => (
                 <li key={link.name}>
-                  <a 
-                    href={link.href} 
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.name}
-                  </a>
+                  {link.isRoute ? (
+                    <Link 
+                      to={link.href} 
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.name}
+                    </Link>
+                  ) : (
+                    <a 
+                      href={link.href} 
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.name}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
