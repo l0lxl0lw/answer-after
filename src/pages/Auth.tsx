@@ -13,6 +13,71 @@ import { supabase } from "@/integrations/supabase/client";
 import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+// Format phone number as user types: +1 (XXX) XXX-XXXX
+function formatPhoneNumber(value: string): string {
+  // Strip all non-digits except leading +
+  const hasPlus = value.startsWith('+');
+  const digits = value.replace(/\D/g, '');
+  
+  if (digits.length === 0) return hasPlus ? '+' : '';
+  
+  // Handle US format (11 digits starting with 1, or 10 digits)
+  let formatted = '';
+  
+  if (digits.length >= 1) {
+    // Check if starts with country code 1
+    const hasCountryCode = digits.startsWith('1') && digits.length > 10;
+    const countryCode = hasCountryCode ? digits[0] : (digits.length <= 10 ? '' : digits[0]);
+    const remaining = hasCountryCode ? digits.slice(1) : (digits.length <= 10 ? digits : digits.slice(1));
+    
+    if (countryCode) {
+      formatted = `+${countryCode} `;
+    } else if (hasPlus || digits.length > 10) {
+      formatted = '+1 ';
+    }
+    
+    // Format area code
+    if (remaining.length > 0) {
+      const areaCode = remaining.slice(0, 3);
+      if (remaining.length <= 3) {
+        formatted += `(${areaCode}`;
+      } else {
+        formatted += `(${areaCode}) `;
+      }
+    }
+    
+    // Format exchange
+    if (remaining.length > 3) {
+      const exchange = remaining.slice(3, 6);
+      formatted += exchange;
+    }
+    
+    // Format subscriber
+    if (remaining.length > 6) {
+      const subscriber = remaining.slice(6, 10);
+      formatted += `-${subscriber}`;
+    }
+  }
+  
+  return formatted;
+}
+
+// Validate phone number format
+function isValidPhoneNumber(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 10 || digits.length === 11;
+}
+
+// Get just the digits for storage (E.164 format)
+function getPhoneDigits(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  // Ensure it starts with country code
+  if (digits.length === 10) {
+    return '+1' + digits;
+  }
+  return '+' + digits;
+}
+
 // Validation schemas
 const loginSchema = z.object({
   email: z
@@ -50,7 +115,7 @@ const signupSchema = z
       .string()
       .trim()
       .min(1, { message: "Phone number is required" })
-      .regex(/^\+?[1-9]\d{9,14}$/, { message: "Please enter a valid phone number (e.g., +15551234567)" }),
+      .refine((val) => isValidPhoneNumber(val), { message: "Please enter a valid 10-digit phone number" }),
     password: z
       .string()
       .min(1, { message: "Password is required" })
@@ -272,7 +337,7 @@ const Auth = () => {
     const verified = await verifyCode('email', emailCode, signupData.email);
     if (verified) {
       // Now verify phone
-      await sendVerificationCode('phone', signupData.phone);
+      await sendVerificationCode('phone', getPhoneDigits(signupData.phone));
       setSignupStep('verify-phone');
     }
   };
@@ -280,7 +345,7 @@ const Auth = () => {
   const handlePhoneVerification = async () => {
     if (!signupData || phoneCode.length !== 6) return;
     
-    const verified = await verifyCode('phone', phoneCode, signupData.phone);
+    const verified = await verifyCode('phone', phoneCode, getPhoneDigits(signupData.phone));
     if (verified) {
       // Both verified, complete signup
       await completeSignup();
@@ -323,7 +388,7 @@ const Auth = () => {
             },
             body: {
               organizationName: signupData.organizationName,
-              notificationPhone: signupData.phone,
+              notificationPhone: getPhoneDigits(signupData.phone),
             },
           }
         );
@@ -471,7 +536,7 @@ const Auth = () => {
         ) : (
           <button
             type="button"
-            onClick={() => sendVerificationCode(type, value)}
+            onClick={() => sendVerificationCode(type, type === 'phone' ? getPhoneDigits(value) : value)}
             disabled={isSendingCode}
             className="text-primary hover:underline font-medium"
           >
@@ -733,9 +798,10 @@ const Auth = () => {
                     <Input
                       id="signup-phone"
                       type="tel"
-                      placeholder="+15551234567"
-                      className="pl-10 h-12"
-                      {...signupForm.register("phone")}
+                      placeholder="+1 (555) 123-4567"
+                      className={`pl-10 h-12 ${signupForm.watch("phone") && !isValidPhoneNumber(signupForm.watch("phone")) ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                      value={signupForm.watch("phone")}
+                      onChange={(e) => signupForm.setValue("phone", formatPhoneNumber(e.target.value), { shouldValidate: true })}
                     />
                   </div>
                   {signupForm.formState.errors.phone && (
@@ -743,9 +809,6 @@ const Auth = () => {
                       {signupForm.formState.errors.phone.message}
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    Include country code (e.g., +1 for US)
-                  </p>
                 </div>
 
                 {/* Password */}
