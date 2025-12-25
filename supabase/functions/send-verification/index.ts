@@ -85,7 +85,9 @@ serve(async (req) => {
       const resend = new Resend(RESEND_API_KEY);
       
       const { error: emailError } = await resend.emails.send({
-        from: 'AnswerAfter <noreply@answerafter.com>',
+        // Use a verified sender. If you want to send from your own domain,
+        // verify it in Resend first, then update this address.
+        from: 'AnswerAfter <onboarding@resend.dev>',
         to: [email],
         subject: 'Verify your email - AnswerAfter',
         html: `
