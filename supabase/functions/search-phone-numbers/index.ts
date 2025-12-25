@@ -71,7 +71,7 @@ serve(async (req) => {
     let searchUrl: string;
     const searchParams = new URLSearchParams({
       VoiceEnabled: 'true',
-      Limit: '10',
+      Limit: '3',
     });
 
     if (numberType === 'toll-free') {
