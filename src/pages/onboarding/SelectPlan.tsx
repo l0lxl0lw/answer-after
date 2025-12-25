@@ -185,34 +185,30 @@ export default function SelectPlan() {
                   {/* Price */}
                   <div className="mb-5">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-sm text-muted-foreground line-through opacity-60">
-                        ${formatPrice(getDisplayPrice(tier))}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline gap-1">
                       <span
                         className={`font-display text-3xl font-bold ${
                           tier.is_popular ? "text-primary-foreground" : "text-foreground"
                         }`}
                       >
-                        $1
+                        ${formatPrice(getDisplayPrice(tier))}
                       </span>
                       <span
                         className={`text-sm ${
                           tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
                         }`}
                       >
-                        first month
+                        /mo
                       </span>
                     </div>
-                    <p
-                      className={`text-xs mt-1 ${
-                        tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
-                      }`}
-                    >
-                      then ${formatPrice(getDisplayPrice(tier))}/mo
-                      {billingPeriod === "yearly" && " billed annually"}
-                    </p>
+                    {billingPeriod === "yearly" && (
+                      <p
+                        className={`text-xs mt-1 ${
+                          tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
+                        }`}
+                      >
+                        billed annually
+                      </p>
+                    )}
                   </div>
 
                   {/* Credits */}
