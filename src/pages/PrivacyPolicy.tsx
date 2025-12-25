@@ -129,7 +129,7 @@ export default function PrivacyPolicy() {
               If you have questions about this Privacy Policy, please contact us at:
             </p>
             <p className="text-muted-foreground mt-2">
-              Email: privacy@answerafter.com
+              Email: contact@answerafter.com
             </p>
           </section>
         </div>
