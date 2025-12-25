@@ -13,7 +13,8 @@ import {
   MapPin, 
   Globe,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -350,9 +351,21 @@ export default function PhoneSetup() {
             transition={{ delay: 0.1 }}
             className="bg-card border rounded-xl p-6 mb-6"
           >
-            <Label className="text-base font-semibold mb-4 block">
-              Select Your Number
-            </Label>
+            <div className="flex items-center justify-between mb-4">
+              <Label className="text-base font-semibold">
+                Select Your Number
+              </Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={searchNumbers}
+                disabled={isSearching}
+                className="gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
+                More numbers
+              </Button>
+            </div>
             <div className="space-y-2">
               {availableNumbers.map((num) => (
                 <label
