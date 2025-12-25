@@ -4,14 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight, Sparkles } from "lucide-react";
 import { useSubscriptionTiers } from "@/hooks/use-api";
-import { BillingToggle, BillingPeriod } from "@/components/pricing/BillingToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function SelectPlan() {
   const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly");
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const navigate = useNavigate();
@@ -21,26 +19,6 @@ export default function SelectPlan() {
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
     return Math.floor(priceCents / 100);
-  };
-
-  // Get the per-month display price
-  const getDisplayPrice = (tier: NonNullable<typeof tiers>[number]) => {
-    if (tier.plan_id === "enterprise") return tier.price_cents;
-    return billingPeriod === "yearly" ? tier.yearly_price_cents : tier.price_cents;
-  };
-
-  // Calculate annual savings when choosing yearly over monthly
-  const getAnnualSavings = (tier: NonNullable<typeof tiers>[number]) => {
-    if (tier.plan_id === "enterprise" || !tier.yearly_price_cents) return 0;
-    const monthlyAnnualCost = (tier.price_cents || 0) * 12;
-    const yearlyAnnualCost = (tier.yearly_price_cents || 0) * 12;
-    return monthlyAnnualCost - yearlyAnnualCost;
-  };
-
-  // Get the total annual cost for yearly billing
-  const getAnnualTotal = (tier: NonNullable<typeof tiers>[number]) => {
-    if (tier.plan_id === "enterprise") return 0;
-    return (tier.yearly_price_cents || 0) * 12;
   };
 
   const isEnterprise = (planId: string) => planId === "enterprise";
@@ -71,7 +49,6 @@ export default function SelectPlan() {
         },
         body: {
           planId,
-          billingPeriod,
         },
       });
 
@@ -130,16 +107,6 @@ export default function SelectPlan() {
           <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 text-accent font-semibold text-sm">
             🎉 Your first month is only $1 on any plan
           </div>
-        </motion.div>
-
-        {/* Billing Toggle */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex justify-center mb-8"
-        >
-          <BillingToggle value={billingPeriod} onChange={setBillingPeriod} discountPercent={25} />
         </motion.div>
 
         {/* Loading State */}
@@ -205,7 +172,7 @@ export default function SelectPlan() {
                           tier.is_popular ? "text-primary-foreground" : "text-foreground"
                         }`}
                       >
-                        ${formatPrice(getDisplayPrice(tier))}
+                        ${formatPrice(tier.price_cents)}
                       </span>
                       <span
                         className={`text-sm ${
@@ -215,32 +182,13 @@ export default function SelectPlan() {
                         /mo
                       </span>
                     </div>
-                    {billingPeriod === "yearly" ? (
-                      <div className="mt-1">
-                        <p
-                          className={`text-xs ${
-                            tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
-                          }`}
-                        >
-                          ${formatPrice(getAnnualTotal(tier))}/year billed upfront
-                        </p>
-                        {getAnnualSavings(tier) > 0 && (
-                          <p className={`text-xs font-semibold mt-0.5 ${
-                            tier.is_popular ? "text-accent" : "text-success"
-                          }`}>
-                            Save ${formatPrice(getAnnualSavings(tier))}/year
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p
-                        className={`text-xs mt-1 ${
-                          tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
-                        }`}
-                      >
-                        billed monthly
-                      </p>
-                    )}
+                    <p
+                      className={`text-xs mt-1 ${
+                        tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
+                      }`}
+                    >
+                      billed monthly
+                    </p>
                   </div>
 
                   {/* Credits */}

@@ -12,39 +12,34 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-CHECKOUT-TRIAL] ${step}${detailsStr}`);
 };
 
-// Plan configurations - monthly is 25% higher than yearly
+// Plan configurations - monthly only
 const PLAN_CONFIG: Record<string, { 
   name: string; 
   monthlyPrice: number;
-  yearlyPrice: number;
   credits: number;
   description: string;
 }> = {
   core: { 
     name: 'Core', 
-    monthlyPrice: 3700,  // $37/mo
-    yearlyPrice: 2900,   // $29/mo billed yearly (25% off)
+    monthlyPrice: 2900,  // $29/mo
     credits: 250,
     description: 'AI-powered after-hours call handling'
   },
   growth: { 
     name: 'Growth', 
-    monthlyPrice: 12500, // $125/mo
-    yearlyPrice: 9900,   // $99/mo billed yearly (25% off)
+    monthlyPrice: 9900, // $99/mo
     credits: 600,
     description: 'For growing service businesses'
   },
   pro: { 
     name: 'Pro', 
-    monthlyPrice: 24900, // $249/mo
-    yearlyPrice: 19900,  // $199/mo billed yearly (25% off)
+    monthlyPrice: 19900, // $199/mo
     credits: 1400,
     description: 'For high-volume operations'
   },
   business: { 
     name: 'Business', 
-    monthlyPrice: 62500, // $625/mo
-    yearlyPrice: 49900,  // $499/mo billed yearly (25% off)
+    monthlyPrice: 49900, // $499/mo
     credits: 3000,
     description: 'For multi-location businesses'
   },
@@ -78,22 +73,18 @@ serve(async (req) => {
 
     // Parse request body for plan selection
     let planId = 'growth'; // default plan
-    let billingPeriod = 'monthly';
     
     try {
       const body = await req.json();
       if (body.planId && PLAN_CONFIG[body.planId]) {
         planId = body.planId;
       }
-      if (body.billingPeriod === 'yearly') {
-        billingPeriod = 'yearly';
-      }
     } catch {
       // Use defaults
     }
 
     const planConfig = PLAN_CONFIG[planId];
-    logStep("Plan selected", { planId, billingPeriod, config: planConfig });
+    logStep("Plan selected", { planId, config: planConfig });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
@@ -118,21 +109,13 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
-    // Strategy: Use a simple monthly subscription for first month at $1
-    // Then after checkout, we'll use subscription schedule to transition to regular pricing
-    // This shows clearly: "$1.00 today, then $X/mo (or $X/year) after 30 days"
-    
+    // Simple monthly billing: $1 first month, then regular monthly price
     const firstMonthPrice = 100; // $1
-    const regularAmount = billingPeriod === 'yearly' 
-      ? planConfig.yearlyPrice * 12  // e.g., $199 × 12 = $2388 annually
-      : planConfig.monthlyPrice;     // e.g., $249 monthly
+    const regularMonthlyPrice = planConfig.monthlyPrice;
     
     logStep("Pricing calculated", { 
-      billingPeriod, 
       firstMonthPrice,
-      regularAmount, 
-      yearlyPerMonth: planConfig.yearlyPrice,
-      monthlyPrice: planConfig.monthlyPrice,
+      regularMonthlyPrice, 
     });
 
     // Create a product for this plan if it doesn't exist
@@ -168,25 +151,23 @@ serve(async (req) => {
     });
     logStep("Created first month price", { priceId: firstMonthPriceObj.id });
 
-    // Create the regular price
+    // Create the regular monthly price
     const regularPriceObj = await stripe.prices.create({
       product: product.id,
-      unit_amount: regularAmount,
+      unit_amount: regularMonthlyPrice,
       currency: 'usd',
       recurring: {
-        interval: billingPeriod === 'yearly' ? 'year' : 'month',
+        interval: 'month',
         interval_count: 1,
       },
       metadata: {
         type: 'regular',
         plan_id: planId,
-        billing_period: billingPeriod,
       }
     });
     logStep("Created regular price", { priceId: regularPriceObj.id });
 
-    // Use checkout session with subscription_data to set up a subscription schedule
-    // This creates a clear flow: pay $1 now, regular billing starts after 1 month
+    // Create checkout session with $1 first month, then regular monthly billing
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
@@ -200,12 +181,11 @@ serve(async (req) => {
         metadata: {
           supabase_user_id: user.id,
           plan_id: planId,
-          billing_period: billingPeriod,
           credits: planConfig.credits.toString(),
-          regular_price_id: regularPriceObj.id, // Store for webhook to use
-          switch_to_regular: 'true', // Flag for webhook
+          regular_price_id: regularPriceObj.id,
+          switch_to_regular: 'true',
         },
-        description: `$1 first month, then $${(regularAmount / 100).toFixed(0)}/${billingPeriod === 'yearly' ? 'year' : 'month'} after 30 days`,
+        description: `$1 first month, then $${(regularMonthlyPrice / 100).toFixed(0)}/month`,
       },
       success_url: `${origin}/onboarding/phone?checkout=success`,
       cancel_url: `${origin}/onboarding/select-plan?checkout=cancelled`,
@@ -213,7 +193,6 @@ serve(async (req) => {
       metadata: {
         supabase_user_id: user.id,
         plan: planId,
-        billing_period: billingPeriod,
         regular_price_id: regularPriceObj.id,
       },
     });
@@ -222,9 +201,8 @@ serve(async (req) => {
       sessionId: session.id, 
       url: session.url,
       planId,
-      billingPeriod,
       firstMonthCharge: firstMonthPrice,
-      regularPrice: regularAmount,
+      regularPrice: regularMonthlyPrice,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {
