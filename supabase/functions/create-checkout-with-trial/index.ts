@@ -12,7 +12,7 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-CHECKOUT-TRIAL] ${step}${detailsStr}`);
 };
 
-// Plan configurations with Stripe price IDs
+// Plan configurations - monthly is 25% higher than yearly
 const PLAN_CONFIG: Record<string, { 
   name: string; 
   monthlyPrice: number;
@@ -22,29 +22,29 @@ const PLAN_CONFIG: Record<string, {
 }> = {
   core: { 
     name: 'Core', 
-    monthlyPrice: 2900,  // $29
-    yearlyPrice: 2175,   // $21.75/mo billed yearly
+    monthlyPrice: 3700,  // $37/mo
+    yearlyPrice: 2900,   // $29/mo billed yearly (25% off)
     credits: 250,
     description: 'AI-powered after-hours call handling'
   },
   growth: { 
     name: 'Growth', 
-    monthlyPrice: 9900,  // $99
-    yearlyPrice: 7425,   // $74.25/mo billed yearly
+    monthlyPrice: 12500, // $125/mo
+    yearlyPrice: 9900,   // $99/mo billed yearly (25% off)
     credits: 600,
     description: 'For growing service businesses'
   },
   pro: { 
     name: 'Pro', 
-    monthlyPrice: 19900, // $199
-    yearlyPrice: 14925,  // $149.25/mo billed yearly
+    monthlyPrice: 24900, // $249/mo
+    yearlyPrice: 19900,  // $199/mo billed yearly (25% off)
     credits: 1400,
     description: 'For high-volume operations'
   },
   business: { 
     name: 'Business', 
-    monthlyPrice: 49900, // $499
-    yearlyPrice: 37425,  // $374.25/mo billed yearly
+    monthlyPrice: 62500, // $625/mo
+    yearlyPrice: 49900,  // $499/mo billed yearly (25% off)
     credits: 3000,
     description: 'For multi-location businesses'
   },
