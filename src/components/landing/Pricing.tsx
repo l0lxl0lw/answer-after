@@ -20,6 +20,20 @@ export function Pricing() {
     return billingPeriod === "yearly" ? tier.yearly_price_cents : tier.price_cents;
   };
 
+  // Calculate annual savings when choosing yearly over monthly
+  const getAnnualSavings = (tier: NonNullable<typeof tiers>[number]) => {
+    if (tier.plan_id === "enterprise" || !tier.yearly_price_cents) return 0;
+    const monthlyAnnualCost = (tier.price_cents || 0) * 12;
+    const yearlyAnnualCost = (tier.yearly_price_cents || 0) * 12;
+    return monthlyAnnualCost - yearlyAnnualCost;
+  };
+
+  // Get the total annual cost for yearly billing
+  const getAnnualTotal = (tier: NonNullable<typeof tiers>[number]) => {
+    if (tier.plan_id === "enterprise") return 0;
+    return (tier.yearly_price_cents || 0) * 12;
+  };
+
   const isEnterprise = (planId: string) => planId === "enterprise";
   const isBusiness = (planId: string) => planId === "business";
 
@@ -136,11 +150,26 @@ export function Pricing() {
                             /mo
                           </span>
                         </div>
-                        {billingPeriod === "yearly" && (
+                        {billingPeriod === "yearly" ? (
+                          <div className="mt-1">
+                            <p className={`text-xs ${
+                              tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
+                            }`}>
+                              ${formatPrice(getAnnualTotal(tier))}/year billed upfront
+                            </p>
+                            {getAnnualSavings(tier) > 0 && (
+                              <p className={`text-xs font-semibold mt-0.5 ${
+                                tier.is_popular ? "text-accent" : "text-success"
+                              }`}>
+                                Save ${formatPrice(getAnnualSavings(tier))}/year
+                              </p>
+                            )}
+                          </div>
+                        ) : (
                           <p className={`text-xs mt-1 ${
                             tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
                           }`}>
-                            billed annually
+                            billed monthly
                           </p>
                         )}
                       </>

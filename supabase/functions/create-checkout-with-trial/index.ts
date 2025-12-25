@@ -132,27 +132,38 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
     // Calculate the unit amount based on billing period
-    const unitAmount = billingPeriod === 'yearly' ? planConfig.yearlyPrice : planConfig.monthlyPrice;
+    // For yearly: charge the full annual amount upfront (monthly rate × 12)
+    // For monthly: charge the monthly amount
+    const unitAmount = billingPeriod === 'yearly' 
+      ? planConfig.yearlyPrice * 12  // e.g., $29 × 12 = $348 annually
+      : planConfig.monthlyPrice;     // e.g., $37 monthly
     const interval = billingPeriod === 'yearly' ? 'year' : 'month';
     
-    // For $1 first month promo:
-    // We'll use subscription_data with trial and then charge $1 immediately using a separate payment
-    // OR use Stripe's coupon system with amount_off
-    
-    // Better approach: Use trial_period_days=30 and set the trial_end to charge $1 upfront
-    // Actually, cleanest is: Create coupon that gives ($price - $1) off for first period
+    logStep("Pricing calculated", { 
+      billingPeriod, 
+      unitAmount, 
+      yearlyPerMonth: planConfig.yearlyPrice,
+      monthlyPrice: planConfig.monthlyPrice,
+      annualTotal: planConfig.yearlyPrice * 12,
+      monthlyAnnualTotal: planConfig.monthlyPrice * 12,
+      savings: (planConfig.monthlyPrice * 12) - (planConfig.yearlyPrice * 12)
+    });
 
-    // Create a dynamic coupon for this specific checkout that discounts to $1
+    // Create a dynamic coupon for $1 first period promo
+    // Discount is the full amount minus $1
     const discountAmount = unitAmount - 100; // Price minus $1 (100 cents)
     
     const dynamicCoupon = await stripe.coupons.create({
       amount_off: discountAmount,
       currency: 'usd',
       duration: 'once',
-      name: `First Month $1 - ${planConfig.name}`,
+      name: billingPeriod === 'yearly' 
+        ? `First Year $1 - ${planConfig.name}` 
+        : `First Month $1 - ${planConfig.name}`,
       metadata: {
-        type: 'first_month_promo',
+        type: 'first_period_promo',
         plan_id: planId,
+        billing_period: billingPeriod,
       }
     });
     logStep("Created dynamic coupon", { couponId: dynamicCoupon.id, discountAmount });
