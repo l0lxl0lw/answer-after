@@ -139,19 +139,21 @@ serve(async (req) => {
         throw new Error('SMS service not configured');
       }
 
-      // Use Twilio to send SMS
-      const twilioEndpoint = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+      const TWILIO_VERIFY_SERVICE_SID = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
+      
+      if (!TWILIO_VERIFY_SERVICE_SID) {
+        throw new Error('Twilio Verify Service not configured. Please add TWILIO_VERIFY_SERVICE_SID secret.');
+      }
+
+      // Use Twilio Verify API for proper SMS verification
+      const twilioAuth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+      const verifyEndpoint = `https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SERVICE_SID}/Verifications`;
       
       const formData = new URLSearchParams();
       formData.append('To', phone);
-      formData.append('From', '+18885551234'); // We'll use the master account messaging service
-      formData.append('Body', `Your AnswerAfter verification code is: ${code}. It expires in 10 minutes.`);
-
-      // Use Twilio Verify Service instead for better deliverability
-      // For now, we'll use a simpler approach with messaging service
-      const twilioAuth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+      formData.append('Channel', 'sms');
       
-      const smsResponse = await fetch(twilioEndpoint, {
+      const smsResponse = await fetch(verifyEndpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Basic ${twilioAuth}`,
@@ -162,11 +164,11 @@ serve(async (req) => {
 
       if (!smsResponse.ok) {
         const smsError = await smsResponse.text();
-        logStep('Error sending SMS', { error: smsError });
+        logStep('Error sending SMS via Verify', { error: smsError });
         throw new Error('Failed to send verification SMS');
       }
 
-      logStep('SMS sent successfully', { to: '***' + phone.slice(-4) });
+      logStep('SMS sent successfully via Twilio Verify', { to: '***' + phone.slice(-4) });
     }
 
     return new Response(
