@@ -109,13 +109,16 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
-    // Simple monthly billing: $1 first month, then regular monthly price
-    const firstMonthPrice = 100; // $1
+    // Strategy: Use regular monthly price with a coupon that reduces first month to $1
+    // This shows: $29/mo with -$28 coupon = $1 due today
+    const firstMonthTargetPrice = 100; // $1
     const regularMonthlyPrice = planConfig.monthlyPrice;
+    const discountAmount = regularMonthlyPrice - firstMonthTargetPrice; // e.g., $29 - $1 = $28
     
     logStep("Pricing calculated", { 
-      firstMonthPrice,
-      regularMonthlyPrice, 
+      firstMonthTargetPrice,
+      regularMonthlyPrice,
+      discountAmount,
     });
 
     // Create a product for this plan if it doesn't exist
@@ -135,22 +138,6 @@ serve(async (req) => {
       logStep("Created product", { productId: product.id });
     }
 
-    // Create the $1 first month price
-    const firstMonthPriceObj = await stripe.prices.create({
-      product: product.id,
-      unit_amount: firstMonthPrice,
-      currency: 'usd',
-      recurring: {
-        interval: 'month',
-        interval_count: 1,
-      },
-      metadata: {
-        type: 'first_month_promo',
-        plan_id: planId,
-      }
-    });
-    logStep("Created first month price", { priceId: firstMonthPriceObj.id });
-
     // Create the regular monthly price
     const regularPriceObj = await stripe.prices.create({
       product: product.id,
@@ -167,14 +154,32 @@ serve(async (req) => {
     });
     logStep("Created regular price", { priceId: regularPriceObj.id });
 
-    // Create checkout session with $1 first month, then regular monthly billing
+    // Create a coupon that discounts to $1 for the first month only
+    const coupon = await stripe.coupons.create({
+      amount_off: discountAmount,
+      currency: 'usd',
+      duration: 'once', // Only applies to first invoice
+      name: `$1 First Month - ${planConfig.name}`,
+      metadata: {
+        type: 'first_month_promo',
+        plan_id: planId,
+      }
+    });
+    logStep("Created coupon", { couponId: coupon.id, discountAmount });
+
+    // Create checkout session with regular price + coupon for first month discount
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
         {
-          price: firstMonthPriceObj.id,
+          price: regularPriceObj.id,
           quantity: 1,
         },
+      ],
+      discounts: [
+        {
+          coupon: coupon.id,
+        }
       ],
       mode: "subscription",
       subscription_data: {
@@ -182,10 +187,7 @@ serve(async (req) => {
           supabase_user_id: user.id,
           plan_id: planId,
           credits: planConfig.credits.toString(),
-          regular_price_id: regularPriceObj.id,
-          switch_to_regular: 'true',
         },
-        description: `$1 first month, then $${(regularMonthlyPrice / 100).toFixed(0)}/month`,
       },
       success_url: `${origin}/onboarding/phone?checkout=success`,
       cancel_url: `${origin}/onboarding/select-plan?checkout=cancelled`,
@@ -193,7 +195,6 @@ serve(async (req) => {
       metadata: {
         supabase_user_id: user.id,
         plan: planId,
-        regular_price_id: regularPriceObj.id,
       },
     });
 
@@ -201,8 +202,9 @@ serve(async (req) => {
       sessionId: session.id, 
       url: session.url,
       planId,
-      firstMonthCharge: firstMonthPrice,
       regularPrice: regularMonthlyPrice,
+      couponDiscount: discountAmount,
+      firstMonthTotal: firstMonthTargetPrice,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {
