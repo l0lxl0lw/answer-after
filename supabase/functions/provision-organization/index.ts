@@ -46,9 +46,10 @@ serve(async (req) => {
 
     logStep('User authenticated', { userId: user.id, email: user.email });
 
-    // Get organization name and notification phone from user metadata or request body
+    // Get organization name, notification phone, and timezone from user metadata or request body
     let organizationName = user.user_metadata?.organization_name;
     let notificationPhone: string | null = null;
+    let timezone = 'America/New_York'; // Default timezone
     
     // Try to get from request body if not in metadata
     try {
@@ -59,6 +60,9 @@ serve(async (req) => {
       if (body.notificationPhone) {
         notificationPhone = body.notificationPhone;
       }
+      if (body.timezone) {
+        timezone = body.timezone;
+      }
     } catch {
       // No body or invalid JSON, continue with metadata
     }
@@ -67,7 +71,7 @@ serve(async (req) => {
       organizationName = `${user.email?.split('@')[0]}'s Organization`;
     }
 
-    logStep('Organization name', { organizationName, hasPhone: !!notificationPhone });
+    logStep('Organization name', { organizationName, hasPhone: !!notificationPhone, timezone });
 
     // Check if user already has an organization
     const { data: existingProfile } = await supabaseAdmin
@@ -118,7 +122,7 @@ serve(async (req) => {
       .insert({
         name: organizationName,
         slug,
-        timezone: 'America/New_York',
+        timezone: timezone,
         notification_email: user.email,
         notification_phone: notificationPhone,
       })
