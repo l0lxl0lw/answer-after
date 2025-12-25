@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, CreditCard } from "lucide-react";
+import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 // Validation schemas
 const loginSchema = z.object({
@@ -45,6 +46,11 @@ const signupSchema = z
       .min(1, { message: "Email is required" })
       .email({ message: "Please enter a valid email address" })
       .max(255, { message: "Email must be less than 255 characters" }),
+    phone: z
+      .string()
+      .trim()
+      .min(1, { message: "Phone number is required" })
+      .regex(/^\+?[1-9]\d{9,14}$/, { message: "Please enter a valid phone number (e.g., +15551234567)" }),
     password: z
       .string()
       .min(1, { message: "Password is required" })
@@ -63,6 +69,8 @@ const signupSchema = z
 type LoginFormData = z.infer<typeof loginSchema>;
 type SignupFormData = z.infer<typeof signupSchema>;
 
+type SignupStep = 'form' | 'verify-email' | 'verify-phone' | 'complete';
+
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,6 +86,15 @@ const Auth = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  
+  // Signup flow state
+  const [signupStep, setSignupStep] = useState<SignupStep>('form');
+  const [signupData, setSignupData] = useState<SignupFormData | null>(null);
+  const [emailCode, setEmailCode] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/dashboard";
 
@@ -87,6 +104,14 @@ const Auth = () => {
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, navigate, from]);
+
+  // Resend countdown timer
+  useEffect(() => {
+    if (resendCountdown > 0) {
+      const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCountdown]);
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -102,6 +127,7 @@ const Auth = () => {
       name: "",
       organizationName: "",
       email: "",
+      phone: "",
       password: "",
       confirmPassword: "",
     },
@@ -177,10 +203,96 @@ const Auth = () => {
     }
   };
 
-  const onSignup = async (data: SignupFormData) => {
+  const sendVerificationCode = async (type: 'email' | 'phone', value: string) => {
+    setIsSendingCode(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-verification', {
+        body: { type, [type]: value }
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Failed to send code');
+      }
+
+      toast({
+        title: "Code sent!",
+        description: `We've sent a verification code to your ${type === 'email' ? 'email' : 'phone'}.`,
+      });
+      setResendCountdown(60);
+    } catch (error: any) {
+      toast({
+        title: "Failed to send code",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const verifyCode = async (type: 'email' | 'phone', code: string, value: string): Promise<boolean> => {
+    setIsVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-code', {
+        body: { type, code, [type]: value }
+      });
+
+      if (error || !data?.success) {
+        toast({
+          title: "Invalid code",
+          description: data?.error || "Please check the code and try again.",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error: any) {
+      toast({
+        title: "Verification failed",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const onSignupFormSubmit = async (data: SignupFormData) => {
+    setSignupData(data);
+    // Start with email verification
+    await sendVerificationCode('email', data.email);
+    setSignupStep('verify-email');
+  };
+
+  const handleEmailVerification = async () => {
+    if (!signupData || emailCode.length !== 6) return;
+    
+    const verified = await verifyCode('email', emailCode, signupData.email);
+    if (verified) {
+      // Now verify phone
+      await sendVerificationCode('phone', signupData.phone);
+      setSignupStep('verify-phone');
+    }
+  };
+
+  const handlePhoneVerification = async () => {
+    if (!signupData || phoneCode.length !== 6) return;
+    
+    const verified = await verifyCode('phone', phoneCode, signupData.phone);
+    if (verified) {
+      // Both verified, complete signup
+      await completeSignup();
+    }
+  };
+
+  const completeSignup = async () => {
+    if (!signupData) return;
+    
     setIsLoading(true);
     try {
-      const result = await signup(data.email, data.password, data.name, data.organizationName);
+      const result = await signup(signupData.email, signupData.password, signupData.name, signupData.organizationName);
       
       if (result.error) {
         toast({
@@ -188,6 +300,7 @@ const Auth = () => {
           description: result.error,
           variant: "destructive",
         });
+        setSignupStep('form');
         setIsLoading(false);
         return;
       }
@@ -201,7 +314,7 @@ const Auth = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       
       if (sessionData.session) {
-        // First, provision the organization (creates org, subscription, role, Twilio)
+        // First, provision the organization with phone number for notifications
         const { data: provisionData, error: provisionError } = await supabase.functions.invoke(
           'provision-organization',
           {
@@ -209,7 +322,8 @@ const Auth = () => {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
             body: {
-              organizationName: data.organizationName,
+              organizationName: signupData.organizationName,
+              notificationPhone: signupData.phone,
             },
           }
         );
@@ -263,10 +377,110 @@ const Auth = () => {
         description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
+      setSignupStep('form');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const renderVerificationStep = (
+    type: 'email' | 'phone',
+    code: string,
+    setCode: (value: string) => void,
+    onVerify: () => void,
+    value: string
+  ) => (
+    <motion.div
+      key={`verify-${type}`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-6"
+    >
+      <button
+        type="button"
+        onClick={() => setSignupStep(type === 'email' ? 'form' : 'verify-email')}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back
+      </button>
+
+      <div className="text-center space-y-2">
+        <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+          {type === 'email' ? (
+            <Mail className="w-8 h-8 text-primary" />
+          ) : (
+            <Phone className="w-8 h-8 text-primary" />
+          )}
+        </div>
+        <h2 className="text-xl font-semibold">
+          Verify your {type === 'email' ? 'email' : 'phone number'}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          We sent a 6-digit code to{' '}
+          <span className="font-medium text-foreground">
+            {type === 'email' ? value : `***${value.slice(-4)}`}
+          </span>
+        </p>
+      </div>
+
+      <div className="flex justify-center">
+        <InputOTP
+          maxLength={6}
+          value={code}
+          onChange={setCode}
+        >
+          <InputOTPGroup>
+            <InputOTPSlot index={0} />
+            <InputOTPSlot index={1} />
+            <InputOTPSlot index={2} />
+            <InputOTPSlot index={3} />
+            <InputOTPSlot index={4} />
+            <InputOTPSlot index={5} />
+          </InputOTPGroup>
+        </InputOTP>
+      </div>
+
+      <Button
+        type="button"
+        variant="hero"
+        size="lg"
+        className="w-full"
+        disabled={code.length !== 6 || isVerifying}
+        onClick={onVerify}
+      >
+        {isVerifying ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Verifying...
+          </>
+        ) : (
+          <>
+            Verify & Continue
+            <ArrowRight className="w-5 h-5" />
+          </>
+        )}
+      </Button>
+
+      <p className="text-center text-sm text-muted-foreground">
+        Didn't receive the code?{' '}
+        {resendCountdown > 0 ? (
+          <span>Resend in {resendCountdown}s</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => sendVerificationCode(type, value)}
+            disabled={isSendingCode}
+            className="text-primary hover:underline font-medium"
+          >
+            {isSendingCode ? 'Sending...' : 'Resend'}
+          </button>
+        )}
+      </p>
+    </motion.div>
+  );
 
   return (
     <div className="min-h-screen flex">
@@ -291,38 +505,61 @@ const Auth = () => {
           {/* Header */}
           <div className="mb-8">
             <h1 className="font-display text-3xl font-bold mb-2">
-              {isLogin ? "Welcome back" : "Create your account"}
+              {isLogin 
+                ? "Welcome back" 
+                : signupStep === 'form' 
+                  ? "Create your account"
+                  : signupStep === 'verify-email'
+                    ? "Verify your email"
+                    : signupStep === 'verify-phone'
+                      ? "Verify your phone"
+                      : "Almost done!"
+              }
             </h1>
             <p className="text-muted-foreground">
               {isLogin
                 ? "Enter your credentials to access your dashboard"
-                : "Start capturing every after-hours opportunity"}
+                : signupStep === 'form'
+                  ? "Start capturing every after-hours opportunity"
+                  : "Enter the verification code to continue"
+              }
             </p>
           </div>
 
-          {/* Tab Switcher */}
-          <div className="flex bg-muted rounded-lg p-1 mb-8">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
-                isLogin
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Log In
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
-                !isLogin
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
+          {/* Tab Switcher - only show on form step */}
+          {signupStep === 'form' && (
+            <div className="flex bg-muted rounded-lg p-1 mb-8">
+              <button
+                onClick={() => setIsLogin(true)}
+                className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
+                  isLogin
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Log In
+              </button>
+              <button
+                onClick={() => setIsLogin(false)}
+                className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
+                  !isLogin
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+          )}
+
+          {/* Progress indicator for signup */}
+          {!isLogin && signupStep !== 'form' && (
+            <div className="flex items-center gap-2 mb-8">
+              <div className={`flex-1 h-1 rounded-full ${signupStep === 'verify-email' || signupStep === 'verify-phone' || signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
+              <div className={`flex-1 h-1 rounded-full ${signupStep === 'verify-phone' || signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
+              <div className={`flex-1 h-1 rounded-full ${signupStep === 'complete' ? 'bg-primary' : 'bg-muted'}`} />
+            </div>
+          )}
 
           {/* Forms */}
           <AnimatePresence mode="wait">
@@ -418,14 +655,14 @@ const Auth = () => {
                   )}
                 </Button>
               </motion.form>
-            ) : (
+            ) : signupStep === 'form' ? (
               <motion.form
                 key="signup"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                onSubmit={signupForm.handleSubmit(onSignup)}
+                onSubmit={signupForm.handleSubmit(onSignupFormSubmit)}
                 className="space-y-5"
               >
                 {/* Name */}
@@ -468,6 +705,7 @@ const Auth = () => {
                   )}
                 </div>
 
+                {/* Email */}
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Work Email</Label>
                   <div className="relative">
@@ -485,6 +723,29 @@ const Auth = () => {
                       {signupForm.formState.errors.email.message}
                     </p>
                   )}
+                </div>
+
+                {/* Phone */}
+                <div className="space-y-2">
+                  <Label htmlFor="signup-phone">Phone Number</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Input
+                      id="signup-phone"
+                      type="tel"
+                      placeholder="+15551234567"
+                      className="pl-10 h-12"
+                      {...signupForm.register("phone")}
+                    />
+                  </div>
+                  {signupForm.formState.errors.phone && (
+                    <p className="text-sm text-destructive">
+                      {signupForm.formState.errors.phone.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Include country code (e.g., +1 for US)
+                  </p>
                 </div>
 
                 {/* Password */}
@@ -576,34 +837,40 @@ const Auth = () => {
                   variant="hero"
                   size="lg"
                   className="w-full"
-                  disabled={isLoading}
+                  disabled={isLoading || isSendingCode}
                 >
-                  {isLoading ? (
+                  {isSendingCode ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Creating account...
+                      Sending verification...
                     </>
                   ) : (
                     <>
-                      Create Account
+                      Continue
                       <ArrowRight className="w-5 h-5" />
                     </>
                   )}
                 </Button>
               </motion.form>
-            )}
+            ) : signupStep === 'verify-email' && signupData ? (
+              renderVerificationStep('email', emailCode, setEmailCode, handleEmailVerification, signupData.email)
+            ) : signupStep === 'verify-phone' && signupData ? (
+              renderVerificationStep('phone', phoneCode, setPhoneCode, handlePhoneVerification, signupData.phone)
+            ) : null}
           </AnimatePresence>
 
           {/* Footer */}
-          <p className="mt-8 text-center text-sm text-muted-foreground">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-primary font-medium hover:underline"
-            >
-              {isLogin ? "Sign up" : "Log in"}
-            </button>
-          </p>
+          {signupStep === 'form' && (
+            <p className="mt-8 text-center text-sm text-muted-foreground">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                onClick={() => setIsLogin(!isLogin)}
+                className="text-primary font-medium hover:underline"
+              >
+                {isLogin ? "Sign up" : "Log in"}
+              </button>
+            </p>
+          )}
         </motion.div>
       </div>
 

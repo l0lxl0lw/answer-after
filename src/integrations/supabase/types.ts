@@ -485,33 +485,39 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           email: string
+          email_verified: boolean
           full_name: string
           id: string
           is_active: boolean
           organization_id: string | null
           phone: string | null
+          phone_verified: boolean
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           email: string
+          email_verified?: boolean
           full_name: string
           id: string
           is_active?: boolean
           organization_id?: string | null
           phone?: string | null
+          phone_verified?: boolean
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           email?: string
+          email_verified?: boolean
           full_name?: string
           id?: string
           is_active?: boolean
           organization_id?: string | null
           phone?: string | null
+          phone_verified?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -768,6 +774,42 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      verification_codes: {
+        Row: {
+          code: string
+          created_at: string
+          email: string | null
+          expires_at: string
+          id: string
+          phone: string | null
+          type: string
+          user_id: string | null
+          verified_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          email?: string | null
+          expires_at: string
+          id?: string
+          phone?: string | null
+          type: string
+          user_id?: string | null
+          verified_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          phone?: string | null
+          type?: string
+          user_id?: string | null
+          verified_at?: string | null
         }
         Relationships: []
       }

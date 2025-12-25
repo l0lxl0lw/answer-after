@@ -46,14 +46,18 @@ serve(async (req) => {
 
     logStep('User authenticated', { userId: user.id, email: user.email });
 
-    // Get organization name from user metadata or request body
+    // Get organization name and notification phone from user metadata or request body
     let organizationName = user.user_metadata?.organization_name;
+    let notificationPhone: string | null = null;
     
     // Try to get from request body if not in metadata
     try {
       const body = await req.json();
       if (body.organizationName) {
         organizationName = body.organizationName;
+      }
+      if (body.notificationPhone) {
+        notificationPhone = body.notificationPhone;
       }
     } catch {
       // No body or invalid JSON, continue with metadata
@@ -63,7 +67,7 @@ serve(async (req) => {
       organizationName = `${user.email?.split('@')[0]}'s Organization`;
     }
 
-    logStep('Organization name', { organizationName });
+    logStep('Organization name', { organizationName, hasPhone: !!notificationPhone });
 
     // Check if user already has an organization
     const { data: existingProfile } = await supabaseAdmin
@@ -116,6 +120,7 @@ serve(async (req) => {
         slug,
         timezone: 'America/New_York',
         notification_email: user.email,
+        notification_phone: notificationPhone,
       })
       .select()
       .single();
