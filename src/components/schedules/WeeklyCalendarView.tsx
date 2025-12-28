@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { WeekSchedule } from '@/components/settings/BusinessHoursSchedule';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useGoogleConnectionGuard } from '@/hooks/useGoogleConnectionGuard';

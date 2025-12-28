@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useGoogleCalendarConnection } from '@/hooks/useGoogleCalendarConnection';
 import { toast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 
 export default function Integrations() {
   const location = useLocation();
