@@ -50,6 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserData = useCallback(async (userId: string): Promise<AuthUser | null> => {
     try {
+      console.log('[AuthContext] Fetching user data for:', userId);
+
       // Fetch profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -57,10 +59,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .maybeSingle();
 
-      if (profileError || !profile) {
-        console.error('Error fetching profile:', profileError);
+      if (profileError) {
+        console.error('[AuthContext] Error fetching profile:', profileError);
         return null;
       }
+
+      if (!profile) {
+        console.error('[AuthContext] No profile found for user:', userId);
+        return null;
+      }
+
+      console.log('[AuthContext] Profile fetched:', profile);
 
       // Fetch role
       const { data: roleData, error: roleError } = await supabase
@@ -69,7 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
+      if (roleError) {
+        console.warn('[AuthContext] Error fetching role:', roleError);
+      }
+
       const role: UserRole = (roleData?.role as UserRole) || 'staff';
+      console.log('[AuthContext] User role:', role);
 
       // Fetch organization if exists
       let organization: Organization | null = null;
@@ -79,11 +93,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('id', profile.organization_id)
           .maybeSingle();
-        
+
         organization = orgData;
+        console.log('[AuthContext] Organization:', organization);
+      } else {
+        console.log('[AuthContext] No organization_id in profile');
       }
 
-      return {
+      const userData = {
         id: profile.id,
         email: profile.email,
         full_name: profile.full_name,
@@ -91,25 +108,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization_id: profile.organization_id,
         organization,
       };
+
+      console.log('[AuthContext] User data assembled:', userData);
+      return userData;
     } catch (error) {
-      console.error('Error in fetchUserData:', error);
+      console.error('[AuthContext] Error in fetchUserData:', error);
       return null;
     }
   }, []);
 
   // Set up auth state listener
   useEffect(() => {
+    console.log('[AuthContext] Setting up auth state listener');
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
+        console.log('[AuthContext] Auth state changed:', event, 'Session:', !!newSession);
         setSession(newSession);
-        
+
         if (newSession?.user) {
+          console.log('[AuthContext] New session user detected, fetching user data');
           // Defer profile fetch to avoid deadlock
           setTimeout(() => {
-            fetchUserData(newSession.user.id).then(setUser);
+            fetchUserData(newSession.user.id).then((userData) => {
+              console.log('[AuthContext] User data set from auth change:', userData);
+              setUser(userData);
+            });
           }, 0);
         } else {
+          console.log('[AuthContext] No session user, clearing user data');
           setUser(null);
         }
       }
@@ -117,9 +145,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      console.log('[AuthContext] Initial session check:', !!existingSession);
       setSession(existingSession);
       if (existingSession?.user) {
         fetchUserData(existingSession.user.id).then((userData) => {
+          console.log('[AuthContext] Initial user data loaded:', userData);
           setUser(userData);
           setIsLoading(false);
         });
@@ -133,22 +163,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
+      console.log('[AuthContext] Login attempt for:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        console.error('Login error:', error);
+        console.error('[AuthContext] Login error:', error);
         if (error.message.includes('Invalid login credentials')) {
           return { error: 'Invalid email or password. Please try again.' };
         }
         return { error: error.message };
       }
 
+      console.log('[AuthContext] Login successful, session created');
       return {};
     } catch (error: any) {
-      console.error('Login exception:', error);
+      console.error('[AuthContext] Login exception:', error);
       return { error: 'An unexpected error occurred. Please try again.' };
     }
   }, []);
@@ -190,12 +222,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }, []);
 
+  const isAuthenticated = !!user && !!session;
+
+  // Log auth state changes
+  useEffect(() => {
+    console.log('[AuthContext] Auth state:', {
+      hasUser: !!user,
+      hasSession: !!session,
+      isAuthenticated,
+      isLoading,
+      userId: user?.id,
+      userEmail: user?.email,
+    });
+  }, [user, session, isAuthenticated, isLoading]);
+
   return (
     <AuthContext.Provider value={{
       user,
       session,
       isLoading,
-      isAuthenticated: !!user && !!session,
+      isAuthenticated,
       login,
       signup,
       logout

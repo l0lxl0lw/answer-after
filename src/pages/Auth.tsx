@@ -361,12 +361,25 @@ const Auth = () => {
       
       toast({
         title: "Account created!",
-        description: "Setting up your organization...",
+        description: "Welcome to the dashboard!",
       });
 
-      // Get session for provisioning
+      // In development mode, skip Edge Function provisioning
+      // Users should manually create organization via SQL
+      const isDevelopment = import.meta.env.MODE === 'development' || !import.meta.env.PROD;
+
+      if (isDevelopment) {
+        toast({
+          title: "Development Mode",
+          description: "Please set up your organization manually via SQL.",
+        });
+        navigate(from, { replace: true });
+        return;
+      }
+
+      // Get session for provisioning (production only)
       const { data: sessionData } = await supabase.auth.getSession();
-      
+
       if (sessionData.session) {
         // First, provision the organization with phone number for notifications
         const { data: provisionData, error: provisionError } = await supabase.functions.invoke(

@@ -6,9 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "supabase:login": "supabase login",
+    "supabase:link": "supabase link --project-ref nyvzjeuugbbduybjulox",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:functions": "supabase functions serve",
+    "supabase:deploy": "supabase functions deploy --project-ref nyvzjeuugbbduybjulox",
+    "supabase:types": "supabase gen types typescript --project-id nyvzjeuugbbduybjulox > src/integrations/supabase/types.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

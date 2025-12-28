@@ -15,21 +15,25 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { toast } = useToast();
   const [isProvisioning, setIsProvisioning] = useState(false);
 
+  // Skip Edge Function requirements in development mode
+  const isDevelopment = import.meta.env.MODE === 'development' || !import.meta.env.PROD;
+
   // Check if user has incomplete signup (logged in but no organization)
-  const hasIncompleteSignup = isAuthenticated && user && !user.organization_id;
+  // Skip auto-provisioning in development mode - users should set up manually via SQL
+  const hasIncompleteSignup = !isDevelopment && isAuthenticated && user && !user.organization_id;
 
   // Fetch subscription status for users with organization
   const { data: subscription, isLoading: isLoadingSubscription } = useQuery({
     queryKey: ['subscription', user?.organization_id],
     queryFn: async () => {
       if (!user?.organization_id) return null;
-      
+
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
         .eq('organization_id', user.organization_id)
         .maybeSingle();
-      
+
       if (error) {
         console.error('Error fetching subscription:', error);
         return null;
@@ -44,8 +48,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const isSelectPlanPath = location.pathname === '/onboarding/select-plan';
   const isPhonePath = location.pathname === '/onboarding/phone';
 
-  // Check if user needs to complete subscription setup
-  const needsPlanSelection = isAuthenticated && user?.organization_id && !isLoadingSubscription && 
+  // Check if user needs to complete subscription setup (no Stripe subscription ID means checkout wasn't completed)
+  // Skip in development mode and when already on onboarding path
+  const needsPlanSelection = !isDevelopment && isAuthenticated && user?.organization_id && !isLoadingSubscription &&
     subscription && !subscription.stripe_subscription_id && !isOnboardingPath;
 
   // Handle incomplete signup (no organization)

@@ -36,6 +36,49 @@ npm i
 npm run dev
 ```
 
+## Development
+
+### Quick Start
+
+```sh
+npm install
+npm run dev
+```
+
+The app will run on http://localhost:8080 connected to your Supabase instance.
+
+### Environment Files
+
+- `.env` - Default configuration (committed)
+- `.env.local` - Local overrides (gitignored - copy from `.env.local.example`)
+
+### Working with Edge Functions
+
+**Option 1: Use Deployed Functions (Recommended)**
+
+```sh
+npm run dev
+# Frontend connects to Supabase with deployed edge functions
+```
+
+**Option 2: Run Functions Locally (Advanced)**
+
+```sh
+# Install Supabase CLI (one-time)
+npm install -g supabase
+
+# Start local Supabase stack
+npm run supabase:start
+
+# In another terminal, serve edge functions
+npm run supabase:functions
+
+# In another terminal, run frontend
+cp .env.local.example .env.local
+# Edit .env.local to point to http://localhost:54321
+npm run dev
+```
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).
