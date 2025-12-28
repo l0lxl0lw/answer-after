@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { config } from "../_shared/config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -321,8 +322,12 @@ async function handleCreateAgent(
     // Use default model
   }
 
+  // Append environment suffix to agent name
+  const baseName = `${orgData.name} - ${organizationId}`;
+  const agentName = config.appendEnvironmentSuffix(baseName);
+
   const agentConfig = {
-    name: `${orgData.name} - ${organizationId}`,
+    name: agentName,
     conversation_config: {
       agent: {
         first_message: firstMessage,

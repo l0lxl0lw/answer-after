@@ -1,15 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { config } from "../_shared/config.ts";
+import { createLogger } from "../_shared/logger.ts";
+import type { OrganizationProvisionRequest, OrganizationProvisionResponse } from "../_shared/types.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[PROVISION-ORG] ${step}${detailsStr}`);
-};
+const logger = createLogger('provision-organization');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -44,7 +44,8 @@ serve(async (req) => {
       throw new Error('Invalid or expired token');
     }
 
-    logStep('User authenticated', { userId: user.id, email: user.email });
+    const reqLogger = logger.withContext({ userId: user.id, email: user.email });
+    reqLogger.info('User authenticated');
 
     // Get organization name, notification phone, and timezone from user metadata or request body
     let organizationName = user.user_metadata?.organization_name;
@@ -71,7 +72,10 @@ serve(async (req) => {
       organizationName = `${user.email?.split('@')[0]}'s Organization`;
     }
 
-    logStep('Organization name', { organizationName, hasPhone: !!notificationPhone, timezone });
+    // Append environment suffix (e.g., "(local)" for local development)
+    organizationName = config.appendEnvironmentSuffix(organizationName);
+
+    reqLogger.info('Organization name determined', { organizationName, hasPhone: !!notificationPhone, timezone, environment: config.environment });
 
     // Check if user already has an organization
     const { data: existingProfile } = await supabaseAdmin
@@ -81,7 +85,7 @@ serve(async (req) => {
       .single();
 
     if (existingProfile?.organization_id) {
-      logStep('User already has organization', { orgId: existingProfile.organization_id });
+      reqLogger.info('User already has organization', { orgId: existingProfile.organization_id });
       
       // Return existing org info
       const { data: org } = await supabaseAdmin
@@ -115,7 +119,7 @@ serve(async (req) => {
       .replace(/(^-|-$)/g, '')
       .substring(0, 50) + '-' + user.id.substring(0, 8);
 
-    logStep('Creating organization', { slug });
+    reqLogger.step('Creating organization', { slug });
 
     const { data: newOrg, error: orgError } = await supabaseAdmin
       .from('organizations')
@@ -130,11 +134,11 @@ serve(async (req) => {
       .single();
 
     if (orgError) {
-      logStep('Error creating organization', { error: orgError });
+      reqLogger.error('Failed to create organization', orgError);
       throw new Error(`Failed to create organization: ${orgError.message}`);
     }
 
-    logStep('Organization created', { orgId: newOrg.id });
+    reqLogger.info('Organization created', { orgId: newOrg.id });
 
     // 2. Update user profile with organization_id
     const { error: profileError } = await supabaseAdmin
@@ -143,11 +147,11 @@ serve(async (req) => {
       .eq('id', user.id);
 
     if (profileError) {
-      logStep('Error updating profile', { error: profileError });
+      reqLogger.error('Failed to update profile', profileError);
       throw new Error(`Failed to update profile: ${profileError.message}`);
     }
 
-    logStep('Profile updated with organization');
+    reqLogger.step('Profile updated with organization');
 
     // 3. Create user role as owner
     const { error: roleError } = await supabaseAdmin
@@ -158,13 +162,13 @@ serve(async (req) => {
       });
 
     if (roleError) {
-      logStep('Error creating user role', { error: roleError });
+      reqLogger.error('Failed to create user role', roleError);
       throw new Error(`Failed to create user role: ${roleError.message}`);
     }
 
-    logStep('User role created as owner');
+    reqLogger.step('User role created as owner');
 
-    // 4. Create subscription (trial on starter plan)
+    // 4. Create subscription (trial on core plan)
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 30);
 
@@ -172,9 +176,9 @@ serve(async (req) => {
       .from('subscriptions')
       .insert({
         organization_id: newOrg.id,
-        plan: 'starter',
+        plan: 'core',
         status: 'trial',
-        total_credits: 1000,
+        total_credits: 250,
         used_credits: 0,
         current_period_start: new Date().toISOString(),
         current_period_end: trialEndDate.toISOString(),
@@ -183,11 +187,11 @@ serve(async (req) => {
       .single();
 
     if (subError) {
-      logStep('Error creating subscription', { error: subError });
+      reqLogger.error('Failed to create subscription', subError);
       throw new Error(`Failed to create subscription: ${subError.message}`);
     }
 
-    logStep('Subscription created', { plan: 'starter', status: 'trial' });
+    reqLogger.step('Subscription created', { plan: 'core', status: 'trial' });
 
     // 5. Create organization_agents record (placeholder - agent created after payment)
     const agentContext = JSON.stringify({
@@ -204,10 +208,9 @@ serve(async (req) => {
       });
 
     if (agentError) {
-      logStep('Error creating agent record', { error: agentError });
-      // Non-fatal, continue
+      reqLogger.warn('Error creating agent record (non-fatal)', { error: agentError.message });
     } else {
-      logStep('Organization agent record created (agent will be created after payment)');
+      reqLogger.step('Organization agent record created');
     }
 
     // Note: Twilio subaccount, phone number, and ElevenLabs agent are now created
@@ -227,7 +230,7 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep('ERROR', { message: errorMessage });
+    logger.error('Provisioning failed', error as Error);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

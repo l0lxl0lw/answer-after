@@ -39,6 +39,14 @@ export default function CalendarCallback() {
   const code = searchParams.get("code");
 
   useEffect(() => {
+    console.log("User state on mount:", {
+      userId: user?.id,
+      organizationId: user?.organization_id,
+      email: user?.email
+    });
+  }, [user]);
+
+  useEffect(() => {
     if (!code) {
       setError("No authorization code received from Google");
       setStep("error");
@@ -109,12 +117,38 @@ export default function CalendarCallback() {
   };
 
   const handleSaveConnection = async () => {
-    if (!selectedCalendar || !tokens || !user?.organization_id) {
-      toast({ 
-        title: "Missing information", 
+    console.log("Save connection called with:", {
+      selectedCalendar,
+      hasTokens: !!tokens,
+      organizationId: user?.organization_id
+    });
+
+    if (!selectedCalendar) {
+      toast({
+        title: "Missing information",
         description: "Please select a calendar to continue",
-        variant: "destructive" 
+        variant: "destructive"
       });
+      return;
+    }
+
+    if (!tokens) {
+      toast({
+        title: "Session expired",
+        description: "Please reconnect your Google Calendar",
+        variant: "destructive"
+      });
+      navigate("/dashboard/schedules/onboarding");
+      return;
+    }
+
+    if (!user?.organization_id) {
+      toast({
+        title: "Organization not found",
+        description: "Please complete your organization setup",
+        variant: "destructive"
+      });
+      navigate("/dashboard");
       return;
     }
 
@@ -203,17 +237,26 @@ export default function CalendarCallback() {
                   </div>
                 )}
 
-                <RadioGroup value={selectedCalendar} onValueChange={setSelectedCalendar}>
+                <RadioGroup
+                  value={selectedCalendar}
+                  onValueChange={(value) => {
+                    console.log("Calendar selected:", value);
+                    setSelectedCalendar(value);
+                  }}
+                >
                   <div className="space-y-3">
                     {calendars.map((cal) => (
                       <div
                         key={cal.id}
                         className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                          selectedCalendar === cal.id 
-                            ? "border-primary bg-primary/5" 
+                          selectedCalendar === cal.id
+                            ? "border-primary bg-primary/5"
                             : "border-border hover:border-primary/50"
                         }`}
-                        onClick={() => setSelectedCalendar(cal.id)}
+                        onClick={() => {
+                          console.log("Calendar clicked:", cal.id, cal.summary);
+                          setSelectedCalendar(cal.id);
+                        }}
                       >
                         <RadioGroupItem value={cal.id} id={cal.id} />
                         <div

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { config } from "../_shared/config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,13 +81,15 @@ serve(async (req) => {
     // STEP 1: Create Twilio Subaccount
     // ============================================
     logStep('Step 1: Creating Twilio subaccount');
-    
+
     let subaccountSid = org.twilio_subaccount_sid;
     let subaccountAuthToken = org.twilio_subaccount_auth_token;
 
     if (!subaccountSid) {
-      const friendlyName = `AnswerAfter-${org.name.substring(0, 20)}-${organizationId.substring(0, 8)}`;
-      
+      // Append environment suffix to Twilio subaccount name
+      const baseName = `AnswerAfter-${org.name.substring(0, 20)}-${organizationId.substring(0, 8)}`;
+      const friendlyName = config.appendEnvironmentSuffix(baseName).replace(/\s+/g, '-');
+
       const subaccountResponse = await fetch(
         'https://api.twilio.com/2010-04-01/Accounts.json',
         {

@@ -23,8 +23,12 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !ELEVENLABS_API_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 async function createElevenLabsAgent(organization: any) {
+  // Append (local) to agent name if running in local environment
+  const isLocal = SUPABASE_URL?.includes('localhost') || SUPABASE_URL?.includes('127.0.0.1');
+  const localSuffix = isLocal ? ' (local)' : '';
+
   const agentConfig = {
-    name: `${organization.name} AI Assistant`,
+    name: `${organization.name} AI Assistant${localSuffix}`,
     conversation_config: {
       agent: {
         prompt: {

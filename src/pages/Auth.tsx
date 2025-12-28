@@ -373,20 +373,7 @@ const Auth = () => {
         description: "Welcome to the dashboard!",
       });
 
-      // In development mode, skip Edge Function provisioning
-      // Users should manually create organization via SQL
-      const isDevelopment = import.meta.env.MODE === 'development' || !import.meta.env.PROD;
-
-      if (isDevelopment) {
-        toast({
-          title: "Development Mode",
-          description: "Please set up your organization manually via SQL.",
-        });
-        navigate(from, { replace: true });
-        return;
-      }
-
-      // Get session for provisioning (production only)
+      // Get session for provisioning
       const { data: sessionData } = await supabase.auth.getSession();
 
       if (sessionData.session) {
