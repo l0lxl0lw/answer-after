@@ -278,10 +278,19 @@ const Auth = () => {
         throw new Error(data?.error || error?.message || 'Failed to send code');
       }
 
-      toast({
-        title: "Code sent!",
-        description: `We've sent a verification code to your ${type === 'email' ? 'email' : 'phone'}.`,
-      });
+      // Show code in toast if in dev mode (local development)
+      if (data?.devMode && data?.code) {
+        toast({
+          title: "🔧 Dev Mode - Verification Code",
+          description: `Your code is: ${data.code}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Code sent!",
+          description: `We've sent a verification code to your ${type === 'email' ? 'email' : 'phone'}.`,
+        });
+      }
       setResendCountdown(60);
     } catch (error: any) {
       toast({

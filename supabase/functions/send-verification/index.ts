@@ -79,7 +79,21 @@ serve(async (req) => {
     // Send the verification
     if (type === 'email') {
       if (!RESEND_API_KEY) {
-        throw new Error('Email service not configured');
+        // For local development: log the code instead of sending email
+        logStep('⚠️  EMAIL SERVICE NOT CONFIGURED - VERIFICATION CODE', { code, email });
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`📧 VERIFICATION CODE FOR ${email}: ${code}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Verification code generated (check console for code)',
+            devMode: true,
+            code // Include code in response for local dev
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       const resend = new Resend(RESEND_API_KEY);

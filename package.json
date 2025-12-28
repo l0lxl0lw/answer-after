@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "echo 'Starting local development...' && supabase start && supabase functions serve & vite",
     "build": "vite build",
+    "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "supabase:login": "supabase login",
@@ -14,7 +16,8 @@
     "supabase:stop": "supabase stop",
     "supabase:functions": "supabase functions serve",
     "supabase:deploy": "supabase functions deploy --project-ref nyvzjeuugbbduybjulox",
-    "supabase:types": "supabase gen types typescript --project-id nyvzjeuugbbduybjulox > src/integrations/supabase/types.ts"
+    "supabase:types": "supabase gen types typescript --project-id nyvzjeuugbbduybjulox > src/integrations/supabase/types.ts",
+    "local": "supabase start && supabase functions serve & vite"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
