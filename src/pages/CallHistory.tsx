@@ -25,6 +25,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
+import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
 
 interface GoogleContact {
   resourceName: string;
@@ -65,6 +66,7 @@ function getStatusBadge(status: string, callSuccessful: string | null) {
 function useGoogleContacts() {
   const { user } = useAuth();
   const { checkGoogleError } = useGoogleConnectionGuard();
+  const { data: connection } = useGoogleCalendarConnection();
   
   return useQuery({
     queryKey: ["google-contacts-for-calls", user?.organization_id],
@@ -92,7 +94,7 @@ function useGoogleContacts() {
         return [];
       }
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.organization_id && !!connection,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     retry: false,
   });
