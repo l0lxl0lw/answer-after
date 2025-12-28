@@ -15,7 +15,7 @@ dist-ssr
 # Environment secrets
 .env.local
 .env.*.local
-.env
+.env*
 
 # Supabase local development
 .supabase/
