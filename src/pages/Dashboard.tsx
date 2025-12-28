@@ -26,7 +26,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase";
 
 // Raw Google Contact structure from API
 interface RawGoogleContact {

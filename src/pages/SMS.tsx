@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase";
 import { useOrganization } from "@/hooks/use-api";
 import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
 

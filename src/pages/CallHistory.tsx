@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConversations, useCalls, type Conversation } from "@/hooks/use-api";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
 
