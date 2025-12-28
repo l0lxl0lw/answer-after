@@ -6,7 +6,7 @@ export function EnvironmentBadge() {
   const url = import.meta.env.VITE_SUPABASE_URL;
 
   const getBadgeInfo = () => {
-    if (url?.includes('localhost')) {
+    if (url?.includes('localhost') || url?.includes('127.0.0.1')) {
       return { label: 'LOCAL', color: 'bg-blue-500' };
     }
     return { label: 'DEV', color: 'bg-purple-500' };
