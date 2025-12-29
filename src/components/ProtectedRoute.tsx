@@ -22,23 +22,52 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Skip auto-provisioning in development mode - users should set up manually via SQL
   const hasIncompleteSignup = !isDevelopment && isAuthenticated && user && !user.organization_id;
 
-  // Fetch subscription status for users with organization
-  const { data: subscription, isLoading: isLoadingSubscription } = useQuery({
-    queryKey: ['subscription', user?.organization_id],
+  // Fetch organization, subscription, and phone number status
+  const { data: onboardingData, isLoading: isLoadingOnboarding } = useQuery({
+    queryKey: ['onboarding-status', user?.organization_id],
     queryFn: async () => {
       if (!user?.organization_id) return null;
 
-      const { data, error } = await supabase
+      // Fetch organization onboarding status
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .select('is_onboarding_complete')
+        .eq('id', user.organization_id)
+        .single();
+
+      if (orgError) {
+        console.error('Error fetching organization:', orgError);
+        return null;
+      }
+
+      // Fetch subscription
+      const { data: subscription, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
         .eq('organization_id', user.organization_id)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching subscription:', error);
-        return null;
+      if (subError) {
+        console.error('Error fetching subscription:', subError);
       }
-      return data;
+
+      // Fetch phone numbers
+      const { data: phoneNumbers, error: phoneError } = await supabase
+        .from('phone_numbers')
+        .select('id')
+        .eq('organization_id', user.organization_id)
+        .limit(1);
+
+      if (phoneError) {
+        console.error('Error fetching phone numbers:', phoneError);
+      }
+
+      return {
+        isOnboardingComplete: org?.is_onboarding_complete || false,
+        hasSubscription: !!subscription?.stripe_subscription_id,
+        hasPhoneNumber: phoneNumbers && phoneNumbers.length > 0,
+        subscription,
+      };
     },
     enabled: !!user?.organization_id && !hasIncompleteSignup,
   });
@@ -48,10 +77,23 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const isSelectPlanPath = location.pathname === '/onboarding/select-plan';
   const isPhonePath = location.pathname === '/onboarding/phone';
 
-  // Check if user needs to complete subscription setup (no Stripe subscription ID means checkout wasn't completed)
-  // Skip in development mode and when already on onboarding path
-  const needsPlanSelection = !isDevelopment && isAuthenticated && user?.organization_id && !isLoadingSubscription &&
-    subscription && !subscription.stripe_subscription_id && !isOnboardingPath;
+  // Determine onboarding redirect based on completion status
+  // Skip when already on onboarding path to avoid redirect loops
+  let onboardingRedirect: string | null = null;
+
+  if (isAuthenticated && user?.organization_id && !isLoadingOnboarding && onboardingData && !isOnboardingPath) {
+    // If onboarding is not complete, determine which step they need
+    if (!onboardingData.isOnboardingComplete) {
+      // In production, check subscription first (Step 1)
+      if (!isDevelopment && !onboardingData.hasSubscription) {
+        onboardingRedirect = '/onboarding/select-plan';
+      }
+      // Then check if they have a phone number (Step 2)
+      else if (!onboardingData.hasPhoneNumber) {
+        onboardingRedirect = '/onboarding/phone';
+      }
+    }
+  }
 
   // Handle incomplete signup (no organization)
   useEffect(() => {
@@ -89,7 +131,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     completeSignup();
   }, [hasIncompleteSignup, isProvisioning, session]);
 
-  if (isLoading || isProvisioning || isLoadingSubscription) {
+  if (isLoading || isProvisioning || isLoadingOnboarding) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -106,9 +148,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
-  // Redirect to plan selection if no Stripe subscription
-  if (needsPlanSelection) {
-    return <Navigate to="/onboarding/select-plan" replace />;
+  // Redirect to appropriate onboarding step if not complete
+  if (onboardingRedirect) {
+    return <Navigate to={onboardingRedirect} replace />;
   }
 
   return <>{children}</>;

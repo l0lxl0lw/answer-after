@@ -22,7 +22,6 @@ import MyServices from "./pages/MyServices";
 import Subscriptions from "./pages/Subscriptions";
 import MyAgent from "./pages/MyAgent";
 import Auth from "./pages/Auth";
-import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import SelectPlan from "./pages/onboarding/SelectPlan";
 import PhoneSetup from "./pages/onboarding/PhoneSetup";
@@ -61,7 +60,6 @@ const App = () => (
             <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
             <Route path="/dashboard/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/dashboard/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
-            <Route path="/dashboard/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
