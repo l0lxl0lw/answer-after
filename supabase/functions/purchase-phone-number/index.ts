@@ -22,6 +22,16 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const USE_LOCAL_SUBACCOUNT = Deno.env.get('USE_LOCAL_SUBACCOUNT') === 'true';
+    const LOCAL_SUBACCOUNT_SID = Deno.env.get('LOCAL_SUBACCOUNT_SID');
+
+    // Debug logging
+    logStep('Environment check', {
+      hasTwilioSid: !!TWILIO_ACCOUNT_SID,
+      hasTwilioToken: !!TWILIO_AUTH_TOKEN,
+      useLocal: USE_LOCAL_SUBACCOUNT,
+      hasLocalSid: !!LOCAL_SUBACCOUNT_SID,
+    });
 
     if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
       throw new Error('Twilio credentials not configured');
@@ -68,7 +78,78 @@ serve(async (req) => {
     let subaccountSid = org.twilio_subaccount_sid;
     let subaccountAuthToken = org.twilio_subaccount_auth_token;
 
-    if (!subaccountSid) {
+    // Use local subaccount for development if configured
+    if (USE_LOCAL_SUBACCOUNT) {
+      logStep('Looking for subaccount named "local"');
+
+      // If SID provided, use it directly
+      if (LOCAL_SUBACCOUNT_SID && !LOCAL_SUBACCOUNT_SID.includes('YOUR_')) {
+        logStep('Using provided local subaccount', { sid: LOCAL_SUBACCOUNT_SID });
+
+        const subaccountResponse = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${LOCAL_SUBACCOUNT_SID}.json`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)}`,
+            }
+          }
+        );
+
+        if (!subaccountResponse.ok) {
+          throw new Error('Failed to fetch local subaccount details');
+        }
+
+        const subaccountData = await subaccountResponse.json();
+        subaccountSid = subaccountData.sid;
+        subaccountAuthToken = subaccountData.auth_token;
+      } else {
+        // Search for subaccount named "local"
+        logStep('Searching for subaccount named "local"');
+
+        const listResponse = await fetch(
+          'https://api.twilio.com/2010-04-01/Accounts.json',
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)}`,
+            }
+          }
+        );
+
+        if (!listResponse.ok) {
+          throw new Error('Failed to list subaccounts');
+        }
+
+        const listData = await listResponse.json();
+        const localSubaccount = listData.accounts?.find((acc: any) =>
+          acc.friendly_name?.toLowerCase().includes('local')
+        );
+
+        if (!localSubaccount) {
+          throw new Error('No subaccount named "local" found. Please create one or set LOCAL_SUBACCOUNT_SID');
+        }
+
+        logStep('Found local subaccount', {
+          sid: localSubaccount.sid,
+          name: localSubaccount.friendly_name
+        });
+
+        subaccountSid = localSubaccount.sid;
+        subaccountAuthToken = localSubaccount.auth_token;
+      }
+
+      // Save to org if not already saved
+      if (org.twilio_subaccount_sid !== subaccountSid) {
+        await supabaseAdmin
+          .from('organizations')
+          .update({
+            twilio_subaccount_sid: subaccountSid,
+            twilio_subaccount_auth_token: subaccountAuthToken
+          })
+          .eq('id', org.id);
+      }
+    } else if (!subaccountSid) {
       // Create Twilio subaccount first
       logStep('Creating Twilio subaccount');
 
@@ -114,69 +195,108 @@ serve(async (req) => {
       throw new Error('Business phone number and area code are required');
     }
 
-    logStep('Searching for number', { areaCode, orgId: org.id });
-
-    // Search for available local numbers by area code
-    const searchResponse = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/AvailablePhoneNumbers/US/Local.json?AreaCode=${areaCode}&Limit=1`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
-        }
-      }
-    );
-
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text();
-      logStep('Search failed', { error: errorText });
-      throw new Error('Failed to search for available numbers');
-    }
-
-    const searchResults = await searchResponse.json();
-
-    if (!searchResults.available_phone_numbers || searchResults.available_phone_numbers.length === 0) {
-      throw new Error(`No phone numbers available in area code ${areaCode}`);
-    }
-
-    // Auto-select the first available number
-    const selectedNumber = searchResults.available_phone_numbers[0];
-    const phoneNumber = selectedNumber.phone_number;
-
-    logStep('Found available number', { phoneNumber, areaCode });
-
-    // Configure webhook URL
     const webhookUrl = `${SUPABASE_URL}/functions/v1/twilio-webhook`;
+    let purchasedNumber: any;
 
-    // Purchase the phone number
-    const purchaseResponse = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/IncomingPhoneNumbers.json`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-          PhoneNumber: phoneNumber,
-          VoiceUrl: webhookUrl,
-          VoiceMethod: 'POST'
-        })
+    // If using local subaccount, grab an existing number instead of purchasing
+    if (USE_LOCAL_SUBACCOUNT) {
+      logStep('Local mode: Looking for existing numbers in local subaccount', { orgId: org.id });
+
+      // Get existing numbers from the local subaccount
+      const existingResponse = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/IncomingPhoneNumbers.json`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
+          }
+        }
+      );
+
+      if (!existingResponse.ok) {
+        const errorText = await existingResponse.text();
+        logStep('Failed to fetch existing numbers', { error: errorText });
+        throw new Error('Failed to fetch existing numbers from local subaccount');
       }
-    );
 
-    if (!purchaseResponse.ok) {
-      const errorText = await purchaseResponse.text();
-      logStep('Purchase failed', { error: errorText });
-      throw new Error('Failed to purchase phone number. It may no longer be available.');
+      const existingData = await existingResponse.json();
+      const availableNumbers = existingData.incoming_phone_numbers || [];
+
+      if (availableNumbers.length === 0) {
+        throw new Error('No existing numbers found in local subaccount. Please add a phone number to your "local" subaccount first.');
+      }
+
+      // Use the first available number
+      purchasedNumber = availableNumbers[0];
+
+      // In local mode, skip webhook configuration since internal URLs won't work
+      // The webhook can be manually configured in Twilio console if needed for testing
+      logStep('Local mode: Using existing number (webhook not updated)', {
+        phoneNumber: purchasedNumber.phone_number,
+        sid: purchasedNumber.sid,
+        note: 'Webhook not updated in local mode - configure manually if needed'
+      });
+    } else {
+      // Production flow: Search and purchase a new number
+      logStep('Searching for number', { areaCode, orgId: org.id });
+
+      const searchResponse = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/AvailablePhoneNumbers/US/Local.json?AreaCode=${areaCode}&Limit=1`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
+          }
+        }
+      );
+
+      if (!searchResponse.ok) {
+        const errorText = await searchResponse.text();
+        logStep('Search failed', { error: errorText });
+        throw new Error('Failed to search for available numbers');
+      }
+
+      const searchResults = await searchResponse.json();
+
+      if (!searchResults.available_phone_numbers || searchResults.available_phone_numbers.length === 0) {
+        throw new Error(`No phone numbers available in area code ${areaCode}`);
+      }
+
+      const selectedNumber = searchResults.available_phone_numbers[0];
+      const phoneNumber = selectedNumber.phone_number;
+
+      logStep('Found available number', { phoneNumber, areaCode });
+
+      // Purchase the phone number
+      const purchaseResponse = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/IncomingPhoneNumbers.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            PhoneNumber: phoneNumber,
+            VoiceUrl: webhookUrl,
+            VoiceMethod: 'POST'
+          })
+        }
+      );
+
+      if (!purchaseResponse.ok) {
+        const errorText = await purchaseResponse.text();
+        logStep('Purchase failed', { error: errorText });
+        throw new Error('Failed to purchase phone number. It may no longer be available.');
+      }
+
+      purchasedNumber = await purchaseResponse.json();
+
+      logStep('Number purchased', {
+        phoneNumber: purchasedNumber.phone_number,
+        sid: purchasedNumber.sid
+      });
     }
-
-    const purchasedNumber = await purchaseResponse.json();
-
-    logStep('Number purchased', {
-      phoneNumber: purchasedNumber.phone_number,
-      sid: purchasedNumber.sid
-    });
 
     // Save business phone number to organizations
     const { error: orgUpdateError } = await supabaseAdmin
