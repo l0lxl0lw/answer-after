@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Shield, AlertTriangle } from 'lucide-react';
 import OrganizationsManagement from '@/components/admin/OrganizationsManagement';
-import PromptTransformationExplainer from '@/components/admin/PromptTransformationExplainer';
+import PromptTemplatesManager from '@/components/admin/PromptTemplatesManager';
 
 const AdminAccess = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -101,7 +101,7 @@ const AdminAccess = () => {
         <Tabs defaultValue="organizations" className="space-y-4">
           <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="organizations">Organizations</TabsTrigger>
-            <TabsTrigger value="prompts">Prompt System</TabsTrigger>
+            <TabsTrigger value="prompts">Prompt Templates</TabsTrigger>
           </TabsList>
 
           <TabsContent value="organizations" className="space-y-4">
@@ -109,7 +109,7 @@ const AdminAccess = () => {
           </TabsContent>
 
           <TabsContent value="prompts" className="space-y-4">
-            <PromptTransformationExplainer />
+            <PromptTemplatesManager />
           </TabsContent>
         </Tabs>
       </div>

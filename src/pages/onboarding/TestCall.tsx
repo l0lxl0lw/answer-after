@@ -277,12 +277,28 @@ export default function TestCall() {
               <h3 className="font-display text-xl font-bold mb-2">
                 Listening for your call...
               </h3>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-6">
                 Go ahead and call{" "}
                 <span className="font-semibold text-foreground">
                   {formatPhoneDisplay(phoneNumber)}
                 </span>
               </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsListening(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={handleSkip}
+                >
+                  Skip test call
+                </Button>
+              </div>
             </motion.div>
           )}
 

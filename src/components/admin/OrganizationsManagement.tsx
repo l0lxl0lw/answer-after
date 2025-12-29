@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Trash2, AlertTriangle, Loader2, Building2, Phone, Calendar, CreditCard } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Trash2, AlertTriangle, Loader2, Building2, Phone, Calendar, CreditCard, Search } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +40,27 @@ const OrganizationsManagement = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
+
+  const filteredOrganizations = useMemo(() => {
+    if (!searchQuery.trim()) return organizations;
+
+    const query = searchQuery.toLowerCase();
+    return organizations.filter((org) => {
+      const user = org.profiles?.[0];
+      const phoneNumber = org.phone_numbers?.[0];
+
+      return (
+        org.name.toLowerCase().includes(query) ||
+        org.slug.toLowerCase().includes(query) ||
+        org.id.toLowerCase().includes(query) ||
+        user?.email?.toLowerCase().includes(query) ||
+        user?.full_name?.toLowerCase().includes(query) ||
+        phoneNumber?.phone_number?.includes(query)
+      );
+    });
+  }, [organizations, searchQuery]);
 
   useEffect(() => {
     fetchOrganizations();
@@ -149,17 +170,28 @@ const OrganizationsManagement = () => {
           <CardTitle>Organizations</CardTitle>
           <CardDescription>
             Manage all organizations in the system. Total: {organizations.length}
+            {searchQuery && ` (showing ${filteredOrganizations.length})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {organizations.length === 0 ? (
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search by name, slug, email, phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {filteredOrganizations.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No organizations found</p>
+              <p>{searchQuery ? 'No organizations match your search' : 'No organizations found'}</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {organizations.map((org) => {
+              {filteredOrganizations.map((org) => {
                 const subscription = org.subscriptions?.[0];
                 const agent = org.organization_agents?.[0];
                 const phoneNumber = org.phone_numbers?.[0];

@@ -5,9 +5,27 @@ import { ArrowRight, Sparkles, Zap, Check, Loader2 } from "lucide-react";
 import { COMPANY } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { createLogger, getEnvironment } from "@/lib/logger";
 import { useQuery } from "@tanstack/react-query";
 import { useSubscriptionTiers } from "@/hooks/use-api";
 import { useEffect } from "react";
+
+const log = createLogger('UpgradePrompt');
+
+// Mock subscription for local development
+const MOCK_SUBSCRIPTION = {
+  id: 'mock-sub-id',
+  organization_id: 'mock-org-id',
+  plan: 'core',
+  status: 'trialing',
+  subscription_tiers: {
+    plan_id: 'core',
+    name: 'Core',
+    price_cents: 4900,
+    credits: 150,
+    features: ['AI receptionist', 'Call transcripts', 'Basic analytics'],
+  },
+};
 
 export default function UpgradePrompt() {
   const navigate = useNavigate();
@@ -28,26 +46,33 @@ export default function UpgradePrompt() {
         .maybeSingle();
 
       if (subError) {
-        console.error('Error fetching subscription:', subError);
+        log.error('Error fetching subscription:', subError);
         return null;
       }
 
-      if (!subData) return null;
+      if (!subData) {
+        // In local environment, return mock subscription for testing
+        if (getEnvironment() === 'local') {
+          log.debug('No subscription found, using mock subscription for local dev');
+          return MOCK_SUBSCRIPTION;
+        }
+        return null;
+      }
 
       // Fetch the corresponding tier
       const { data: tierData, error: tierError } = await supabase
         .from('subscription_tiers')
-        .select('plan_id, name, price_monthly_cents, credits_included, features')
+        .select('plan_id, name, price_cents, credits, features')
         .eq('plan_id', subData.plan)
         .maybeSingle();
 
       if (tierError) {
-        console.error('Error fetching tier:', tierError);
+        log.error('Error fetching tier:', tierError);
         return null;
       }
 
       if (!tierData) {
-        console.error('No tier found for plan:', subData.plan);
+        log.error('No tier found for plan:', subData.plan);
         return null;
       }
 
@@ -63,18 +88,19 @@ export default function UpgradePrompt() {
   const currentPlan = subscription?.subscription_tiers;
   const currentPlanId = currentPlan?.plan_id;
 
-  // Skip this page if user has Pro or Business plan, or no subscription
+  // Redirect based on subscription status
   useEffect(() => {
     if (!isLoading) {
-      // If no subscription at all, skip to next step
-      if (!subscription) {
-        console.warn('No subscription found, skipping upgrade prompt');
-        navigate("/onboarding/setup-services", { replace: true });
+      // If no subscription at all (only in non-local environments)
+      if (!subscription && getEnvironment() !== 'local') {
+        log.warn('No subscription found, redirecting to plan selection');
+        navigate("/onboarding/select-plan", { replace: true });
         return;
       }
 
-      // If Pro or Business, skip
+      // If Pro or Business, skip upgrade prompt (they don't need it)
       if (currentPlanId === 'pro' || currentPlanId === 'business') {
+        log.debug('Pro/Business plan detected, skipping upgrade prompt');
         navigate("/onboarding/setup-services", { replace: true });
       }
     }
@@ -156,7 +182,7 @@ export default function UpgradePrompt() {
             <div className="mb-4">
               <h3 className="font-display text-xl font-bold mb-1">{currentPlan.name}</h3>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">${formatPrice(currentPlan.price_monthly_cents)}</span>
+                <span className="text-3xl font-bold">${formatPrice(currentPlan.price_cents)}</span>
                 <span className="text-muted-foreground text-sm">/month</span>
               </div>
             </div>
@@ -164,7 +190,7 @@ export default function UpgradePrompt() {
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
                 <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                <span className="text-sm">{currentPlan.credits_included} credits/month (~{Math.floor(currentPlan.credits_included / 3)} calls)</span>
+                <span className="text-sm">{currentPlan.credits} credits/month (~{Math.floor(currentPlan.credits / 3)} calls)</span>
               </li>
               {currentPlan.features && (currentPlan.features as string[]).map((feature: string, idx: number) => (
                 <li key={idx} className="flex items-start gap-3">
@@ -202,22 +228,22 @@ export default function UpgradePrompt() {
             <div className="mb-4">
               <h3 className="font-display text-xl font-bold mb-1">{upgradePlan.name}</h3>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">${formatPrice(upgradePlan.price_monthly_cents)}</span>
+                <span className="text-3xl font-bold">${formatPrice(upgradePlan.price_cents)}</span>
                 <span className="text-muted-foreground text-sm">/month</span>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                ${formatPrice(upgradePlan.price_monthly_cents - currentPlan.price_monthly_cents)} more than {currentPlan.name}
+                ${formatPrice(upgradePlan.price_cents - currentPlan.price_cents)} more than {currentPlan.name}
               </p>
             </div>
 
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
                 <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm font-medium">{upgradePlan.credits_included} credits/month (~{Math.floor(upgradePlan.credits_included / 3)} calls)</span>
+                <span className="text-sm font-medium">{upgradePlan.credits} credits/month (~{Math.floor(upgradePlan.credits / 3)} calls)</span>
               </li>
               <li className="flex items-start gap-3">
                 <Sparkles className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm font-medium">+{upgradePlan.credits_included - currentPlan.credits_included} more credits</span>
+                <span className="text-sm font-medium">+{upgradePlan.credits - currentPlan.credits} more credits</span>
               </li>
               {upgradePlan.features && (upgradePlan.features as string[]).map((feature: string, idx: number) => (
                 <li key={idx} className="flex items-start gap-3">
