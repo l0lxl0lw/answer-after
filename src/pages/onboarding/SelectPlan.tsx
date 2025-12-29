@@ -7,6 +7,8 @@ import { useSubscriptionTiers } from "@/hooks/use-api";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { shouldSkipStripe } from "@/lib/environment";
+import { LINKS, COMPANY } from "@/lib/constants";
 
 export default function SelectPlan() {
   const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
@@ -25,7 +27,7 @@ export default function SelectPlan() {
 
   const handleSelectPlan = async (planId: string) => {
     if (isEnterprise(planId)) {
-      window.location.href = "mailto:sales@answerafter.com";
+      window.location.href = LINKS.salesEmail;
       return;
     }
 
@@ -41,6 +43,18 @@ export default function SelectPlan() {
 
     setSelectedPlan(planId);
     setIsProcessing(true);
+
+    // Skip Stripe in local/development environment
+    if (shouldSkipStripe()) {
+      toast({
+        title: "Development Mode",
+        description: "Skipping Stripe checkout in local environment. Proceeding to next step.",
+      });
+      setTimeout(() => {
+        navigate("/onboarding/phone");
+      }, 1000);
+      return;
+    }
 
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout-with-trial", {
@@ -82,7 +96,7 @@ export default function SelectPlan() {
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-display font-semibold text-lg">AnswerAfter</h1>
+              <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
               <p className="text-sm text-muted-foreground">Step 1 of 3 • Choose your plan</p>
             </div>
           </div>
@@ -276,7 +290,7 @@ export default function SelectPlan() {
           className="mt-8 text-center"
         >
           <p className="text-muted-foreground text-sm">
-            Need more? <a href="mailto:sales@answerafter.com" className="text-primary hover:underline">Contact sales</a> for enterprise pricing with custom limits and dedicated support.
+            Need more? <a href={LINKS.salesEmail} className="text-primary hover:underline">Contact sales</a> for enterprise pricing with custom limits and dedicated support.
           </p>
         </motion.div>
       </div>

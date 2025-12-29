@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Phone } from "lucide-react";
+import { LINKS } from "@/lib/constants";
 
 export function CTA() {
   return (
@@ -55,13 +56,13 @@ export function CTA() {
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
-            <Button 
-              size="xl" 
+            <Button
+              size="xl"
               variant="outline"
               className="border-2 border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 font-semibold"
               asChild
             >
-              <a href="mailto:sales@answerafter.com">
+              <a href={LINKS.salesEmail}>
                 Talk to Sales
               </a>
             </Button>

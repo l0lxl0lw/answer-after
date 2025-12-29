@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CONTACT, COMPANY } from "@/lib/constants";
 
 export default function TermsOfService() {
   return (
@@ -151,7 +152,7 @@ export default function TermsOfService() {
               If you have questions about these Terms of Service, please contact us at:
             </p>
             <p className="text-muted-foreground mt-2">
-              Email: contact@answerafter.com
+              Email: {CONTACT.general}
             </p>
           </section>
         </div>
@@ -160,7 +161,7 @@ export default function TermsOfService() {
       {/* Footer */}
       <footer className="border-t border-border py-8 mt-12">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} Answer After. All rights reserved.
+          © {new Date().getFullYear()} {COMPANY.name}. All rights reserved.
         </div>
       </footer>
     </div>

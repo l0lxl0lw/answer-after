@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
+import { COMPANY } from "@/lib/constants";
 
 type NumberType = "local" | "toll-free";
 
@@ -182,7 +183,7 @@ export default function PhoneSetup() {
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-display font-semibold text-lg">AnswerAfter</h1>
+              <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
               <p className="text-sm text-muted-foreground">Step 3 of 3 • Choose your phone number</p>
             </div>
           </div>

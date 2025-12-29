@@ -6,17 +6,30 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
 import { useCreateCreditTopup, useTotalAvailableCredits } from "@/hooks/use-credits";
 import { cn } from "@/lib/utils";
+import { shouldSkipStripe } from "@/lib/environment";
+import { useToast } from "@/hooks/use-toast";
+import { LINKS } from "@/lib/constants";
 
 export default function Subscriptions() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
   const { purchasedCredits } = useTotalAvailableCredits();
   const createTopup = useCreateCreditTopup();
+  const { toast } = useToast();
 
   const currentPlan = subscription?.plan?.toLowerCase() || "core";
   const isLoading = subscriptionLoading || tiersLoading;
 
   const handleTopup = async () => {
+    // Skip Stripe in local/development environment
+    if (shouldSkipStripe()) {
+      toast({
+        title: "Development Mode",
+        description: "Stripe credit top-ups are disabled in local environment.",
+      });
+      return;
+    }
+
     const result = await createTopup.mutateAsync();
     if (result?.url) {
       window.location.href = result.url;
@@ -272,7 +285,7 @@ export default function Subscriptions() {
                         )}
                         asChild
                       >
-                        <Link to={isEnterprise(tier.plan_id) ? "mailto:sales@answerafter.com" : "/dashboard/settings"}>
+                        <Link to={isEnterprise(tier.plan_id) ? LINKS.salesEmail : "/dashboard/settings"}>
                           {isEnterprise(tier.plan_id) ? "Contact Sales" : isUpgrade ? "Upgrade" : isDowngrade ? "Downgrade" : "Select"}
                           <ArrowRight className="w-3.5 h-3.5 ml-1" />
                         </Link>

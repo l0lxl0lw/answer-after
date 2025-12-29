@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight } from "lucide-react";
 import { useSubscriptionTiers } from "@/hooks/use-api";
+import { LINKS } from "@/lib/constants";
 
 export function Pricing() {
   const { data: tiers, isLoading } = useSubscriptionTiers();
@@ -147,13 +148,13 @@ export function Pricing() {
                   </ul>
 
                   {/* CTA */}
-                  <Button 
+                  <Button
                     variant={tier.is_popular ? "secondary" : isEnterprise(tier.plan_id) ? "outline" : "default"}
                     size="sm"
                     className={`w-full ${tier.is_popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`}
                     asChild
                   >
-                    <Link to={isEnterprise(tier.plan_id) ? "mailto:sales@answerafter.com" : "/auth?signup=true"}>
+                    <Link to={isEnterprise(tier.plan_id) ? LINKS.salesEmail : "/auth?signup=true"}>
                       {isEnterprise(tier.plan_id) ? "Contact Sales" : "Get Started"}
                       <ArrowRight className="w-4 h-4 ml-1" />
                     </Link>
