@@ -3,27 +3,38 @@
  * Provides consistent environment checks across the application
  */
 
+import { getEnvironment, type Environment } from './logger';
+
+// Re-export for convenience
+export { getEnvironment, type Environment };
+
 /**
  * Check if running in local development environment
  * Detects localhost or 127.0.0.1 in Supabase URL
  */
 export const isLocalEnvironment = (): boolean => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  return url?.includes('localhost') || url?.includes('127.0.0.1') || false;
+  return getEnvironment() === 'local';
 };
 
 /**
- * Check if running in development mode
- * Uses Vite's MODE and PROD flags
+ * Check if running in development mode (local or devo)
  */
 export const isDevelopmentMode = (): boolean => {
-  return import.meta.env.MODE === 'development' || !import.meta.env.PROD;
+  const env = getEnvironment();
+  return env === 'local' || env === 'devo';
+};
+
+/**
+ * Check if running in production
+ */
+export const isProductionEnvironment = (): boolean => {
+  return getEnvironment() === 'prod';
 };
 
 /**
  * Determine if Stripe integration should be skipped
- * Returns true in local or development environments
+ * Returns true in local environment only
  */
 export const shouldSkipStripe = (): boolean => {
-  return isLocalEnvironment() || isDevelopmentMode();
+  return isLocalEnvironment();
 };
