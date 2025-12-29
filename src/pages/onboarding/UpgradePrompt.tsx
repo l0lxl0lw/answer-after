@@ -20,18 +20,41 @@ export default function UpgradePrompt() {
     queryFn: async () => {
       if (!user?.organization_id) return null;
 
-      const { data, error } = await supabase
+      // Fetch subscription
+      const { data: subData, error: subError } = await supabase
         .from('subscriptions')
-        .select('*, subscription_tiers(plan_id, name, price_monthly_cents, credits_included, features)')
+        .select('*')
         .eq('organization_id', user.organization_id)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching subscription:', error);
+      if (subError) {
+        console.error('Error fetching subscription:', subError);
         return null;
       }
 
-      return data;
+      if (!subData) return null;
+
+      // Fetch the corresponding tier
+      const { data: tierData, error: tierError } = await supabase
+        .from('subscription_tiers')
+        .select('plan_id, name, price_monthly_cents, credits_included, features')
+        .eq('plan_id', subData.plan)
+        .maybeSingle();
+
+      if (tierError) {
+        console.error('Error fetching tier:', tierError);
+        return null;
+      }
+
+      if (!tierData) {
+        console.error('No tier found for plan:', subData.plan);
+        return null;
+      }
+
+      return {
+        ...subData,
+        subscription_tiers: tierData,
+      };
     },
     enabled: !!user?.organization_id,
   });
@@ -40,14 +63,22 @@ export default function UpgradePrompt() {
   const currentPlan = subscription?.subscription_tiers;
   const currentPlanId = currentPlan?.plan_id;
 
-  // Skip this page if user has Pro or Business plan
+  // Skip this page if user has Pro or Business plan, or no subscription
   useEffect(() => {
-    if (!isLoading && currentPlanId) {
+    if (!isLoading) {
+      // If no subscription at all, skip to next step
+      if (!subscription) {
+        console.warn('No subscription found, skipping upgrade prompt');
+        navigate("/onboarding/setup-services", { replace: true });
+        return;
+      }
+
+      // If Pro or Business, skip
       if (currentPlanId === 'pro' || currentPlanId === 'business') {
         navigate("/onboarding/setup-services", { replace: true });
       }
     }
-  }, [isLoading, currentPlanId, navigate]);
+  }, [isLoading, subscription, currentPlanId, navigate]);
 
   // Determine upgrade target
   const planHierarchy = ['core', 'growth', 'pro', 'business'];

@@ -46,13 +46,42 @@ export default function SelectPlan() {
 
     // Skip Stripe in local/development environment
     if (shouldSkipStripe()) {
-      toast({
-        title: "Development Mode",
-        description: "Skipping Stripe checkout in local environment. Proceeding to next step.",
-      });
-      setTimeout(() => {
-        navigate("/onboarding/phone");
-      }, 1000);
+      try {
+        // In dev mode, manually provision the organization with the selected plan
+        const { data: provisionData, error: provisionError } = await supabase.functions.invoke("provision-organization", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: {
+            planId: planId,
+          },
+        });
+
+        if (provisionError) {
+          console.error('Provisioning error:', provisionError);
+          throw new Error(provisionError.message || "Failed to set up organization");
+        }
+
+        toast({
+          title: "Development Mode",
+          description: "Organization provisioned. Proceeding to next step.",
+        });
+
+        // Wait a bit for the organization to be created and profile updated
+        setTimeout(() => {
+          // Force a page reload to refresh the AuthContext
+          window.location.href = "/onboarding/phone";
+        }, 1500);
+      } catch (error: any) {
+        console.error("Provisioning error:", error);
+        toast({
+          title: "Setup failed",
+          description: error.message || "Failed to provision organization. Please try again.",
+          variant: "destructive",
+        });
+        setSelectedPlan(null);
+        setIsProcessing(false);
+      }
       return;
     }
 

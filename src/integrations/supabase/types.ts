@@ -473,6 +473,7 @@ export type Database = {
       phone_numbers: {
         Row: {
           created_at: string
+          elevenlabs_phone_number_id: string | null
           friendly_name: string | null
           id: string
           is_active: boolean
@@ -486,6 +487,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          elevenlabs_phone_number_id?: string | null
           friendly_name?: string | null
           id?: string
           is_active?: boolean
@@ -499,6 +501,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          elevenlabs_phone_number_id?: string | null
           friendly_name?: string | null
           id?: string
           is_active?: boolean

@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { COMPANY } from "@/lib/constants";
 import { formatPhoneDisplay } from "@/lib/phoneUtils";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function TestCall() {
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
@@ -18,6 +19,7 @@ export default function TestCall() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     loadPhoneNumber();
@@ -116,9 +118,12 @@ export default function TestCall() {
         description: "Welcome to AnswerAfter. Let's go to your dashboard.",
       });
 
-      // Redirect to dashboard
+      // Invalidate queries to ensure fresh data on next load
+      await queryClient.invalidateQueries({ queryKey: ['onboarding-status'] });
+
+      // Use window.location.href for full page reload to bypass cache issues
       setTimeout(() => {
-        navigate("/dashboard?welcome=true");
+        window.location.href = "/dashboard?welcome=true";
       }, 1500);
     } catch (error) {
       console.error("Error completing onboarding:", error);

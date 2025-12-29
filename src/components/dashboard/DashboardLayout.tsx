@@ -256,7 +256,7 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
             <div key={sectionIndex}>
               {/* Section Label */}
               {section.label && !collapsed && (
-                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <div className="px-3 py-1.5 text-sm font-medium text-muted-foreground uppercase tracking-wider">
                   {section.label}
                 </div>
               )}
@@ -271,7 +271,7 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
                       to={link.href}
                       onClick={onClose}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+                        "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm",
                         collapsed && "justify-center px-2",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"

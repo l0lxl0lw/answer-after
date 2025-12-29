@@ -30,6 +30,7 @@ import SetupServices from "./pages/onboarding/SetupServices";
 import TestCall from "./pages/onboarding/TestCall";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
+import AdminAccess from "./pages/AdminAccess";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/login" element={<Auth />} />
+            <Route path="/adminaccess" element={<AdminAccess />} />
             <Route path="/onboarding/select-plan" element={<ProtectedRoute><SelectPlan /></ProtectedRoute>} />
             <Route path="/onboarding/phone" element={<ProtectedRoute><PhoneSetup /></ProtectedRoute>} />
             <Route path="/onboarding/upgrade-prompt" element={<ProtectedRoute><UpgradePrompt /></ProtectedRoute>} />

@@ -24,6 +24,8 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const USE_LOCAL_SUBACCOUNT = Deno.env.get('USE_LOCAL_SUBACCOUNT') === 'true';
     const LOCAL_SUBACCOUNT_SID = Deno.env.get('LOCAL_SUBACCOUNT_SID');
+    const LOCAL_SUBACCOUNT_AUTH_TOKEN = Deno.env.get('LOCAL_SUBACCOUNT_AUTH_TOKEN');
+    const DEV_MODE = Deno.env.get('DEV_MODE') === 'true';
 
     // Debug logging
     logStep('Environment check', {
@@ -31,9 +33,13 @@ serve(async (req) => {
       hasTwilioToken: !!TWILIO_AUTH_TOKEN,
       useLocal: USE_LOCAL_SUBACCOUNT,
       hasLocalSid: !!LOCAL_SUBACCOUNT_SID,
+      devMode: DEV_MODE,
     });
 
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    // In dev mode, skip Twilio entirely
+    if (DEV_MODE) {
+      logStep('DEV MODE: Skipping Twilio, creating mock phone number');
+    } else if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
       throw new Error('Twilio credentials not configured');
     }
 
@@ -78,31 +84,45 @@ serve(async (req) => {
     let subaccountSid = org.twilio_subaccount_sid;
     let subaccountAuthToken = org.twilio_subaccount_auth_token;
 
+    // Skip subaccount creation in dev mode
+    if (DEV_MODE) {
+      logStep('DEV MODE: Skipping subaccount creation');
+      subaccountSid = 'DEV_MODE_MOCK';
+      subaccountAuthToken = 'DEV_MODE_MOCK';
+    }
     // Use local subaccount for development if configured
-    if (USE_LOCAL_SUBACCOUNT) {
+    else if (USE_LOCAL_SUBACCOUNT) {
       logStep('Looking for subaccount named "local"');
 
       // If SID provided, use it directly
       if (LOCAL_SUBACCOUNT_SID && !LOCAL_SUBACCOUNT_SID.includes('YOUR_')) {
         logStep('Using provided local subaccount', { sid: LOCAL_SUBACCOUNT_SID });
 
-        const subaccountResponse = await fetch(
-          `https://api.twilio.com/2010-04-01/Accounts/${LOCAL_SUBACCOUNT_SID}.json`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Basic ${btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)}`,
+        subaccountSid = LOCAL_SUBACCOUNT_SID;
+
+        // If auth token provided directly, use it (for main accounts)
+        if (LOCAL_SUBACCOUNT_AUTH_TOKEN) {
+          logStep('Using provided auth token for local account');
+          subaccountAuthToken = LOCAL_SUBACCOUNT_AUTH_TOKEN;
+        } else {
+          // Otherwise fetch from API (for subaccounts)
+          const subaccountResponse = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${LOCAL_SUBACCOUNT_SID}.json`,
+            {
+              method: 'GET',
+              headers: {
+                'Authorization': `Basic ${btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)}`,
+              }
             }
+          );
+
+          if (!subaccountResponse.ok) {
+            throw new Error('Failed to fetch local subaccount details');
           }
-        );
 
-        if (!subaccountResponse.ok) {
-          throw new Error('Failed to fetch local subaccount details');
+          const subaccountData = await subaccountResponse.json();
+          subaccountAuthToken = subaccountData.auth_token;
         }
-
-        const subaccountData = await subaccountResponse.json();
-        subaccountSid = subaccountData.sid;
-        subaccountAuthToken = subaccountData.auth_token;
       } else {
         // Search for subaccount named "local"
         logStep('Searching for subaccount named "local"');
@@ -198,8 +218,25 @@ serve(async (req) => {
     const webhookUrl = `${SUPABASE_URL}/functions/v1/twilio-webhook`;
     let purchasedNumber: any;
 
+    // Dev mode: Create mock phone number
+    if (DEV_MODE) {
+      logStep('DEV MODE: Creating mock phone number');
+
+      // Generate a mock phone number in the requested area code
+      const mockNumber = `+1${areaCode}5551${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+
+      purchasedNumber = {
+        sid: `PN${Date.now()}mock`,
+        phone_number: mockNumber,
+      };
+
+      logStep('DEV MODE: Mock number created', {
+        phoneNumber: purchasedNumber.phone_number,
+        sid: purchasedNumber.sid
+      });
+    }
     // If using local subaccount, grab an existing number instead of purchasing
-    if (USE_LOCAL_SUBACCOUNT) {
+    else if (USE_LOCAL_SUBACCOUNT) {
       logStep('Local mode: Looking for existing numbers in local subaccount', { orgId: org.id });
 
       // Get existing numbers from the local subaccount
@@ -342,7 +379,7 @@ serve(async (req) => {
       logStep('Creating ElevenLabs agent');
 
       try {
-        await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
+        const agentResponse = await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -353,6 +390,13 @@ serve(async (req) => {
             organizationId: org.id,
           }),
         });
+
+        const agentResult = await agentResponse.json();
+        if (agentResponse.ok) {
+          logStep('ElevenLabs agent created', { result: agentResult });
+        } else {
+          logStep('ElevenLabs agent creation failed', { status: agentResponse.status, result: agentResult });
+        }
       } catch (agentError) {
         logStep('Agent creation error (non-fatal)', { error: String(agentError) });
       }

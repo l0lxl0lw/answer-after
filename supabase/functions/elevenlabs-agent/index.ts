@@ -322,9 +322,11 @@ async function handleCreateAgent(
     // Use default model
   }
 
-  // Append environment suffix to agent name
-  const baseName = `${orgData.name} - ${organizationId}`;
-  const agentName = config.appendEnvironmentSuffix(baseName);
+  // Build agent name with environment and mode prefix
+  // Format: [LOCAL][INBOUND] name - uuid
+  const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
+  const modePrefix = '[INBOUND]'; // TODO: Pass mode from dashboard when outbound is supported
+  const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${organizationId}`;
 
   const agentConfig = {
     name: agentName,
@@ -374,14 +376,28 @@ async function handleCreateAgent(
 
     const agentData = await response.json();
     console.log('ElevenLabs agent created:', agentData);
-    
+
     await supabase
       .from('organization_agents')
-      .update({ 
+      .update({
         elevenlabs_agent_id: agentData.agent_id,
         context: agentContext || null
       })
       .eq('organization_id', organizationId);
+
+    // Import phone number to ElevenLabs and assign the agent
+    console.log('=== STARTING PHONE IMPORT ===');
+    console.log('organizationId:', organizationId);
+    console.log('agentId:', agentData.agent_id);
+    console.log('agentName:', agentName);
+    console.log('hasApiKey:', !!ELEVENLABS_API_KEY);
+
+    try {
+      await importPhoneNumberToElevenLabs(supabase, organizationId, agentData.agent_id, agentName, ELEVENLABS_API_KEY);
+      console.log('=== PHONE IMPORT COMPLETED ===');
+    } catch (importError) {
+      console.error('=== PHONE IMPORT FAILED ===', importError);
+    }
 
     return new Response(JSON.stringify({
       success: true,
@@ -393,10 +409,166 @@ async function handleCreateAgent(
 
   } catch (error) {
     console.error('Error creating ElevenLabs agent:', error);
-    return new Response(JSON.stringify({ error: 'Failed to create agent' }), { 
+    return new Response(JSON.stringify({ error: 'Failed to create agent' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
+  }
+}
+
+async function importPhoneNumberToElevenLabs(
+  supabase: any,
+  organizationId: string,
+  agentId: string,
+  agentLabel: string,
+  apiKey: string
+): Promise<void> {
+  console.log(`[ElevenLabs Phone Import] Starting for org: ${organizationId}, agent: ${agentId}`);
+
+  try {
+    // Step 1: Get Twilio credentials - from env vars in local mode, or from org record
+    const USE_LOCAL_SUBACCOUNT = Deno.env.get('USE_LOCAL_SUBACCOUNT') === 'true';
+    const LOCAL_SUBACCOUNT_SID = Deno.env.get('LOCAL_SUBACCOUNT_SID');
+    const LOCAL_SUBACCOUNT_AUTH_TOKEN = Deno.env.get('LOCAL_SUBACCOUNT_AUTH_TOKEN');
+
+    let twilioSid: string | undefined;
+    let twilioToken: string | undefined;
+
+    if (USE_LOCAL_SUBACCOUNT || config.isLocal) {
+      // Use local environment variables
+      twilioSid = LOCAL_SUBACCOUNT_SID;
+      twilioToken = LOCAL_SUBACCOUNT_AUTH_TOKEN;
+      console.log('[ElevenLabs Phone Import] Using local Twilio credentials from env');
+    } else {
+      // Get from organization record
+      const { data: orgData, error: orgError } = await supabase
+        .from('organizations')
+        .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
+        .eq('id', organizationId)
+        .single();
+
+      if (orgError || !orgData) {
+        console.log('[ElevenLabs Phone Import] No organization found:', orgError?.message);
+        return;
+      }
+
+      twilioSid = orgData.twilio_subaccount_sid;
+      twilioToken = orgData.twilio_subaccount_auth_token;
+      console.log('[ElevenLabs Phone Import] Using org Twilio credentials');
+    }
+
+    if (!twilioSid || !twilioToken) {
+      console.log('[ElevenLabs Phone Import] No Twilio credentials available');
+      return;
+    }
+
+    console.log('[ElevenLabs Phone Import] Found Twilio credentials, SID:', twilioSid);
+
+    // Step 2: Get the phone number for this organization
+    const { data: phoneData, error: phoneError } = await supabase
+      .from('phone_numbers')
+      .select('id, phone_number, elevenlabs_phone_number_id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (phoneError || !phoneData) {
+      console.log('[ElevenLabs Phone Import] No phone number found:', phoneError?.message);
+      return;
+    }
+
+    console.log('[ElevenLabs Phone Import] Found phone number:', phoneData.phone_number);
+
+    // Step 3: Check if already imported - if so, just assign the agent
+    if (phoneData.elevenlabs_phone_number_id) {
+      console.log('[ElevenLabs Phone Import] Phone already imported, assigning agent');
+      const assignResponse = await fetch(
+        `https://api.elevenlabs.io/v1/convai/phone-numbers/${phoneData.elevenlabs_phone_number_id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ agent_id: agentId }),
+        }
+      );
+      const assignText = await assignResponse.text();
+      console.log('[ElevenLabs Phone Import] Agent assignment result:', assignResponse.status, assignText);
+      return;
+    }
+
+    // Step 4: Import phone number to ElevenLabs
+    // API: POST https://api.elevenlabs.io/v1/convai/phone-numbers
+    const importPayload = {
+      phone_number: phoneData.phone_number,
+      label: agentLabel,
+      provider: 'twilio',
+      sid: twilioSid,
+      token: twilioToken,
+    };
+
+    console.log('[ElevenLabs Phone Import] Sending import request:', {
+      phone_number: phoneData.phone_number,
+      label: agentLabel,
+      provider: 'twilio',
+    });
+
+    const importResponse = await fetch('https://api.elevenlabs.io/v1/convai/phone-numbers', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(importPayload),
+    });
+
+    const importText = await importResponse.text();
+    console.log('[ElevenLabs Phone Import] Import response:', importResponse.status, importText);
+
+    if (!importResponse.ok) {
+      console.error('[ElevenLabs Phone Import] Failed to import phone number');
+      return;
+    }
+
+    const importData = JSON.parse(importText);
+    const phoneNumberId = importData.phone_number_id;
+
+    // Step 5: Save the ElevenLabs phone number ID to database
+    const { error: updateError } = await supabase
+      .from('phone_numbers')
+      .update({ elevenlabs_phone_number_id: phoneNumberId })
+      .eq('id', phoneData.id);
+
+    if (updateError) {
+      console.error('[ElevenLabs Phone Import] Failed to save phone_number_id:', updateError.message);
+    } else {
+      console.log('[ElevenLabs Phone Import] Saved phone_number_id to database');
+    }
+
+    // Step 6: Assign the agent to the imported phone number
+    // API: PATCH https://api.elevenlabs.io/v1/convai/phone-numbers/{phone_number_id}
+    console.log('[ElevenLabs Phone Import] Assigning agent to phone number');
+    const assignResponse = await fetch(
+      `https://api.elevenlabs.io/v1/convai/phone-numbers/${phoneNumberId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ agent_id: agentId }),
+      }
+    );
+
+    const assignText = await assignResponse.text();
+    console.log('[ElevenLabs Phone Import] Agent assignment result:', assignResponse.status, assignText);
+
+    if (assignResponse.ok) {
+      console.log('[ElevenLabs Phone Import] Successfully imported phone and assigned agent');
+    }
+  } catch (error) {
+    console.error('[ElevenLabs Phone Import] Error:', error);
   }
 }
 
@@ -661,8 +833,13 @@ async function handleRenameAgent(
     });
   }
 
+  // Build agent name with environment and mode prefix
+  const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
+  const modePrefix = '[INBOUND]'; // TODO: Pass mode from dashboard when outbound is supported
+  const agentName = `${envPrefix}${modePrefix} ${name} - ${organizationId}`;
+
   const updateConfig = {
-    name: `${name} - ${organizationId}`
+    name: agentName
   };
 
   try {

@@ -47,11 +47,12 @@ serve(async (req) => {
     const reqLogger = logger.withContext({ userId: user.id, email: user.email });
     reqLogger.info('User authenticated');
 
-    // Get organization name, notification phone, and timezone from user metadata or request body
+    // Get organization name, notification phone, timezone, and planId from user metadata or request body
     let organizationName = user.user_metadata?.organization_name;
     let notificationPhone: string | null = null;
     let timezone = 'America/New_York'; // Default timezone
-    
+    let planId = 'core'; // Default plan
+
     // Try to get from request body if not in metadata
     try {
       const body = await req.json();
@@ -64,6 +65,9 @@ serve(async (req) => {
       if (body.timezone) {
         timezone = body.timezone;
       }
+      if (body.planId) {
+        planId = body.planId;
+      }
     } catch {
       // No body or invalid JSON, continue with metadata
     }
@@ -72,10 +76,9 @@ serve(async (req) => {
       organizationName = `${user.email?.split('@')[0]}'s Organization`;
     }
 
-    // Append environment suffix (e.g., "(local)" for local development)
-    organizationName = config.appendEnvironmentSuffix(organizationName);
+    // Note: Environment prefix is now added to agent name instead (e.g., [LOCAL][INBOUND])
 
-    reqLogger.info('Organization name determined', { organizationName, hasPhone: !!notificationPhone, timezone, environment: config.environment });
+    reqLogger.info('Organization name determined', { organizationName, hasPhone: !!notificationPhone, timezone, planId, environment: config.environment });
 
     // Check if user already has an organization
     const { data: existingProfile } = await supabaseAdmin
@@ -168,17 +171,26 @@ serve(async (req) => {
 
     reqLogger.step('User role created as owner');
 
-    // 4. Create subscription (trial on core plan)
+    // 4. Create subscription (trial on selected plan)
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 30);
+
+    // Get credits for the selected plan
+    const { data: tierData } = await supabaseAdmin
+      .from('subscription_tiers')
+      .select('credits')
+      .eq('plan_id', planId)
+      .single();
+
+    const totalCredits = tierData?.credits || 250;
 
     const { data: subscription, error: subError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
         organization_id: newOrg.id,
-        plan: 'core',
+        plan: planId,
         status: 'trial',
-        total_credits: 250,
+        total_credits: totalCredits,
         used_credits: 0,
         current_period_start: new Date().toISOString(),
         current_period_end: trialEndDate.toISOString(),
@@ -191,7 +203,7 @@ serve(async (req) => {
       throw new Error(`Failed to create subscription: ${subError.message}`);
     }
 
-    reqLogger.step('Subscription created', { plan: 'core', status: 'trial' });
+    reqLogger.step('Subscription created', { plan: planId, status: 'trial', credits: totalCredits });
 
     // 5. Create organization_agents record (placeholder - agent created after payment)
     const agentContext = JSON.stringify({

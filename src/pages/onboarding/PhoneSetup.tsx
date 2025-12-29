@@ -111,6 +111,8 @@ export default function PhoneSetup() {
     setIsPurchasing(true);
 
     try {
+      console.log('[PhoneSetup] Calling purchase-phone-number with:', { businessPhoneNumber: businessPhone, areaCode });
+
       // Call Edge Function to purchase number and save business phone
       const { data, error } = await supabase.functions.invoke("purchase-phone-number", {
         headers: {
@@ -122,10 +124,19 @@ export default function PhoneSetup() {
         },
       });
 
-      if (error || !data?.success) {
-        throw new Error(data?.error || error?.message || "Failed to set up phone number");
+      console.log('[PhoneSetup] Response:', { data, error });
+
+      if (error) {
+        console.error('[PhoneSetup] Edge function error:', error);
+        throw new Error(error.message || "Failed to call phone setup function");
       }
 
+      if (!data?.success) {
+        console.error('[PhoneSetup] Setup failed:', data);
+        throw new Error(data?.error || "Failed to set up phone number");
+      }
+
+      console.log('[PhoneSetup] Phone number set up successfully:', data.phoneNumber);
       setFoundNumber(data.phoneNumber);
 
       toast({
@@ -230,6 +241,12 @@ export default function PhoneSetup() {
                 placeholder="+1 (555) 123-4567"
                 value={businessPhone}
                 onChange={(e) => handleBusinessPhoneChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isValidPhoneNumber(businessPhone) && !isPurchasing && !foundNumber && !authLoading) {
+                    e.preventDefault();
+                    handlePurchase();
+                  }
+                }}
                 className="text-lg h-12"
                 disabled={isPurchasing}
               />
