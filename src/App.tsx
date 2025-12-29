@@ -25,6 +25,9 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import SelectPlan from "./pages/onboarding/SelectPlan";
 import PhoneSetup from "./pages/onboarding/PhoneSetup";
+import UpgradePrompt from "./pages/onboarding/UpgradePrompt";
+import SetupServices from "./pages/onboarding/SetupServices";
+import TestCall from "./pages/onboarding/TestCall";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 
@@ -46,6 +49,9 @@ const App = () => (
             <Route path="/login" element={<Auth />} />
             <Route path="/onboarding/select-plan" element={<ProtectedRoute><SelectPlan /></ProtectedRoute>} />
             <Route path="/onboarding/phone" element={<ProtectedRoute><PhoneSetup /></ProtectedRoute>} />
+            <Route path="/onboarding/upgrade-prompt" element={<ProtectedRoute><UpgradePrompt /></ProtectedRoute>} />
+            <Route path="/onboarding/setup-services" element={<ProtectedRoute><SetupServices /></ProtectedRoute>} />
+            <Route path="/onboarding/test-call" element={<ProtectedRoute><TestCall /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/calls" element={<ProtectedRoute><CallHistory /></ProtectedRoute>} />
             <Route path="/dashboard/calls/:id" element={<ProtectedRoute><CallDetail /></ProtectedRoute>} />

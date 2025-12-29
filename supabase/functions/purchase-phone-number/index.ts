@@ -38,7 +38,7 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabaseAnon.auth.getUser(token);
-    
+
     if (userError || !user) {
       throw new Error('Invalid token');
     }
@@ -71,9 +71,9 @@ serve(async (req) => {
     if (!subaccountSid) {
       // Create Twilio subaccount first
       logStep('Creating Twilio subaccount');
-      
+
       const friendlyName = `AnswerAfter-${org.name.substring(0, 20)}-${org.id.substring(0, 8)}`;
-      
+
       const subaccountResponse = await fetch(
         'https://api.twilio.com/2010-04-01/Accounts.json',
         {
@@ -108,13 +108,42 @@ serve(async (req) => {
       logStep('Subaccount created', { sid: subaccountSid });
     }
 
-    const { phoneNumber, numberType } = await req.json();
-    
-    if (!phoneNumber) {
-      throw new Error('Phone number is required');
+    const { businessPhoneNumber, areaCode } = await req.json();
+
+    if (!businessPhoneNumber || !areaCode) {
+      throw new Error('Business phone number and area code are required');
     }
 
-    logStep('Purchasing number', { phoneNumber, numberType, orgId: org.id });
+    logStep('Searching for number', { areaCode, orgId: org.id });
+
+    // Search for available local numbers by area code
+    const searchResponse = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/AvailablePhoneNumbers/US/Local.json?AreaCode=${areaCode}&Limit=1`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
+        }
+      }
+    );
+
+    if (!searchResponse.ok) {
+      const errorText = await searchResponse.text();
+      logStep('Search failed', { error: errorText });
+      throw new Error('Failed to search for available numbers');
+    }
+
+    const searchResults = await searchResponse.json();
+
+    if (!searchResults.available_phone_numbers || searchResults.available_phone_numbers.length === 0) {
+      throw new Error(`No phone numbers available in area code ${areaCode}`);
+    }
+
+    // Auto-select the first available number
+    const selectedNumber = searchResults.available_phone_numbers[0];
+    const phoneNumber = selectedNumber.phone_number;
+
+    logStep('Found available number', { phoneNumber, areaCode });
 
     // Configure webhook URL
     const webhookUrl = `${SUPABASE_URL}/functions/v1/twilio-webhook`;
@@ -143,19 +172,31 @@ serve(async (req) => {
     }
 
     const purchasedNumber = await purchaseResponse.json();
-    
-    logStep('Number purchased', { 
-      phoneNumber: purchasedNumber.phone_number, 
-      sid: purchasedNumber.sid 
+
+    logStep('Number purchased', {
+      phoneNumber: purchasedNumber.phone_number,
+      sid: purchasedNumber.sid
     });
 
-    // Save to database
+    // Save business phone number to organizations
+    const { error: orgUpdateError } = await supabaseAdmin
+      .from('organizations')
+      .update({
+        business_phone_number: businessPhoneNumber,
+      })
+      .eq('id', org.id);
+
+    if (orgUpdateError) {
+      logStep('Org update error', { error: orgUpdateError });
+    }
+
+    // Save purchased number to database
     const { error: insertError } = await supabaseAdmin
       .from('phone_numbers')
       .insert({
         organization_id: org.id,
         phone_number: purchasedNumber.phone_number,
-        friendly_name: purchasedNumber.friendly_name || (numberType === 'toll-free' ? 'Toll-Free Line' : 'Business Line'),
+        friendly_name: `Business Line (${areaCode})`,
         is_shared: false,
         is_active: true,
         twilio_sid: purchasedNumber.sid,
@@ -167,14 +208,8 @@ serve(async (req) => {
       // Don't throw - number is purchased, just failed to save
     }
 
-    // Update organization onboarding status
-    await supabaseAdmin
-      .from('organizations')
-      .update({
-        is_onboarding_complete: true,
-        onboarding_completed_at: new Date().toISOString()
-      })
-      .eq('id', org.id);
+    // DO NOT mark onboarding as complete yet - we have more steps
+    // Onboarding will be complete after the test call step
 
     // Trigger ElevenLabs agent creation if not already done
     const { data: agentRecord } = await supabaseAdmin
@@ -185,7 +220,7 @@ serve(async (req) => {
 
     if (!agentRecord?.elevenlabs_agent_id) {
       logStep('Creating ElevenLabs agent');
-      
+
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
           method: 'POST',
@@ -204,10 +239,11 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         phoneNumber: purchasedNumber.phone_number,
-        twilioSid: purchasedNumber.sid
+        twilioSid: purchasedNumber.sid,
+        businessPhoneNumber,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -97,7 +97,7 @@ export default function SelectPlan() {
             </div>
             <div>
               <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
-              <p className="text-sm text-muted-foreground">Step 1 of 3 • Choose your plan</p>
+              <p className="text-sm text-muted-foreground">Step 1 of 6 • Choose your plan</p>
             </div>
           </div>
         </div>

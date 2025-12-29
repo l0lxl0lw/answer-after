@@ -88,9 +88,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       if (!isDevelopment && !onboardingData.hasSubscription) {
         onboardingRedirect = '/onboarding/select-plan';
       }
-      // Then check if they have a phone number (Step 2)
+      // Check if they have a phone number (Step 2)
       else if (!onboardingData.hasPhoneNumber) {
         onboardingRedirect = '/onboarding/phone';
+      }
+      // If they have a phone but onboarding isn't complete, send them to setup services (Step 4)
+      // They can always access upgrade-prompt later, but services setup is more important
+      else {
+        onboardingRedirect = '/onboarding/setup-services';
       }
     }
   }

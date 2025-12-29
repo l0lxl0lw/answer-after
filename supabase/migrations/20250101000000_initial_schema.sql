@@ -1,6 +1,6 @@
 -- ============================================
 -- ANSWERAFTER DATABASE SCHEMA
--- Complete schema for local Supabase replication
+-- Initial consolidated schema
 -- ============================================
 
 -- ============= ENUMS =============
@@ -22,6 +22,7 @@ CREATE TABLE public.organizations (
   business_hours_schedule jsonb DEFAULT '{"friday": {"end": "17:00", "start": "09:00", "enabled": true}, "monday": {"end": "17:00", "start": "09:00", "enabled": true}, "sunday": {"end": "17:00", "start": "09:00", "enabled": false}, "tuesday": {"end": "17:00", "start": "09:00", "enabled": true}, "saturday": {"end": "17:00", "start": "09:00", "enabled": false}, "thursday": {"end": "17:00", "start": "09:00", "enabled": true}, "wednesday": {"end": "17:00", "start": "09:00", "enabled": true}}'::jsonb,
   notification_email text,
   notification_phone text,
+  business_phone_number text,
   emergency_keywords text[],
   twilio_subaccount_sid text,
   twilio_subaccount_auth_token text,
@@ -30,6 +31,8 @@ CREATE TABLE public.organizations (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+COMMENT ON COLUMN public.organizations.business_phone_number IS 'Original business phone number provided by user during onboarding';
 
 -- Profiles table (linked to auth.users)
 CREATE TABLE public.profiles (
@@ -201,7 +204,7 @@ CREATE TABLE public.services (
   name text NOT NULL,
   description text,
   category text NOT NULL DEFAULT 'routine',
-  base_price_cents integer NOT NULL DEFAULT 0,
+  price_cents integer NOT NULL DEFAULT 0,
   duration_minutes integer NOT NULL DEFAULT 60,
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -278,6 +281,15 @@ CREATE TABLE public.verification_codes (
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
+-- Idempotency keys table
+CREATE TABLE public.idempotency_keys (
+  id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  key text NOT NULL UNIQUE,
+  result jsonb,
+  processed_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
 -- ============= FUNCTIONS =============
 
 -- Function to update updated_at column
@@ -333,11 +345,24 @@ AS $$
   )
 $$;
 
+-- Function to cleanup old idempotency keys
+CREATE OR REPLACE FUNCTION public.cleanup_old_idempotency_keys()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  DELETE FROM public.idempotency_keys
+  WHERE created_at < NOW() - INTERVAL '30 days';
+END;
+$$;
+
 -- ============= INDEXES =============
 CREATE INDEX idx_appointment_reminders_appointment ON public.appointment_reminders USING btree (appointment_id);
 CREATE INDEX idx_appointment_reminders_scheduled ON public.appointment_reminders USING btree (scheduled_time, status);
 CREATE INDEX idx_purchased_credits_org_id ON public.purchased_credits USING btree (organization_id);
 CREATE INDEX idx_purchased_credits_remaining ON public.purchased_credits USING btree (credits_remaining) WHERE (credits_remaining > 0);
+CREATE INDEX idx_idempotency_keys_key ON public.idempotency_keys(key);
+CREATE INDEX idx_idempotency_keys_created_at ON public.idempotency_keys(created_at);
 
 -- ============= ENABLE RLS =============
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
@@ -358,6 +383,7 @@ ALTER TABLE public.credit_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchased_credits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.verification_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.idempotency_keys ENABLE ROW LEVEL SECURITY;
 
 -- ============= RLS POLICIES =============
 
@@ -474,13 +500,9 @@ CREATE POLICY "Service role can manage templates" ON public.prompt_templates FOR
 CREATE POLICY "Block anonymous access to verification_codes" ON public.verification_codes FOR SELECT TO anon USING (false);
 CREATE POLICY "Service role can manage verification codes" ON public.verification_codes FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- ============= TRIGGERS =============
-
--- Trigger for new user creation (attach to auth.users)
--- Note: Run this after the schema is created
--- CREATE TRIGGER on_auth_user_created
---   AFTER INSERT ON auth.users
---   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- Idempotency keys policies
+CREATE POLICY "Service role full access to idempotency_keys" ON public.idempotency_keys FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Block all other access to idempotency_keys" ON public.idempotency_keys FOR ALL USING (false) WITH CHECK (false);
 
 -- ============= SEED DATA =============
 
@@ -627,9 +649,9 @@ INSERT INTO public.subscription_tiers (
 INSERT INTO storage.buckets (id, name, public) VALUES ('tts-audio', 'tts-audio', true);
 INSERT INTO storage.buckets (id, name, public) VALUES ('greetings', 'greetings', true);
 
+-- ============= TRIGGERS =============
 
--- Create trigger for new user creation
+-- Trigger for new user creation
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-

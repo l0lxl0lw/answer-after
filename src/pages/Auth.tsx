@@ -471,7 +471,15 @@ const Auth = () => {
         </p>
       </div>
 
-      <div className="flex justify-center">
+      <div
+        className="flex justify-center"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && code.length === 6 && !isVerifying) {
+            e.preventDefault();
+            onVerify();
+          }
+        }}
+      >
         <InputOTP
           maxLength={6}
           value={code}
