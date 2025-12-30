@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
 
 interface Organization {
   id: string;
@@ -71,24 +72,15 @@ const OrganizationsManagement = () => {
       setLoading(true);
 
       // Call admin endpoint which uses service role to bypass RLS
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-list-organizations`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke('admin-list-organizations', {
+        method: 'GET',
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch organizations');
+      if (error) {
+        throw new Error(error.message || 'Failed to fetch organizations');
       }
 
-      const result = await response.json();
-      setOrganizations(result.data || []);
+      setOrganizations(data?.data || []);
     } catch (error) {
       console.error('Error fetching organizations:', error);
       toast({
@@ -113,23 +105,14 @@ const OrganizationsManagement = () => {
       setDeleting(true);
 
       // Call the delete edge function
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-delete-organization`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({
-            organizationId: selectedOrg.id,
-          }),
-        }
-      );
+      const { error } = await supabase.functions.invoke('admin-delete-organization', {
+        body: {
+          organizationId: selectedOrg.id,
+        },
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete organization');
+      if (error) {
+        throw new Error(error.message || 'Failed to delete organization');
       }
 
       toast({

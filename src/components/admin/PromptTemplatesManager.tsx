@@ -3,10 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
 import {
   Loader2,
   Save,
@@ -62,24 +61,15 @@ const PromptTemplatesManager = () => {
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-prompt-templates`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke('admin-prompt-templates', {
+        method: 'GET',
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch templates');
+      if (error) {
+        throw new Error(error.message || 'Failed to fetch templates');
       }
 
-      const result = await response.json();
-      setTemplates(result.data || []);
+      setTemplates(data?.data || []);
     } catch (error) {
       console.error('Error fetching templates:', error);
       toast({
@@ -107,31 +97,20 @@ const PromptTemplatesManager = () => {
 
     try {
       setSaving(template.id);
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-prompt-templates`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({
-            id: template.id,
-            template: newTemplate,
-          }),
-        }
-      );
+      const { data, error } = await supabase.functions.invoke('admin-prompt-templates', {
+        body: {
+          id: template.id,
+          template: newTemplate,
+        },
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update template');
+      if (error) {
+        throw new Error(error.message || 'Failed to update template');
       }
-
-      const result = await response.json();
 
       // Update local state
       setTemplates((prev) =>
-        prev.map((t) => (t.id === template.id ? result.data : t))
+        prev.map((t) => (t.id === template.id ? data.data : t))
       );
       setEditedTemplates((prev) => {
         const { [template.id]: _, ...rest } = prev;
