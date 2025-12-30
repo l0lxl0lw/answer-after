@@ -1,9 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAnonClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { getTwilioCredentials, makeTwilioRequest, getAccountUrl } from "../_shared/twilio.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger('get-twilio-calls');
 
 interface TwilioCall {
   sid: string;
@@ -32,50 +32,36 @@ interface TransformedCall {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("No authorization header", 401);
     }
 
-    // Initialize Supabase client to get user info
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const supabase = createAnonClient();
+    const token = authHeader.replace("Bearer ", "");
 
     // Get authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
-      console.error("Auth error:", userError);
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("Unauthorized", 401);
     }
 
     // Get user's profile to find organization and signup time
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from("profiles")
       .select("organization_id, created_at")
       .eq("id", user.id)
       .single();
 
-    if (profileError || !profile?.organization_id) {
-      console.error("Profile error:", profileError);
-      return new Response(JSON.stringify({ error: "User not in organization" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!profile?.organization_id) {
+      return errorResponse("User not in organization", 400);
     }
 
     // Get organization's phone numbers
@@ -85,28 +71,13 @@ Deno.serve(async (req) => {
       .eq("organization_id", profile.organization_id);
 
     if (phoneError) {
-      console.error("Phone numbers error:", phoneError);
-      return new Response(JSON.stringify({ error: "Failed to get phone numbers" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("Failed to get phone numbers", 500);
     }
 
     const toNumbers = phoneNumbers?.map(p => p.phone_number) || [];
-    console.log("Fetching calls for phone numbers:", toNumbers);
-    console.log("User signed up at:", profile.created_at);
+    log.info("Fetching calls for phone numbers", { count: toNumbers.length });
 
-    // Get Twilio credentials
-    const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-    const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-
-    if (!accountSid || !authToken) {
-      console.error("Missing Twilio credentials");
-      return new Response(JSON.stringify({ error: "Twilio credentials not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const twilioCredentials = getTwilioCredentials();
 
     // Parse query parameters
     const url = new URL(req.url);
@@ -119,74 +90,65 @@ Deno.serve(async (req) => {
     const signupDate = new Date(profile.created_at);
 
     for (const toNumber of toNumbers) {
-      // Build Twilio API URL with filters
-      const twilioUrl = new URL(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`);
-      twilioUrl.searchParams.set("To", toNumber);
-      twilioUrl.searchParams.set("StartTime>", signupDate.toISOString().split("T")[0]);
-      twilioUrl.searchParams.set("PageSize", "100");
-
-      console.log("Fetching from Twilio:", twilioUrl.toString());
-
-      const response = await fetch(twilioUrl.toString(), {
-        headers: {
-          Authorization: "Basic " + btoa(`${accountSid}:${authToken}`),
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Twilio API error:", response.status, errorText);
-        continue;
-      }
-
-      const data = await response.json();
-      console.log(`Found ${data.calls?.length || 0} calls for ${toNumber}`);
-
-      // Transform Twilio calls to our format
-      for (const call of data.calls || []) {
-        const twilioCall = call as TwilioCall;
-        
-        // Map Twilio status to our status
-        let status = "completed";
-        let outcome: string | null = null;
-        
-        switch (twilioCall.status) {
-          case "completed":
-            status = "completed";
-            outcome = parseInt(twilioCall.duration) > 0 ? "information_provided" : "no_action";
-            break;
-          case "busy":
-          case "no-answer":
-          case "canceled":
-            status = "failed";
-            outcome = "no_action";
-            break;
-          case "failed":
-            status = "failed";
-            outcome = "no_action";
-            break;
-          case "in-progress":
-          case "ringing":
-          case "queued":
-            status = "active";
-            break;
-          default:
-            status = "completed";
-        }
-
-        allCalls.push({
-          id: twilioCall.sid,
-          caller_phone: twilioCall.from,
-          caller_name: null,
-          status,
-          outcome,
-          is_emergency: false,
-          started_at: twilioCall.start_time || twilioCall.date_created,
-          ended_at: twilioCall.end_time || null,
-          duration_seconds: parseInt(twilioCall.duration) || 0,
-          summary: `Call from ${twilioCall.from} - ${twilioCall.status}`,
-          twilio_call_sid: twilioCall.sid,
+      try {
+        const params = new URLSearchParams({
+          To: toNumber,
+          "StartTime>": signupDate.toISOString().split("T")[0],
+          PageSize: "100",
         });
+
+        const data = await makeTwilioRequest<{ calls: TwilioCall[] }>(
+          `${getAccountUrl(twilioCredentials.accountSid)}/Calls.json?${params}`,
+          twilioCredentials
+        );
+
+        log.info(`Found calls for ${toNumber}`, { count: data.calls?.length || 0 });
+
+        // Transform Twilio calls to our format
+        for (const twilioCall of data.calls || []) {
+          let status = "completed";
+          let outcome: string | null = null;
+
+          switch (twilioCall.status) {
+            case "completed":
+              status = "completed";
+              outcome = parseInt(twilioCall.duration) > 0 ? "information_provided" : "no_action";
+              break;
+            case "busy":
+            case "no-answer":
+            case "canceled":
+              status = "failed";
+              outcome = "no_action";
+              break;
+            case "failed":
+              status = "failed";
+              outcome = "no_action";
+              break;
+            case "in-progress":
+            case "ringing":
+            case "queued":
+              status = "active";
+              break;
+            default:
+              status = "completed";
+          }
+
+          allCalls.push({
+            id: twilioCall.sid,
+            caller_phone: twilioCall.from,
+            caller_name: null,
+            status,
+            outcome,
+            is_emergency: false,
+            started_at: twilioCall.start_time || twilioCall.date_created,
+            ended_at: twilioCall.end_time || null,
+            duration_seconds: parseInt(twilioCall.duration) || 0,
+            summary: `Call from ${twilioCall.from} - ${twilioCall.status}`,
+            twilio_call_sid: twilioCall.sid,
+          });
+        }
+      } catch (error) {
+        log.warn(`Error fetching calls for ${toNumber}`, { error: (error as Error).message });
       }
     }
 
@@ -199,41 +161,30 @@ Deno.serve(async (req) => {
       const searchLower = search.toLowerCase();
       filteredCalls = allCalls.filter(call =>
         call.caller_phone.toLowerCase().includes(searchLower) ||
-        (call.caller_name?.toLowerCase().includes(searchLower)) ||
-        (call.summary?.toLowerCase().includes(searchLower))
+        call.caller_name?.toLowerCase().includes(searchLower) ||
+        call.summary?.toLowerCase().includes(searchLower)
       );
     }
 
     // Paginate results
     const total = filteredCalls.length;
     const startIndex = (page - 1) * perPage;
-    const endIndex = startIndex + perPage;
-    const paginatedCalls = filteredCalls.slice(startIndex, endIndex);
+    const paginatedCalls = filteredCalls.slice(startIndex, startIndex + perPage);
 
-    console.log(`Returning ${paginatedCalls.length} calls (page ${page}, total ${total})`);
+    log.info(`Returning calls`, { count: paginatedCalls.length, page, total });
 
-    return new Response(
-      JSON.stringify({
-        calls: paginatedCalls,
-        meta: {
-          page,
-          per_page: perPage,
-          total,
-          total_pages: Math.ceil(total / perPage),
-        },
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return successResponse({
+      calls: paginatedCalls,
+      meta: {
+        page,
+        per_page: perPage,
+        total,
+        total_pages: Math.ceil(total / perPage),
+      },
+    });
+
   } catch (error) {
-    console.error("Error fetching Twilio calls:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error", details: String(error) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

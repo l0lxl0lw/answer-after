@@ -1,9 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAnonClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { getElevenLabsApiKey, makeElevenLabsRequest } from "../_shared/elevenlabs.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger('get-elevenlabs-conversations');
 
 interface ElevenLabsConversation {
   conversation_id: string;
@@ -20,12 +20,6 @@ interface ElevenLabsConversation {
   };
 }
 
-interface ElevenLabsConversationsResponse {
-  conversations: ElevenLabsConversation[];
-  has_more: boolean;
-  next_cursor?: string;
-}
-
 interface TransformedConversation {
   id: string;
   conversation_id: string;
@@ -39,69 +33,49 @@ interface TransformedConversation {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("No authorization header", 401);
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const supabase = createAnonClient();
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("Unauthorized", 401);
     }
 
     // Get user's organization
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from("profiles")
       .select("organization_id")
       .eq("id", user.id)
       .single();
 
-    if (profileError || !profile?.organization_id) {
-      return new Response(JSON.stringify({ error: "Organization not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!profile?.organization_id) {
+      return errorResponse("Organization not found", 404);
     }
 
     // Get organization's ElevenLabs agent ID
-    const { data: agentData, error: agentError } = await supabase
+    const { data: agentData } = await supabase
       .from("organization_agents")
       .select("elevenlabs_agent_id")
       .eq("organization_id", profile.organization_id)
       .single();
 
-    if (agentError || !agentData?.elevenlabs_agent_id) {
-      return new Response(JSON.stringify({ error: "ElevenLabs agent not configured" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!agentData?.elevenlabs_agent_id) {
+      return errorResponse("ElevenLabs agent not configured", 404);
     }
 
-    const elevenlabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
-    if (!elevenlabsApiKey) {
-      return new Response(JSON.stringify({ error: "ElevenLabs API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const elevenlabsApiKey = getElevenLabsApiKey();
 
     // Parse query parameters
     const url = new URL(req.url);
@@ -110,38 +84,25 @@ Deno.serve(async (req) => {
     const search = url.searchParams.get("search") || "";
     const cursor = url.searchParams.get("cursor") || "";
 
-    // Build ElevenLabs API URL
-    const apiUrl = new URL("https://api.elevenlabs.io/v1/convai/conversations");
-    apiUrl.searchParams.set("agent_id", agentData.elevenlabs_agent_id);
-    apiUrl.searchParams.set("page_size", perPage.toString());
-    apiUrl.searchParams.set("summary_mode", "include");
-    
-    if (cursor) {
-      apiUrl.searchParams.set("cursor", cursor);
-    }
-    if (search) {
-      apiUrl.searchParams.set("search", search);
-    }
-
-    console.log("Fetching ElevenLabs conversations:", apiUrl.toString());
-
-    const response = await fetch(apiUrl.toString(), {
-      headers: {
-        "xi-api-key": elevenlabsApiKey,
-      },
+    // Build API URL params
+    const params = new URLSearchParams({
+      agent_id: agentData.elevenlabs_agent_id,
+      page_size: perPage.toString(),
+      summary_mode: "include",
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("ElevenLabs API error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "Failed to fetch conversations" }), {
-        status: response.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (cursor) params.set("cursor", cursor);
+    if (search) params.set("search", search);
 
-    const data: ElevenLabsConversationsResponse = await response.json();
-    console.log(`Found ${data.conversations?.length || 0} conversations`);
+    log.info("Fetching ElevenLabs conversations", { agentId: agentData.elevenlabs_agent_id });
+
+    const data = await makeElevenLabsRequest<{
+      conversations: ElevenLabsConversation[];
+      has_more: boolean;
+      next_cursor?: string;
+    }>(`/convai/conversations?${params}`, { apiKey: elevenlabsApiKey });
+
+    log.info(`Found ${data.conversations?.length || 0} conversations`);
 
     // Transform conversations to our format
     const conversations: TransformedConversation[] = (data.conversations || []).map((conv) => ({
@@ -155,29 +116,19 @@ Deno.serve(async (req) => {
       call_successful: conv.call_successful || conv.analysis?.call_successful || null,
     }));
 
-    return new Response(
-      JSON.stringify({
-        conversations,
-        meta: {
-          page,
-          per_page: perPage,
-          total: conversations.length,
-          has_more: data.has_more,
-          next_cursor: data.next_cursor,
-        },
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return successResponse({
+      conversations,
+      meta: {
+        page,
+        per_page: perPage,
+        total: conversations.length,
+        has_more: data.has_more,
+        next_cursor: data.next_cursor,
+      },
+    });
+
   } catch (error) {
-    console.error("Error fetching conversations:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error", details: String(error) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

@@ -56,7 +56,7 @@ import { useNavigate } from "react-router-dom";
 const serviceSchema = z.object({
   name: z.string().trim().min(1, "Service name is required").max(100, "Name too long"),
   description: z.string().max(500, "Description too long").optional(),
-  base_price_cents: z.number().min(0, "Price must be positive"),
+  price_cents: z.number().min(0, "Price must be positive"),
   duration_minutes: z.number().min(1, "Duration must be at least 1 minute").max(1440, "Duration too long"),
   category: z.enum(["routine", "emergency", "maintenance", "installation"]),
 });
@@ -65,7 +65,7 @@ interface Service {
   id: string;
   name: string;
   description: string | null;
-  base_price_cents: number;
+  price_cents: number;
   duration_minutes: number;
   category: string;
   is_active: boolean;
@@ -76,7 +76,7 @@ interface Service {
 interface FormData {
   name: string;
   description: string;
-  base_price_cents: number;
+  price_cents: number;
   duration_minutes: number;
   category: string;
 }
@@ -84,7 +84,7 @@ interface FormData {
 const emptyForm: FormData = {
   name: "",
   description: "",
-  base_price_cents: 0,
+  price_cents: 0,
   duration_minutes: 60,
   category: "routine",
 };
@@ -147,7 +147,7 @@ const MyServices = () => {
         organization_id: user?.organization_id,
         name: data.name.trim(),
         description: data.description.trim() || null,
-        base_price_cents: data.base_price_cents,
+        price_cents: data.price_cents,
         duration_minutes: data.duration_minutes,
         category: data.category,
       });
@@ -171,7 +171,7 @@ const MyServices = () => {
         .update({
           name: data.name.trim(),
           description: data.description.trim() || null,
-          base_price_cents: data.base_price_cents,
+          price_cents: data.price_cents,
           duration_minutes: data.duration_minutes,
           category: data.category,
         })
@@ -230,7 +230,7 @@ const MyServices = () => {
     setFormData({
       name: service.name,
       description: service.description || "",
-      base_price_cents: service.base_price_cents,
+      price_cents: service.price_cents,
       duration_minutes: service.duration_minutes,
       category: service.category,
     });
@@ -394,7 +394,7 @@ const MyServices = () => {
                           <DollarSign className="w-4 h-4 text-muted-foreground" />
                           <span className="text-muted-foreground">Base Price:</span>
                           <span className="font-medium text-foreground">
-                            {formatPrice(service.base_price_cents)}
+                            {formatPrice(service.price_cents)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
@@ -492,14 +492,14 @@ const MyServices = () => {
                     id="price"
                     type="number"
                     min={0}
-                    value={formData.base_price_cents / 100}
+                    value={formData.price_cents / 100}
                     onChange={(e) =>
-                      setFormData({ ...formData, base_price_cents: Math.round(parseFloat(e.target.value || "0") * 100) })
+                      setFormData({ ...formData, price_cents: Math.round(parseFloat(e.target.value || "0") * 100) })
                     }
                     placeholder="95"
                   />
-                  {formErrors.base_price_cents && (
-                    <p className="text-sm text-destructive">{formErrors.base_price_cents}</p>
+                  {formErrors.price_cents && (
+                    <p className="text-sm text-destructive">{formErrors.price_cents}</p>
                   )}
                 </div>
 

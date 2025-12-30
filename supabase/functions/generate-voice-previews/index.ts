@@ -1,27 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { getElevenLabsApiKey, generateVoicePreview } from "../_shared/elevenlabs.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('generate-voice-previews');
 
 const PREVIEW_TEXT = "Hello, Thanks for calling. How can I help you today?";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    if (!ELEVENLABS_API_KEY) {
-      throw new Error('ELEVENLABS_API_KEY is not set');
-    }
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const elevenlabsApiKey = getElevenLabsApiKey();
+    const supabase = createServiceClient();
 
     // Get all voices that don't have a preview_url yet
     const { data: voices, error: fetchError } = await supabase
@@ -31,38 +27,21 @@ serve(async (req) => {
 
     if (fetchError) throw fetchError;
 
-    console.log(`Found ${voices?.length || 0} voices without previews`);
+    log.info(`Found ${voices?.length || 0} voices without previews`);
 
     const results = [];
 
     for (const voice of voices || []) {
       try {
-        console.log(`Generating preview for ${voice.name} (${voice.elevenlabs_voice_id})`);
+        log.step(`Generating preview for ${voice.name}`);
 
-        // Generate TTS
-        const ttsResponse = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${voice.elevenlabs_voice_id}`,
-          {
-            method: 'POST',
-            headers: {
-              'xi-api-key': ELEVENLABS_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              text: PREVIEW_TEXT,
-              model_id: 'eleven_multilingual_v2',
-              output_format: 'mp3_44100_128',
-            }),
-          }
+        // Generate TTS using shared utility
+        const audioBuffer = await generateVoicePreview(
+          PREVIEW_TEXT,
+          voice.elevenlabs_voice_id,
+          elevenlabsApiKey
         );
 
-        if (!ttsResponse.ok) {
-          const error = await ttsResponse.text();
-          console.error(`TTS failed for ${voice.name}:`, error);
-          continue;
-        }
-
-        const audioBuffer = await ttsResponse.arrayBuffer();
         const fileName = `voice-previews/${voice.elevenlabs_voice_id}.mp3`;
 
         // Upload to storage
@@ -74,7 +53,7 @@ serve(async (req) => {
           });
 
         if (uploadError) {
-          console.error(`Upload failed for ${voice.name}:`, uploadError);
+          log.warn(`Upload failed for ${voice.name}`, { error: uploadError.message });
           continue;
         }
 
@@ -90,30 +69,26 @@ serve(async (req) => {
           .eq('id', voice.id);
 
         if (updateError) {
-          console.error(`Update failed for ${voice.name}:`, updateError);
+          log.warn(`Update failed for ${voice.name}`, { error: updateError.message });
           continue;
         }
 
         results.push({ voice: voice.name, status: 'success', url: urlData.publicUrl });
-        console.log(`Successfully generated preview for ${voice.name}`);
+        log.info(`Successfully generated preview for ${voice.name}`);
 
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 500));
+
       } catch (voiceError) {
-        console.error(`Error processing ${voice.name}:`, voiceError);
+        log.warn(`Error processing ${voice.name}`, { error: (voiceError as Error).message });
         results.push({ voice: voice.name, status: 'error', error: String(voiceError) });
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return successResponse({ success: true, results });
+
   } catch (error) {
-    console.error('Error:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    logger.error('Handler error', error as Error);
+    return errorResponse(error as Error);
   }
 });

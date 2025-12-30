@@ -1,37 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAnonClient, createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger('google-calendar-events');
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// Helper function to validate user belongs to organization
 async function validateUserOrganization(req: Request, organizationId: string): Promise<{ valid: boolean; error?: string; userId?: string }> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return { valid: false, error: "Missing authorization header" };
   }
 
-  // Create client with user's token to validate their identity
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  });
+  const supabase = createAnonClient();
+  const token = authHeader.replace("Bearer ", "");
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user) {
-    console.error("Failed to get user:", userError);
     return { valid: false, error: "Invalid authentication" };
   }
 
-  // Use service role to check user's organization
-  const serviceSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const serviceSupabase = createServiceClient();
   const { data: profile, error: profileError } = await serviceSupabase
     .from("profiles")
     .select("organization_id")
@@ -39,12 +31,10 @@ async function validateUserOrganization(req: Request, organizationId: string): P
     .single();
 
   if (profileError || !profile) {
-    console.error("Failed to get user profile:", profileError);
     return { valid: false, error: "User profile not found" };
   }
 
   if (profile.organization_id !== organizationId) {
-    console.error("User organization mismatch:", { userOrg: profile.organization_id, requestedOrg: organizationId });
     return { valid: false, error: "Unauthorized - user does not belong to this organization" };
   }
 
@@ -59,15 +49,13 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
     .single();
 
   if (error || !connection) {
-    console.error("No Google connection found for org:", organizationId);
     return null;
   }
 
   const expiresAt = new Date(connection.token_expires_at);
   const now = new Date();
-  
+
   if (now >= expiresAt) {
-    console.log("Token expired, refreshing...");
     const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -80,9 +68,8 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
     });
 
     const refreshData = await refreshResponse.json();
-    
+
     if (refreshData.error) {
-      console.error("Token refresh failed:", refreshData);
       return null;
     }
 
@@ -101,7 +88,7 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
   return connection.access_token;
 }
 
-async function getSelectedCalendarId(supabase: any, organizationId: string): Promise<string | null> {
+async function getSelectedCalendarId(supabase: any, organizationId: string): Promise<string> {
   const { data: connection } = await supabase
     .from("google_calendar_connections")
     .select("selected_calendars")
@@ -109,7 +96,7 @@ async function getSelectedCalendarId(supabase: any, organizationId: string): Pro
     .single();
 
   if (!connection?.selected_calendars?.length) {
-    return "primary"; // Default to primary calendar
+    return "primary";
   }
 
   return connection.selected_calendars[0];
@@ -117,47 +104,45 @@ async function getSelectedCalendarId(supabase: any, organizationId: string): Pro
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const body = await req.json();
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+
+    const body = await parseJsonBody<{
+      action: string;
+      organizationId?: string;
+      timeMin?: string;
+      timeMax?: string;
+    }>(req, ['action']);
+
     const { action, organizationId, timeMin, timeMax } = body;
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createServiceClient();
 
     switch (action) {
       case "list": {
         if (!organizationId) {
-          return new Response(JSON.stringify({ error: "Organization ID required" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Organization ID required", 400);
         }
 
         // SECURITY: Validate user belongs to this organization
         const validation = await validateUserOrganization(req, organizationId);
         if (!validation.valid) {
-          console.error("Organization validation failed:", validation.error);
-          return new Response(JSON.stringify({ error: validation.error, events: [] }), {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.warn("Organization validation failed", { error: validation.error });
+          return errorResponse(validation.error!, 403);
         }
 
-        console.log("User validated for organization:", organizationId);
+        log.info("User validated for organization", { organizationId });
 
         const accessToken = await getValidAccessToken(supabase, organizationId);
         if (!accessToken) {
-          return new Response(JSON.stringify({ error: "No valid Google connection", events: [] }), {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return successResponse({ error: "No valid Google connection", events: [] });
         }
 
         const calendarId = await getSelectedCalendarId(supabase, organizationId);
-        
-        // Build query params
+
         const params = new URLSearchParams({
           singleEvents: "true",
           orderBy: "startTime",
@@ -167,9 +152,9 @@ serve(async (req) => {
         if (timeMin) params.set("timeMin", timeMin);
         if (timeMax) params.set("timeMax", timeMax);
 
-        const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId!)}/events?${params}`;
-        
-        console.log("Fetching events from:", eventsUrl);
+        const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`;
+
+        log.info("Fetching events", { calendarId });
 
         const eventsResponse = await fetch(eventsUrl, {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -177,15 +162,12 @@ serve(async (req) => {
 
         if (!eventsResponse.ok) {
           const errorText = await eventsResponse.text();
-          console.error("Failed to fetch events:", errorText);
-          return new Response(JSON.stringify({ error: "Failed to fetch events", events: [] }), {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Failed to fetch events", new Error(errorText));
+          return successResponse({ error: "Failed to fetch events", events: [] });
         }
 
         const eventsData = await eventsResponse.json();
-        
+
         // Transform events to simpler format
         const events = (eventsData.items || []).map((event: any) => ({
           id: event.id,
@@ -197,25 +179,16 @@ serve(async (req) => {
           location: event.location,
         }));
 
-        console.log(`Found ${events.length} events`);
+        log.info("Events fetched", { count: events.length });
 
-        return new Response(JSON.stringify({ events }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ events });
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Unknown action" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse("Unknown action", 400);
     }
-  } catch (error: unknown) {
-    console.error("Google Calendar Events error:", error);
-    const message = error instanceof Error ? error.message : "Internal error";
-    return new Response(JSON.stringify({ error: message, events: [] }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (error) {
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

@@ -1,44 +1,39 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createAnonClient, createServiceClient, getUserFromAuth } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { config } from "../_shared/config.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[CREATE-CHECKOUT-TRIAL] ${step}${detailsStr}`);
-};
+const logger = createLogger('create-checkout-with-trial');
 
 // Plan configurations - monthly only
-const PLAN_CONFIG: Record<string, { 
-  name: string; 
+const PLAN_CONFIG: Record<string, {
+  name: string;
   monthlyPrice: number;
   credits: number;
   description: string;
 }> = {
-  core: { 
-    name: 'Core', 
+  core: {
+    name: 'Core',
     monthlyPrice: 2900,  // $29/mo
     credits: 250,
     description: 'AI-powered after-hours call handling'
   },
-  growth: { 
-    name: 'Growth', 
+  growth: {
+    name: 'Growth',
     monthlyPrice: 9900, // $99/mo
     credits: 600,
     description: 'For growing service businesses'
   },
-  pro: { 
-    name: 'Pro', 
+  pro: {
+    name: 'Pro',
     monthlyPrice: 19900, // $199/mo
     credits: 1400,
     description: 'For high-volume operations'
   },
-  business: { 
-    name: 'Business', 
+  business: {
+    name: 'Business',
     monthlyPrice: 49900, // $499/mo
     credits: 3000,
     description: 'For multi-location businesses'
@@ -47,16 +42,12 @@ const PLAN_CONFIG: Record<string, {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-  );
-
   try {
-    logStep("Function started");
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    log.step("Function started");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
@@ -69,28 +60,40 @@ serve(async (req) => {
       throw new Error("Invalid STRIPE_SECRET_KEY format");
     }
 
-    // In local/development, require test keys to prevent accidental charges
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const isLocalEnv = supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1");
-
-    if (isLocalEnv && !isTestKey) {
+    if (config.isLocal && !isTestKey) {
       throw new Error("SAFETY: Local environment requires Stripe test keys (sk_test_*). Live keys are not allowed in local development.");
     }
 
-    logStep("Stripe key verified", { isTestMode: isTestKey, isLocalEnv });
+    log.info("Stripe key verified", { isTestMode: isTestKey, isLocalEnv: config.isLocal });
+
+    const supabaseAnon = createAnonClient();
+    const supabaseAdmin = createServiceClient();
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabaseClient.auth.getUser(token);
+    const { data } = await supabaseAnon.auth.getUser(token);
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    log.info("User authenticated", { userId: user.id, email: user.email });
+
+    // Get user's organization_id
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.organization_id) {
+      throw new Error("User has no organization. Please complete signup first.");
+    }
+    const organizationId = profile.organization_id;
+    log.info("Organization found", { organizationId });
 
     // Parse request body for plan selection
     let planId = 'growth'; // default plan
-    
+
     try {
       const body = await req.json();
       if (body.planId && PLAN_CONFIG[body.planId]) {
@@ -101,17 +104,17 @@ serve(async (req) => {
     }
 
     const planConfig = PLAN_CONFIG[planId];
-    logStep("Plan selected", { planId, config: planConfig });
+    log.info("Plan selected", { planId, config: planConfig });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     // Check if Stripe customer exists
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId: string | undefined;
-    
+
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
-      logStep("Found existing customer", { customerId });
+      log.info("Found existing customer", { customerId });
     } else {
       // Create new customer with metadata
       const newCustomer = await stripe.customers.create({
@@ -121,28 +124,23 @@ serve(async (req) => {
         },
       });
       customerId = newCustomer.id;
-      logStep("Created new customer", { customerId });
+      log.info("Created new customer", { customerId });
     }
 
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
     // Strategy: Use regular monthly price with a coupon that reduces first month to $1
-    // This shows: $29/mo with -$28 coupon = $1 due today
     const firstMonthTargetPrice = 100; // $1
     const regularMonthlyPrice = planConfig.monthlyPrice;
-    const discountAmount = regularMonthlyPrice - firstMonthTargetPrice; // e.g., $29 - $1 = $28
-    
-    logStep("Pricing calculated", { 
-      firstMonthTargetPrice,
-      regularMonthlyPrice,
-      discountAmount,
-    });
+    const discountAmount = regularMonthlyPrice - firstMonthTargetPrice;
+
+    log.info("Pricing calculated", { firstMonthTargetPrice, regularMonthlyPrice, discountAmount });
 
     // Create a product for this plan if it doesn't exist
     const productName = `AnswerAfter ${planConfig.name}`;
     const products = await stripe.products.list({ limit: 100 });
     let product = products.data.find((p: Stripe.Product) => p.name === productName && p.active);
-    
+
     if (!product) {
       product = await stripe.products.create({
         name: productName,
@@ -152,7 +150,7 @@ serve(async (req) => {
           credits: planConfig.credits.toString(),
         }
       });
-      logStep("Created product", { productId: product.id });
+      log.info("Created product", { productId: product.id });
     }
 
     // Create the regular monthly price
@@ -169,22 +167,22 @@ serve(async (req) => {
         plan_id: planId,
       }
     });
-    logStep("Created regular price", { priceId: regularPriceObj.id });
+    log.info("Created regular price", { priceId: regularPriceObj.id });
 
     // Create a coupon that discounts to $1 for the first month only
     const coupon = await stripe.coupons.create({
       amount_off: discountAmount,
       currency: 'usd',
-      duration: 'once', // Only applies to first invoice
+      duration: 'once',
       name: `$1 First Month - ${planConfig.name}`,
       metadata: {
         type: 'first_month_promo',
         plan_id: planId,
       }
     });
-    logStep("Created coupon", { couponId: coupon.id, discountAmount });
+    log.info("Created coupon", { couponId: coupon.id, discountAmount });
 
-    // Create checkout session with regular price + coupon for first month discount
+    // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
@@ -215,26 +213,38 @@ serve(async (req) => {
       },
     });
 
-    logStep("Checkout session created", {
+    log.info("Checkout session created", {
       sessionId: session.id,
       planId: planId,
-      sessionMetadataPlan: session.metadata?.plan,
       url: session.url,
       regularPrice: regularMonthlyPrice,
       couponDiscount: discountAmount,
       firstMonthTotal: firstMonthTargetPrice,
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    // Store selected plan immediately in database (before Stripe payment completes)
+    const { error: subError } = await supabaseAdmin
+      .from("subscriptions")
+      .upsert({
+        organization_id: organizationId,
+        plan: planId,
+        status: 'pending',
+        stripe_customer_id: customerId,
+        total_credits: planConfig.credits,
+      }, {
+        onConflict: 'organization_id'
+      });
+
+    if (subError) {
+      log.warn("Failed to create pending subscription", { error: subError.message });
+    } else {
+      log.info("Pending subscription created", { organizationId, plan: planId });
+    }
+
+    return successResponse({ url: session.url });
+
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

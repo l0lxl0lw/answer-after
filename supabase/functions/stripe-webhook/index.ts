@@ -1,20 +1,20 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createServiceClient } from "../_shared/db.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { config } from "../_shared/config.ts";
 
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
-};
+const logger = createLogger('stripe-webhook');
 
 serve(async (req) => {
   try {
-    logStep("Webhook received");
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    log.step("Webhook received");
 
     // Handle empty or missing body
     const body = await req.text();
     if (!body || body.trim() === "") {
-      logStep("Empty body received, ignoring");
+      log.info("Empty body received, ignoring");
       return new Response(JSON.stringify({ received: true, message: "Empty body ignored" }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
@@ -24,7 +24,6 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
-    // Safety check: Ensure we're using test keys in non-production environments
     const isTestKey = stripeKey.startsWith("sk_test_");
     const isLiveKey = stripeKey.startsWith("sk_live_");
 
@@ -32,30 +31,22 @@ serve(async (req) => {
       throw new Error("Invalid STRIPE_SECRET_KEY format");
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const isLocalEnv = supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1");
-
-    if (isLocalEnv && !isTestKey) {
+    if (config.isLocal && !isTestKey) {
       throw new Error("SAFETY: Local environment requires Stripe test keys (sk_test_*). Live keys are not allowed in local development.");
     }
 
-    logStep("Stripe key verified", { isTestMode: isTestKey, isLocalEnv });
+    log.info("Stripe key verified", { isTestMode: isTestKey, isLocalEnv: config.isLocal });
 
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
     if (!webhookSecret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
-    );
+    const supabaseClient = createServiceClient();
 
     // Verify webhook signature for security
     const signature = req.headers.get("stripe-signature");
     if (!signature) {
-      logStep("Missing stripe-signature header");
+      log.warn("Missing stripe-signature header");
       return new Response(JSON.stringify({ error: "Missing signature" }), {
         headers: { "Content-Type": "application/json" },
         status: 400,
@@ -65,33 +56,31 @@ serve(async (req) => {
     let event: Stripe.Event;
     try {
       event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
-      logStep("Webhook signature verified");
+      log.info("Webhook signature verified");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      logStep("Webhook signature verification failed", { error: errorMessage });
+      log.error("Webhook signature verification failed", new Error(errorMessage));
       return new Response(JSON.stringify({ error: "Webhook signature verification failed" }), {
         headers: { "Content-Type": "application/json" },
         status: 400,
       });
     }
 
-    logStep("Processing event", { type: event.type });
+    log.info("Processing event", { type: event.type });
 
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        logStep("Checkout session completed", { sessionId: session.id, customerId: session.customer });
+        log.info("Checkout session completed", { sessionId: session.id, customerId: session.customer });
 
-        // Get customer email and metadata
         const customerId = session.customer as string;
         const customer = await stripe.customers.retrieve(customerId);
-        
+
         if (customer.deleted || !('email' in customer) || !customer.email) {
-          logStep("Customer has no email, skipping");
+          log.info("Customer has no email, skipping");
           break;
         }
 
-        // Find the profile by email to get organization_id
         const { data: profile, error: profileError } = await supabaseClient
           .from("profiles")
           .select("organization_id")
@@ -99,7 +88,7 @@ serve(async (req) => {
           .single();
 
         if (profileError || !profile?.organization_id) {
-          logStep("Profile not found for checkout", { email: customer.email, error: profileError });
+          log.warn("Profile not found for checkout", { email: customer.email, error: profileError });
           break;
         }
 
@@ -108,8 +97,7 @@ serve(async (req) => {
         // Check if this is a credit top-up purchase
         if (session.metadata?.type === 'credit_topup') {
           const creditsAmount = parseInt(session.metadata?.credits_amount || '300', 10);
-          
-          // Insert purchased credits
+
           const { error: insertError } = await supabaseClient
             .from("purchased_credits")
             .insert({
@@ -121,21 +109,16 @@ serve(async (req) => {
             });
 
           if (insertError) {
-            logStep("Error inserting purchased credits", { error: insertError });
+            log.error("Error inserting purchased credits", insertError);
           } else {
-            logStep("Credit top-up recorded", { organizationId, credits: creditsAmount });
+            log.info("Credit top-up recorded", { organizationId, credits: creditsAmount });
           }
           break;
         }
 
-        // Determine plan from metadata - log all metadata for debugging
-        logStep("Session metadata", { metadata: session.metadata });
-
         const planFromMetadata = session.metadata?.plan || 'core';
+        log.info("Triggering onboarding flow", { organizationId, plan: planFromMetadata });
 
-        logStep("Triggering onboarding flow", { organizationId, plan: planFromMetadata, rawPlanMetadata: session.metadata?.plan });
-
-        // Trigger the onboarding flow
         const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
         const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -153,13 +136,13 @@ serve(async (req) => {
           });
 
           const onboardingResult = await onboardingResponse.json();
-          logStep("Onboarding result", onboardingResult);
+          log.info("Onboarding result", onboardingResult);
 
           if (!onboardingResult.success) {
-            logStep("Onboarding had issues", { steps: onboardingResult.steps });
+            log.warn("Onboarding had issues", { steps: onboardingResult.steps });
           }
         } catch (onboardingError) {
-          logStep("Onboarding error (non-fatal)", { error: String(onboardingError) });
+          log.warn("Onboarding error (non-fatal)", { error: String(onboardingError) });
         }
         break;
       }
@@ -168,14 +151,12 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
-        // Get customer email to find organization
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted || !('email' in customer) || !customer.email) {
-          logStep("Customer has no email, skipping");
+          log.info("Customer has no email, skipping");
           break;
         }
 
-        // Find the profile by email to get organization_id
         const { data: profileCreate, error: profileErrorCreate } = await supabaseClient
           .from("profiles")
           .select("organization_id")
@@ -183,7 +164,7 @@ serve(async (req) => {
           .single();
 
         if (profileErrorCreate || !profileCreate?.organization_id) {
-          logStep("Profile not found", { email: customer.email, error: profileErrorCreate });
+          log.warn("Profile not found", { email: customer.email, error: profileErrorCreate });
           break;
         }
 
@@ -194,21 +175,17 @@ serve(async (req) => {
         const regularPriceId = subscription.metadata?.regular_price_id;
 
         if (switchToRegular && regularPriceId) {
-          logStep("Setting up subscription schedule for $1 promo", {
+          log.info("Setting up subscription schedule for $1 promo", {
             subscriptionId: subscription.id,
             regularPriceId
           });
 
           try {
-            // Create a subscription schedule from this subscription
             const schedule = await stripe.subscriptionSchedules.create({
               from_subscription: subscription.id,
             });
 
-            // Update the schedule with phases:
-            // Phase 1 (current): $1 for 1 month
-            // Phase 2: Regular pricing ongoing
-            const currentPhaseEnd = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
+            const currentPhaseEnd = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60);
 
             await stripe.subscriptionSchedules.update(schedule.id, {
               phases: [
@@ -218,40 +195,37 @@ serve(async (req) => {
                 },
                 {
                   items: [{ price: regularPriceId, quantity: 1 }],
-                  iterations: undefined, // Ongoing
+                  iterations: undefined,
                 },
               ],
-              end_behavior: 'release', // Release to regular subscription after phases complete
+              end_behavior: 'release',
             });
 
-            logStep("Subscription schedule created", {
+            log.info("Subscription schedule created", {
               scheduleId: schedule.id,
               phaseEndDate: new Date(currentPhaseEnd * 1000).toISOString()
             });
           } catch (scheduleError) {
-            logStep("Error creating subscription schedule", { error: String(scheduleError) });
+            log.error("Error creating subscription schedule", scheduleError as Error);
           }
         }
 
-        // Determine subscription status and plan - check multiple sources
         let statusCreate = subscription.status;
         let planCreate = subscription.metadata?.plan_id;
 
-        // Fallback 1: Check price metadata
         if (!planCreate) {
           const priceId = subscription.items.data[0]?.price?.id;
           if (priceId) {
             try {
               const price = await stripe.prices.retrieve(priceId);
               planCreate = price.metadata?.plan_id;
-              logStep("Got plan from price metadata", { priceId, plan: planCreate });
+              log.info("Got plan from price metadata", { priceId, plan: planCreate });
             } catch (e) {
-              logStep("Could not retrieve price", { priceId, error: String(e) });
+              log.warn("Could not retrieve price", { priceId, error: String(e) });
             }
           }
         }
 
-        // Fallback 2: Check if subscription already exists with a plan (don't overwrite with 'core')
         if (!planCreate) {
           const { data: existingSub } = await supabaseClient
             .from("subscriptions")
@@ -261,19 +235,12 @@ serve(async (req) => {
 
           if (existingSub?.plan && existingSub.plan !== 'core') {
             planCreate = existingSub.plan;
-            logStep("Preserving existing plan", { plan: planCreate });
+            log.info("Preserving existing plan", { plan: planCreate });
           }
         }
 
-        // Final fallback
         planCreate = planCreate || "core";
 
-        logStep("Subscription plan determined", {
-          fromMetadata: subscription.metadata?.plan_id,
-          finalPlan: planCreate
-        });
-
-        // Update or insert subscription in database
         const { error: upsertErrorCreate } = await supabaseClient
           .from("subscriptions")
           .upsert({
@@ -290,9 +257,9 @@ serve(async (req) => {
           });
 
         if (upsertErrorCreate) {
-          logStep("Error upserting subscription", { error: upsertErrorCreate });
+          log.error("Error upserting subscription", upsertErrorCreate);
         } else {
-          logStep("Subscription synced", { organizationId: organizationIdCreate, status: statusCreate, plan: planCreate });
+          log.info("Subscription synced", { organizationId: organizationIdCreate, status: statusCreate, plan: planCreate });
         }
         break;
       }
@@ -301,14 +268,12 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
-        // Get customer email to find organization
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted || !('email' in customer) || !customer.email) {
-          logStep("Customer has no email, skipping");
+          log.info("Customer has no email, skipping");
           break;
         }
 
-        // Find the profile by email to get organization_id
         const { data: profile, error: profileError } = await supabaseClient
           .from("profiles")
           .select("organization_id")
@@ -316,31 +281,28 @@ serve(async (req) => {
           .single();
 
         if (profileError || !profile?.organization_id) {
-          logStep("Profile not found", { email: customer.email, error: profileError });
+          log.warn("Profile not found", { email: customer.email, error: profileError });
           break;
         }
 
         const organizationId = profile.organization_id;
 
-        // Determine subscription status and plan - check multiple sources
         let status = subscription.status;
         let plan = subscription.metadata?.plan_id;
 
-        // Fallback 1: Check price metadata
         if (!plan) {
           const priceId = subscription.items.data[0]?.price?.id;
           if (priceId) {
             try {
               const price = await stripe.prices.retrieve(priceId);
               plan = price.metadata?.plan_id;
-              logStep("Got plan from price metadata", { priceId, plan });
+              log.info("Got plan from price metadata", { priceId, plan });
             } catch (e) {
-              logStep("Could not retrieve price", { priceId, error: String(e) });
+              log.warn("Could not retrieve price", { priceId, error: String(e) });
             }
           }
         }
 
-        // Fallback 2: Check if subscription already exists with a plan (don't overwrite with 'core')
         if (!plan) {
           const { data: existingSub } = await supabaseClient
             .from("subscriptions")
@@ -350,19 +312,12 @@ serve(async (req) => {
 
           if (existingSub?.plan && existingSub.plan !== 'core') {
             plan = existingSub.plan;
-            logStep("Preserving existing plan", { plan });
+            log.info("Preserving existing plan", { plan });
           }
         }
 
-        // Final fallback
         plan = plan || "core";
 
-        logStep("Subscription plan determined", {
-          fromMetadata: subscription.metadata?.plan_id,
-          finalPlan: plan
-        });
-
-        // Update subscription in database
         const { error: upsertError } = await supabaseClient
           .from("subscriptions")
           .upsert({
@@ -379,9 +334,9 @@ serve(async (req) => {
           });
 
         if (upsertError) {
-          logStep("Error upserting subscription", { error: upsertError });
+          log.error("Error upserting subscription", upsertError);
         } else {
-          logStep("Subscription synced", { organizationId, status, plan, subscriptionId: subscription.id });
+          log.info("Subscription synced", { organizationId, status, plan, subscriptionId: subscription.id });
         }
         break;
       }
@@ -392,7 +347,7 @@ serve(async (req) => {
 
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted || !('email' in customer) || !customer.email) {
-          logStep("Customer has no email, skipping");
+          log.info("Customer has no email, skipping");
           break;
         }
 
@@ -408,7 +363,7 @@ serve(async (req) => {
             .update({ status: "cancelled" })
             .eq("organization_id", profile.organization_id);
 
-          logStep("Subscription cancelled", { organizationId: profile.organization_id });
+          log.info("Subscription cancelled", { organizationId: profile.organization_id });
         }
         break;
       }
@@ -416,7 +371,7 @@ serve(async (req) => {
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         if (invoice.billing_reason === "subscription_cycle") {
-          logStep("Recurring payment succeeded", { invoiceId: invoice.id });
+          log.info("Recurring payment succeeded", { invoiceId: invoice.id });
         }
         break;
       }
@@ -424,7 +379,7 @@ serve(async (req) => {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
-        
+
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted || !('email' in customer) || !customer.email) break;
 
@@ -440,13 +395,13 @@ serve(async (req) => {
             .update({ status: "past_due" })
             .eq("organization_id", profile.organization_id);
 
-          logStep("Payment failed - marked past_due", { organizationId: profile.organization_id });
+          log.info("Payment failed - marked past_due", { organizationId: profile.organization_id });
         }
         break;
       }
 
       default:
-        logStep("Unhandled event type", { type: event.type });
+        log.info("Unhandled event type", { type: event.type });
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -455,7 +410,7 @@ serve(async (req) => {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
+    logger.error("Handler error", new Error(errorMessage));
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { "Content-Type": "application/json" },
       status: 500,

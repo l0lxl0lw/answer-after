@@ -127,12 +127,12 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
       // Get average service price for revenue estimation
       const { data: services } = await supabase
         .from('services')
-        .select('base_price_cents')
+        .select('price_cents')
         .eq('organization_id', user.organization_id)
         .eq('is_active', true);
 
       const avgServicePrice = services && services.length > 0
-        ? services.reduce((sum, s) => sum + s.base_price_cents, 0) / services.length / 100
+        ? services.reduce((sum, s) => sum + s.price_cents, 0) / services.length / 100
         : 150; // Default $150 per booking if no services defined
 
       // Calculate current period stats

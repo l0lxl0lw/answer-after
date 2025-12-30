@@ -1,18 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAnonClient, createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger('google-calendar-auth');
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// Scopes for calendar and contacts access
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -20,26 +16,21 @@ const SCOPES = [
   "https://www.googleapis.com/auth/contacts",
 ].join(" ");
 
-// Helper function to validate user belongs to organization
 async function validateUserOrganization(req: Request, organizationId: string): Promise<{ valid: boolean; error?: string; userId?: string }> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return { valid: false, error: "Missing authorization header" };
   }
 
-  // Create client with user's token to validate their identity
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  });
+  const supabase = createAnonClient();
+  const token = authHeader.replace("Bearer ", "");
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user) {
-    console.error("Failed to get user:", userError);
     return { valid: false, error: "Invalid authentication" };
   }
 
-  // Use service role to check user's organization
-  const serviceSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const serviceSupabase = createServiceClient();
   const { data: profile, error: profileError } = await serviceSupabase
     .from("profiles")
     .select("organization_id")
@@ -47,12 +38,10 @@ async function validateUserOrganization(req: Request, organizationId: string): P
     .single();
 
   if (profileError || !profile) {
-    console.error("Failed to get user profile:", profileError);
     return { valid: false, error: "User profile not found" };
   }
 
   if (profile.organization_id !== organizationId) {
-    console.error("User organization mismatch:", { userOrg: profile.organization_id, requestedOrg: organizationId });
     return { valid: false, error: "Unauthorized - user does not belong to this organization" };
   }
 
@@ -61,149 +50,126 @@ async function validateUserOrganization(req: Request, organizationId: string): P
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const body = await req.json();
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+
+    const body = await parseJsonBody<{
+      action: string;
+      redirectUrl?: string;
+      code?: string;
+      organizationId?: string;
+      accessToken?: string;
+      refreshToken?: string;
+      expiresIn?: number;
+      email?: string;
+      calendarId?: string;
+    }>(req, ['action']);
+
     const { action, redirectUrl, code, organizationId, accessToken, refreshToken, expiresIn, email, calendarId } = body;
 
-    // Create supabase client with service role for database operations
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createServiceClient();
 
     switch (action) {
       case "authorize": {
-        // Build OAuth URL for Google Calendar
         const params = new URLSearchParams({
           client_id: GOOGLE_CLIENT_ID,
-          redirect_uri: redirectUrl,
+          redirect_uri: redirectUrl!,
           response_type: "code",
           scope: SCOPES,
           access_type: "offline",
           prompt: "consent",
         });
-        
+
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-        console.log("Generated auth URL for redirect:", redirectUrl);
-        
-        return new Response(JSON.stringify({ authUrl }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        log.info("Generated auth URL", { redirectUrl });
+
+        return successResponse({ authUrl });
       }
 
       case "callback": {
-        // Exchange code for tokens
-        console.log("Exchanging code for tokens...");
-        
+        log.step("Exchanging code for tokens");
+
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             client_id: GOOGLE_CLIENT_ID,
             client_secret: GOOGLE_CLIENT_SECRET,
-            code,
+            code: code!,
             grant_type: "authorization_code",
-            redirect_uri: redirectUrl,
+            redirect_uri: redirectUrl!,
           }),
         });
 
         const tokenData = await tokenResponse.json();
-        
+
         if (tokenData.error) {
-          console.error("Token exchange failed:", tokenData);
-          return new Response(JSON.stringify({ error: tokenData.error_description || "Token exchange failed" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Token exchange failed", new Error(tokenData.error_description));
+          return errorResponse(tokenData.error_description || "Token exchange failed", 400);
         }
 
-        // Get user's email from Google
         const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
           headers: { Authorization: `Bearer ${tokenData.access_token}` },
         });
         const userInfo = await userInfoResponse.json();
-        
-        console.log("Successfully obtained tokens for:", userInfo.email);
 
-        return new Response(JSON.stringify({
+        log.info("Successfully obtained tokens", { email: userInfo.email });
+
+        return successResponse({
           success: true,
           email: userInfo.email,
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           expiresIn: tokenData.expires_in,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       case "list-calendars": {
-        // Get the authorization header to identify the user
         const authHeader = req.headers.get("Authorization");
         if (!authHeader) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        
-        if (!accessToken) {
-          return new Response(JSON.stringify({ error: "Access token required" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Unauthorized", 401);
         }
 
-        // Fetch calendars from Google
+        if (!accessToken) {
+          return errorResponse("Access token required", 400);
+        }
+
         const calendarsResponse = await fetch(
           "https://www.googleapis.com/calendar/v3/users/me/calendarList",
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        
+
         const calendarsData = await calendarsResponse.json();
-        
+
         if (calendarsData.error) {
-          console.error("Failed to fetch calendars:", calendarsData.error);
-          return new Response(JSON.stringify({ error: "Failed to fetch calendars" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Failed to fetch calendars", new Error(calendarsData.error.message));
+          return errorResponse("Failed to fetch calendars", 400);
         }
 
-        // Filter to calendars user can write to
         const writableCalendars = calendarsData.items?.filter(
           (cal: any) => cal.accessRole === "owner" || cal.accessRole === "writer"
         ) || [];
 
-        return new Response(JSON.stringify({ calendars: writableCalendars }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ calendars: writableCalendars });
       }
 
       case "save-connection": {
-        // Validate required fields
         if (!organizationId || !accessToken || !refreshToken || !calendarId) {
-          console.error("Missing fields:", { organizationId: !!organizationId, accessToken: !!accessToken, refreshToken: !!refreshToken, calendarId: !!calendarId });
-          return new Response(JSON.stringify({ error: "Missing required fields" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Missing required fields", 400);
         }
 
-        // SECURITY: Validate user belongs to this organization
         const validation = await validateUserOrganization(req, organizationId);
         if (!validation.valid) {
-          console.error("Organization validation failed:", validation.error);
-          return new Response(JSON.stringify({ error: validation.error }), {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse(validation.error!, 403);
         }
 
-        console.log("User validated for organization:", organizationId);
+        log.info("User validated for organization", { organizationId });
 
         const expiresAt = new Date(Date.now() + (expiresIn || 3600) * 1000).toISOString();
 
-        // Upsert the connection (one per organization)
         const { error } = await supabase
           .from("google_calendar_connections")
           .upsert({
@@ -217,27 +183,18 @@ serve(async (req) => {
           }, { onConflict: "organization_id" });
 
         if (error) {
-          console.error("Failed to save connection:", error);
-          return new Response(JSON.stringify({ error: "Failed to save connection" }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Failed to save connection", error);
+          return errorResponse("Failed to save connection", 500);
         }
 
-        console.log("Calendar connection saved for org:", organizationId);
+        log.info("Calendar connection saved", { organizationId });
 
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ success: true });
       }
 
       case "refresh-token": {
-        // Refresh an expired access token
         if (!refreshToken) {
-          return new Response(JSON.stringify({ error: "Refresh token required" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Refresh token required", 400);
         }
 
         const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -252,35 +209,24 @@ serve(async (req) => {
         });
 
         const refreshData = await refreshResponse.json();
-        
+
         if (refreshData.error) {
-          console.error("Token refresh failed:", refreshData);
-          return new Response(JSON.stringify({ error: "Token refresh failed" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Token refresh failed", new Error(refreshData.error));
+          return errorResponse("Token refresh failed", 400);
         }
 
-        return new Response(JSON.stringify({
+        return successResponse({
           accessToken: refreshData.access_token,
           expiresIn: refreshData.expires_in,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Unknown action" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse("Unknown action", 400);
     }
-  } catch (error: unknown) {
-    console.error("Google Calendar auth error:", error);
-    const message = error instanceof Error ? error.message : "Internal error";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+
+  } catch (error) {
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

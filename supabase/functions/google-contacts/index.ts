@@ -1,20 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger('google-contacts');
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 const SOURCE_TAG = "AnswerAfter";
 
 async function getValidAccessToken(supabase: any, organizationId: string): Promise<string | null> {
-  // Get the stored connection
   const { data: connection, error } = await supabase
     .from("google_calendar_connections")
     .select("*")
@@ -22,17 +18,13 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
     .single();
 
   if (error || !connection) {
-    console.error("No Google connection found for org:", organizationId);
     return null;
   }
 
-  // Check if token is expired
   const expiresAt = new Date(connection.token_expires_at);
   const now = new Date();
-  
+
   if (now >= expiresAt) {
-    console.log("Token expired, refreshing...");
-    // Refresh the token
     const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -45,13 +37,11 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
     });
 
     const refreshData = await refreshResponse.json();
-    
+
     if (refreshData.error) {
-      console.error("Token refresh failed:", refreshData);
       return null;
     }
 
-    // Update the stored token
     const newExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
     await supabase
       .from("google_calendar_connections")
@@ -69,81 +59,71 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const body = await req.json();
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+
+    const body = await parseJsonBody<{
+      action: string;
+      organizationId: string;
+      name?: string;
+      phone?: string;
+      notes?: string;
+      resourceName?: string;
+    }>(req, ['action', 'organizationId']);
+
     const { action, organizationId, name, phone, notes, resourceName } = body;
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createServiceClient();
 
     switch (action) {
       case "list": {
-        // List contacts with AnswerAfter tag
+        log.info("Listing contacts", { organizationId });
+
         const accessToken = await getValidAccessToken(supabase, organizationId);
         if (!accessToken) {
-          return new Response(JSON.stringify({ error: "No valid Google connection" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("No valid Google connection", 400);
         }
 
-        // Always list all contacts and filter - search API can be unreliable
         const listUrl = `https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,biographies,metadata&pageSize=1000&sortOrder=LAST_MODIFIED_DESCENDING`;
-        console.log("Fetching contacts from:", listUrl);
-        
+
         const listResponse = await fetch(listUrl, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         if (!listResponse.ok) {
           const errorText = await listResponse.text();
-          console.error("List contacts failed:", errorText);
-          return new Response(JSON.stringify({ error: "Failed to fetch contacts", details: errorText }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("List contacts failed", new Error(errorText));
+          return errorResponse("Failed to fetch contacts", 400);
         }
 
         const listData = await listResponse.json();
-        console.log("Total contacts from Google:", listData.connections?.length || 0);
-        
+
         // Filter by source tag in biographies
         const contacts = (listData.connections || []).filter((contact: any) => {
           const bio = contact.biographies?.[0]?.value || "";
-          const hasTag = bio.includes(`Source: ${SOURCE_TAG}`);
-          if (hasTag) {
-            console.log("Found AnswerAfter contact:", contact.names?.[0]?.displayName || contact.names?.[0]?.givenName);
-          }
-          return hasTag;
+          return bio.includes(`Source: ${SOURCE_TAG}`);
         });
 
-        console.log("Filtered AnswerAfter contacts:", contacts.length);
+        log.info("Contacts filtered", { total: listData.connections?.length || 0, filtered: contacts.length });
 
-        return new Response(JSON.stringify({ contacts }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ contacts });
       }
 
       case "create": {
-        // Create a new contact
         if (!name || !phone) {
-          return new Response(JSON.stringify({ error: "Name and phone are required" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Name and phone are required", 400);
         }
+
+        log.info("Creating contact", { organizationId, name });
 
         const accessToken = await getValidAccessToken(supabase, organizationId);
         if (!accessToken) {
-          return new Response(JSON.stringify({ error: "No valid Google connection" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("No valid Google connection", 400);
         }
 
-        // Create contact with AnswerAfter source tag
         const contactData = {
           names: [{ givenName: name }],
           phoneNumbers: [{ value: phone, type: "mobile" }],
@@ -167,36 +147,26 @@ serve(async (req) => {
 
         if (!createResponse.ok) {
           const errorText = await createResponse.text();
-          console.error("Create contact failed:", errorText);
-          return new Response(JSON.stringify({ error: "Failed to create contact" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Create contact failed", new Error(errorText));
+          return errorResponse("Failed to create contact", 400);
         }
 
         const createdContact = await createResponse.json();
-        console.log("Contact created:", createdContact.resourceName);
+        log.info("Contact created", { resourceName: createdContact.resourceName });
 
-        return new Response(JSON.stringify({ success: true, contact: createdContact }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ success: true, contact: createdContact });
       }
 
       case "update": {
-        // Update an existing contact
         if (!resourceName) {
-          return new Response(JSON.stringify({ error: "Resource name is required" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Resource name is required", 400);
         }
+
+        log.info("Updating contact", { organizationId, resourceName });
 
         const accessToken = await getValidAccessToken(supabase, organizationId);
         if (!accessToken) {
-          return new Response(JSON.stringify({ error: "No valid Google connection" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("No valid Google connection", 400);
         }
 
         // First get the current contact to get etag
@@ -206,10 +176,7 @@ serve(async (req) => {
         );
 
         if (!getResponse.ok) {
-          return new Response(JSON.stringify({ error: "Contact not found" }), {
-            status: 404,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Contact not found", 404);
         }
 
         const existingContact = await getResponse.json();
@@ -249,36 +216,26 @@ serve(async (req) => {
 
         if (!updateResponse.ok) {
           const errorText = await updateResponse.text();
-          console.error("Update contact failed:", errorText);
-          return new Response(JSON.stringify({ error: "Failed to update contact" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Update contact failed", new Error(errorText));
+          return errorResponse("Failed to update contact", 400);
         }
 
         const updatedContact = await updateResponse.json();
-        console.log("Contact updated:", resourceName);
+        log.info("Contact updated", { resourceName });
 
-        return new Response(JSON.stringify({ success: true, contact: updatedContact }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ success: true, contact: updatedContact });
       }
 
       case "delete": {
-        // Delete a contact
         if (!resourceName) {
-          return new Response(JSON.stringify({ error: "Resource name is required" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("Resource name is required", 400);
         }
+
+        log.info("Deleting contact", { organizationId, resourceName });
 
         const accessToken = await getValidAccessToken(supabase, organizationId);
         if (!accessToken) {
-          return new Response(JSON.stringify({ error: "No valid Google connection" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse("No valid Google connection", 400);
         }
 
         const deleteResponse = await fetch(
@@ -291,32 +248,20 @@ serve(async (req) => {
 
         if (!deleteResponse.ok) {
           const errorText = await deleteResponse.text();
-          console.error("Delete contact failed:", errorText);
-          return new Response(JSON.stringify({ error: "Failed to delete contact" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          log.error("Delete contact failed", new Error(errorText));
+          return errorResponse("Failed to delete contact", 400);
         }
 
-        console.log("Contact deleted:", resourceName);
+        log.info("Contact deleted", { resourceName });
 
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return successResponse({ success: true });
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Unknown action" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse("Unknown action", 400);
     }
-  } catch (error: unknown) {
-    console.error("Google Contacts error:", error);
-    const message = error instanceof Error ? error.message : "Internal error";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (error) {
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

@@ -1,46 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient, getUserFromAuth } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
+import { getTwilioCredentials, makeTwilioRequest, getAccountUrl } from "../_shared/twilio.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[SEARCH-PHONE] ${step}${detailsStr}`);
-};
+const logger = createLogger('search-phone-numbers');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
 
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-      throw new Error('Twilio credentials not configured');
-    }
+    const twilioCredentials = getTwilioCredentials();
+    const supabaseAdmin = createServiceClient();
 
     // Authenticate user
-    const supabaseAnon = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
-    const supabaseAdmin = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
-
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
+    const { user, error: authError } = await getUserFromAuth(authHeader);
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabaseAnon.auth.getUser(token);
-    
-    if (userError || !user) {
-      throw new Error('Invalid token');
+    if (authError || !user) {
+      return errorResponse(authError || 'Invalid token', 401);
     }
 
     // Get user's organization and Twilio subaccount
@@ -51,7 +34,7 @@ serve(async (req) => {
       .single();
 
     if (!profile?.organization_id) {
-      throw new Error('No organization found');
+      return errorResponse('No organization found', 404);
     }
 
     const { data: org } = await supabaseAdmin
@@ -61,64 +44,53 @@ serve(async (req) => {
       .single();
 
     // Use subaccount if available, otherwise use master account
-    const accountSid = org?.twilio_subaccount_sid || TWILIO_ACCOUNT_SID;
-    const authToken = org?.twilio_subaccount_auth_token || TWILIO_AUTH_TOKEN;
+    const accountSid = org?.twilio_subaccount_sid || twilioCredentials.accountSid;
+    const authToken = org?.twilio_subaccount_auth_token || twilioCredentials.authToken;
 
-    const { numberType, areaCode } = await req.json();
-    
-    logStep('Searching numbers', { numberType, areaCode, orgId: profile.organization_id });
+    const { numberType, areaCode } = await parseJsonBody<{
+      numberType?: string;
+      areaCode?: string;
+    }>(req);
 
-    let searchUrl: string;
+    log.step('Searching numbers', { numberType, areaCode, orgId: profile.organization_id });
+
     const searchParams = new URLSearchParams({
       VoiceEnabled: 'true',
       Limit: '3',
     });
 
+    let endpoint: string;
     if (numberType === 'toll-free') {
-      // Search toll-free numbers
-      searchUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/AvailablePhoneNumbers/US/TollFree.json?${searchParams}`;
+      endpoint = `${getAccountUrl(accountSid)}/AvailablePhoneNumbers/US/TollFree.json?${searchParams}`;
     } else {
-      // Search local numbers
       if (areaCode) {
         searchParams.set('AreaCode', areaCode);
       }
-      searchUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/AvailablePhoneNumbers/US/Local.json?${searchParams}`;
+      endpoint = `${getAccountUrl(accountSid)}/AvailablePhoneNumbers/US/Local.json?${searchParams}`;
     }
 
-    const searchResponse = await fetch(searchUrl, {
-      headers: {
-        'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-      },
-    });
+    const searchResult = await makeTwilioRequest<{
+      available_phone_numbers: Array<{
+        phone_number: string;
+        friendly_name: string;
+        locality: string;
+        region: string;
+      }>;
+    }>(endpoint, { accountSid, authToken });
 
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text();
-      logStep('Twilio search failed', { error: errorText });
-      throw new Error('Failed to search phone numbers');
-    }
-
-    const searchResult = await searchResponse.json();
-    
-    const numbers = (searchResult.available_phone_numbers || []).map((num: any) => ({
+    const numbers = (searchResult.available_phone_numbers || []).map(num => ({
       phone_number: num.phone_number,
       friendly_name: num.friendly_name,
       locality: num.locality,
       region: num.region,
     }));
 
-    logStep('Found numbers', { count: numbers.length });
+    log.info('Found numbers', { count: numbers.length });
 
-    return new Response(
-      JSON.stringify({ success: true, numbers }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return successResponse({ success: true, numbers });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep('ERROR', { message: errorMessage });
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    logger.error('Handler error', error as Error);
+    return errorResponse(error as Error);
   }
 });

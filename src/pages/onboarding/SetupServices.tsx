@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { COMPANY } from "@/lib/constants";
-import { createLogger, getEnvironment } from "@/lib/logger";
+import { createLogger } from "@/lib/logger";
 
 const log = createLogger('SetupServices');
 
@@ -23,9 +23,6 @@ interface Service {
 }
 
 type PlanTier = 'core' | 'growth' | 'pro' | 'business';
-
-// Mock subscription for local dev
-const MOCK_PLAN: PlanTier = 'pro';
 
 export default function SetupServices() {
   const [greeting, setGreeting] = useState("");
@@ -57,10 +54,9 @@ export default function SetupServices() {
         return null;
       }
 
-      // In local dev, return mock plan if no subscription
-      if (!data && getEnvironment() === 'local') {
-        log.debug('Using mock plan for local dev:', MOCK_PLAN);
-        return { plan: MOCK_PLAN };
+      if (!data) {
+        log.debug('No subscription found in database');
+        return null;
       }
 
       return data;
@@ -68,7 +64,9 @@ export default function SetupServices() {
     enabled: !!user?.organization_id,
   });
 
+  // Use database as source of truth for plan
   const currentPlan = (subscription?.plan as PlanTier) || 'core';
+  log.debug('Current plan from database:', currentPlan);
 
   // Plan capabilities
   const hasGreetingSetup = currentPlan !== 'core'; // Growth, Pro, Business
@@ -105,7 +103,7 @@ export default function SetupServices() {
           servicesData.map((s) => ({
             id: s.id,
             name: s.name,
-            price: s.base_price_cents ? String(s.base_price_cents / 100) : "",
+            price: s.price_cents ? String(s.price_cents / 100) : "",
             duration: s.duration_minutes ? String(s.duration_minutes) : "",
           }))
         );
@@ -231,7 +229,7 @@ export default function SetupServices() {
           const servicesToInsert = validServices.map((s) => ({
             organization_id: user.organization_id,
             name: s.name.trim(),
-            base_price_cents: s.price ? Math.round(parseFloat(s.price) * 100) : 0,
+            price_cents: s.price ? Math.round(parseFloat(s.price) * 100) : 0,
             duration_minutes: s.duration ? parseInt(s.duration) : 60,
             is_active: true,
           }));

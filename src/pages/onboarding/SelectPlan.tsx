@@ -44,10 +44,6 @@ export default function SelectPlan() {
     setSelectedPlan(planId);
     setIsProcessing(true);
 
-    // Store selected plan for use in upgrade-prompt page
-    localStorage.setItem('selectedPlanId', planId);
-    console.log('[SelectPlan] Saved planId to localStorage:', planId);
-
     // Skip Stripe in local/development environment
     if (shouldSkipStripe()) {
       try {

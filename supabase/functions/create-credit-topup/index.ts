@@ -1,39 +1,24 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createAnonClient, createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { config } from "../_shared/config.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[CREATE-CREDIT-TOPUP] ${step}${detailsStr}`);
-};
+const logger = createLogger('create-credit-topup');
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-  );
-
-  const supabaseAdmin = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-  );
-
   try {
-    logStep("Function started");
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    log.step("Function started");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
-    // Safety check: Ensure we're using test keys in non-production environments
     const isTestKey = stripeKey.startsWith("sk_test_");
     const isLiveKey = stripeKey.startsWith("sk_live_");
 
@@ -41,54 +26,54 @@ serve(async (req) => {
       throw new Error("Invalid STRIPE_SECRET_KEY format");
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const isLocalEnv = supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1");
-
-    if (isLocalEnv && !isTestKey) {
+    if (config.isLocal && !isTestKey) {
       throw new Error("SAFETY: Local environment requires Stripe test keys (sk_test_*). Live keys are not allowed in local development.");
     }
 
-    logStep("Stripe key verified", { isTestMode: isTestKey, isLocalEnv });
+    log.info("Stripe key verified", { isTestMode: isTestKey, isLocalEnv: config.isLocal });
+
+    const supabaseAnon = createAnonClient();
+    const supabaseAdmin = createServiceClient();
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabaseClient.auth.getUser(token);
+    const { data } = await supabaseAnon.auth.getUser(token);
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    log.info("User authenticated", { userId: user.id, email: user.email });
 
     // Get credit config
-    const { data: config, error: configError } = await supabaseAdmin
+    const { data: creditConfig, error: configError } = await supabaseAdmin
       .from('credit_config')
       .select('config_key, config_value')
       .in('config_key', ['topup_credits_amount', 'topup_price_cents']);
 
     if (configError) throw new Error(`Failed to get config: ${configError.message}`);
 
-    const configMap = Object.fromEntries(config.map(c => [c.config_key, Number(c.config_value)]));
+    const configMap = Object.fromEntries(creditConfig.map(c => [c.config_key, Number(c.config_value)]));
     const creditsAmount = configMap['topup_credits_amount'] || 300;
     const priceCents = configMap['topup_price_cents'] || 1000;
 
-    logStep("Credit config loaded", { creditsAmount, priceCents });
+    log.info("Credit config loaded", { creditsAmount, priceCents });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     // Check if Stripe customer exists
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId: string | undefined;
-    
+
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
-      logStep("Found existing customer", { customerId });
+      log.info("Found existing customer", { customerId });
     } else {
       const newCustomer = await stripe.customers.create({
         email: user.email,
         metadata: { supabase_user_id: user.id },
       });
       customerId = newCustomer.id;
-      logStep("Created new customer", { customerId });
+      log.info("Created new customer", { customerId });
     }
 
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
@@ -119,18 +104,12 @@ serve(async (req) => {
       },
     });
 
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
+    log.info("Checkout session created", { sessionId: session.id, url: session.url });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return successResponse({ url: session.url });
+
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

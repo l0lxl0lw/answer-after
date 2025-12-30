@@ -630,7 +630,7 @@ export type Database = {
       }
       services: {
         Row: {
-          base_price_cents: number
+          price_cents: number
           category: string
           created_at: string
           description: string | null
@@ -642,7 +642,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          base_price_cents?: number
+          price_cents?: number
           category?: string
           created_at?: string
           description?: string | null
@@ -654,7 +654,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          base_price_cents?: number
+          price_cents?: number
           category?: string
           created_at?: string
           description?: string | null

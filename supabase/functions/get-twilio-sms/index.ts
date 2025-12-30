@@ -1,9 +1,8 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAnonClient, createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('get-twilio-sms');
 
 interface TwilioMessage {
   sid: string;
@@ -33,30 +32,19 @@ interface TransformedMessage {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    // Initialize Supabase client with service role to bypass RLS
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    
-    // Use anon key client for auth verification
-    const anonClient = createClient(supabaseUrl, supabaseAnonKey);
-    
-    // Use service role client for data queries (bypasses RLS)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    const anonClient = createAnonClient();
+    const supabase = createServiceClient();
 
     // Get auth header and verify user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'No authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('No authorization header', 401);
     }
 
     const { data: { user }, error: authError } = await anonClient.auth.getUser(
@@ -64,11 +52,8 @@ Deno.serve(async (req) => {
     );
 
     if (authError || !user) {
-      console.error('Auth error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      log.error('Auth error', authError || new Error('No user'));
+      return errorResponse('Unauthorized', 401);
     }
 
     // Get user's organization using service role client
@@ -79,11 +64,8 @@ Deno.serve(async (req) => {
       .single();
 
     if (profileError || !profile?.organization_id) {
-      console.error('Profile error:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'User organization not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      log.error('Profile error', profileError || new Error('No organization'));
+      return errorResponse('User organization not found', 404);
     }
 
     // Get organization's phone numbers
@@ -94,18 +76,12 @@ Deno.serve(async (req) => {
       .eq('is_active', true);
 
     if (phoneError) {
-      console.error('Phone numbers error:', phoneError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch phone numbers' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      log.error('Phone numbers error', phoneError);
+      return errorResponse('Failed to fetch phone numbers', 500);
     }
 
     if (!phoneNumbers || phoneNumbers.length === 0) {
-      return new Response(
-        JSON.stringify({ messages: [], meta: { total: 0 } }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return successResponse({ messages: [], meta: { total: 0 } });
     }
 
     // Get Twilio credentials
@@ -113,11 +89,8 @@ Deno.serve(async (req) => {
     const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
 
     if (!twilioAccountSid || !twilioAuthToken) {
-      console.error('Missing Twilio credentials');
-      return new Response(
-        JSON.stringify({ error: 'Twilio credentials not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      log.error('Missing Twilio credentials', new Error('Credentials not configured'));
+      return errorResponse('Twilio credentials not configured', 500);
     }
 
     // Fetch SMS messages from Twilio for each phone number
@@ -125,18 +98,13 @@ Deno.serve(async (req) => {
     const credentials = btoa(`${twilioAccountSid}:${twilioAuthToken}`);
 
     for (const { phone_number } of phoneNumbers) {
-      // Fetch messages sent TO this number (inbound)
       const inboundUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json?To=${encodeURIComponent(phone_number)}&PageSize=50`;
-      
-      // Fetch messages sent FROM this number (outbound)
       const outboundUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json?From=${encodeURIComponent(phone_number)}&PageSize=50`;
 
       try {
         // Fetch inbound messages
         const inboundResponse = await fetch(inboundUrl, {
-          headers: {
-            'Authorization': `Basic ${credentials}`,
-          },
+          headers: { 'Authorization': `Basic ${credentials}` },
         });
 
         if (inboundResponse.ok) {
@@ -157,9 +125,7 @@ Deno.serve(async (req) => {
 
         // Fetch outbound messages
         const outboundResponse = await fetch(outboundUrl, {
-          headers: {
-            'Authorization': `Basic ${credentials}`,
-          },
+          headers: { 'Authorization': `Basic ${credentials}` },
         });
 
         if (outboundResponse.ok) {
@@ -178,7 +144,7 @@ Deno.serve(async (req) => {
           allMessages.push(...outboundMessages);
         }
       } catch (fetchError) {
-        console.error(`Error fetching SMS for ${phone_number}:`, fetchError);
+        log.error(`Error fetching SMS for ${phone_number}`, fetchError as Error);
       }
     }
 
@@ -187,23 +153,15 @@ Deno.serve(async (req) => {
       new Map(allMessages.map(msg => [msg.id, msg])).values()
     ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    console.log(`Fetched ${uniqueMessages.length} SMS messages`);
+    log.info('Fetched SMS messages', { count: uniqueMessages.length });
 
-    return new Response(
-      JSON.stringify({
-        messages: uniqueMessages,
-        meta: {
-          total: uniqueMessages.length,
-        },
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return successResponse({
+      messages: uniqueMessages,
+      meta: { total: uniqueMessages.length },
+    });
 
   } catch (error) {
-    console.error('Error in get-twilio-sms:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    logger.error('Handler error', error as Error);
+    return errorResponse('Internal server error', 500);
   }
 });

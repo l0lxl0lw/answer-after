@@ -1,28 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('outbound-reminder-call');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    const supabase = createServiceClient();
 
-    const { reminderId, appointmentId } = await req.json();
-    
+    const body = await parseJsonBody<{
+      reminderId?: string;
+      appointmentId?: string;
+    }>(req, []);
+
+    const { reminderId, appointmentId } = body;
+
     if (!reminderId && !appointmentId) {
-      return new Response(JSON.stringify({ error: 'reminderId or appointmentId required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return errorResponse('reminderId or appointmentId required', 400);
     }
 
     // Get reminder details
@@ -33,24 +34,20 @@ serve(async (req) => {
         .select('*, appointments(*)')
         .eq('id', reminderId)
         .single();
-      
+
       if (error || !data) {
-        console.error('Reminder not found:', error);
-        return new Response(JSON.stringify({ error: 'Reminder not found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        log.error('Reminder not found', error || new Error('No data'));
+        return errorResponse('Reminder not found', 404);
       }
       reminder = data;
     }
 
     const appointment = reminder.appointments;
     if (!appointment) {
-      return new Response(JSON.stringify({ error: 'Appointment not found' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return errorResponse('Appointment not found', 404);
     }
+
+    log.info('Processing reminder', { reminderId, appointmentId: appointment.id });
 
     // Get organization details
     const { data: orgData, error: orgError } = await supabase
@@ -60,11 +57,8 @@ serve(async (req) => {
       .single();
 
     if (orgError || !orgData) {
-      console.error('Organization not found:', orgError);
-      return new Response(JSON.stringify({ error: 'Organization not found' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      log.error('Organization not found', orgError || new Error('No data'));
+      return errorResponse('Organization not found', 404);
     }
 
     // Get organization's phone number
@@ -78,10 +72,7 @@ serve(async (req) => {
 
     const fromNumber = phoneData?.phone_number || Deno.env.get('TWILIO_DEFAULT_FROM_NUMBER');
     if (!fromNumber) {
-      return new Response(JSON.stringify({ error: 'No phone number configured' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return errorResponse('No phone number configured', 400);
     }
 
     // Get ElevenLabs agent for this organization
@@ -92,10 +83,7 @@ serve(async (req) => {
       .single();
 
     if (!agentData?.elevenlabs_agent_id) {
-      return new Response(JSON.stringify({ error: 'No AI agent configured for organization' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return errorResponse('No AI agent configured for organization', 400);
     }
 
     // Update reminder status to in_progress
@@ -106,14 +94,14 @@ serve(async (req) => {
 
     // Format appointment time for the AI
     const appointmentDate = new Date(appointment.scheduled_start);
-    const formattedDate = appointmentDate.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      month: 'long', 
-      day: 'numeric' 
+    const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
     });
-    const formattedTime = appointmentDate.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit' 
+    const formattedTime = appointmentDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
     });
 
     // Build reminder-specific prompt
@@ -146,7 +134,8 @@ At the end, summarize the outcome clearly.`;
     // Make the outbound call via Twilio
     const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID')!;
     const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN')!;
-    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+
     // Build TwiML for connecting to ElevenLabs agent
     const webhookUrl = `${supabaseUrl}/functions/v1/reminder-webhook?reminderId=${reminderId}`;
     const streamUrl = `wss://${new URL(supabaseUrl).hostname.replace('supabase.co', 'functions.supabase.co')}/functions/v1/elevenlabs-agent?agentId=${agentData.elevenlabs_agent_id}&callSid={{CallSid}}&reminderContext=${encodeURIComponent(reminderPrompt)}`;
@@ -183,25 +172,21 @@ At the end, summarize the outcome clearly.`;
 
     if (!callResponse.ok) {
       const errorText = await callResponse.text();
-      console.error('Twilio call creation failed:', errorText);
-      
-      // Update reminder as failed
+      log.error('Twilio call creation failed', new Error(errorText));
+
       await supabase
         .from('appointment_reminders')
-        .update({ 
+        .update({
           status: 'failed',
           notes: `Failed to initiate call: ${errorText}`
         })
         .eq('id', reminderId);
 
-      return new Response(JSON.stringify({ error: 'Failed to initiate call' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return errorResponse('Failed to initiate call', 500);
     }
 
     const callData = await callResponse.json();
-    console.log('Outbound call initiated:', callData.sid);
+    log.info('Outbound call initiated', { callSid: callData.sid });
 
     // Update reminder with call SID
     await supabase
@@ -209,19 +194,14 @@ At the end, summarize the outcome clearly.`;
       .update({ twilio_call_sid: callData.sid })
       .eq('id', reminderId);
 
-    return new Response(JSON.stringify({
+    return successResponse({
       success: true,
       callSid: callData.sid,
       message: 'Reminder call initiated'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Error in outbound-reminder-call:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: corsHeaders
-    });
+    logger.error('Handler error', error as Error);
+    return errorResponse('Internal server error', 500);
   }
 });

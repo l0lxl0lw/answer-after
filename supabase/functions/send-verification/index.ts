@@ -1,16 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
+import { getTwilioCredentials, getTwilioAuthHeader } from "../_shared/twilio.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[SEND-VERIFICATION] ${step}${detailsStr}`);
-};
+const logger = createLogger('send-verification');
 
 // Generate a 6-digit code
 function generateCode(): string {
@@ -19,37 +15,35 @@ function generateCode(): string {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing Supabase credentials');
-    }
+    const supabaseAdmin = createServiceClient();
 
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const body = await parseJsonBody<{
+      type: 'email' | 'phone';
+      email?: string;
+      phone?: string;
+      userId?: string;
+    }>(req, ['type']);
 
-    const body = await req.json();
     const { type, email, phone, userId } = body;
 
-    logStep('Request received', { type, email, phone: phone ? '***' + phone.slice(-4) : null });
+    log.info('Request received', { type, email, phone: phone ? '***' + phone.slice(-4) : null });
 
-    if (!type || !['email', 'phone'].includes(type)) {
-      throw new Error('Invalid verification type. Must be "email" or "phone"');
+    if (!['email', 'phone'].includes(type)) {
+      return errorResponse('Invalid verification type. Must be "email" or "phone"', 400);
     }
 
     if (type === 'email' && !email) {
-      throw new Error('Email is required for email verification');
+      return errorResponse('Email is required for email verification', 400);
     }
 
     if (type === 'phone' && !phone) {
-      throw new Error('Phone is required for phone verification');
+      return errorResponse('Phone is required for phone verification', 400);
     }
 
     // Generate verification code
@@ -70,39 +64,36 @@ serve(async (req) => {
       });
 
     if (insertError) {
-      logStep('Error storing verification code', { error: insertError });
+      log.error('Error storing verification code', insertError);
       throw new Error('Failed to create verification code');
     }
 
-    logStep('Verification code stored', { type, expiresAt: expiresAt.toISOString() });
+    log.info('Verification code stored', { type, expiresAt: expiresAt.toISOString() });
 
     // Send the verification
     if (type === 'email') {
+      const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+
       if (!RESEND_API_KEY) {
         // For local development: log the code instead of sending email
-        logStep('⚠️  EMAIL SERVICE NOT CONFIGURED - VERIFICATION CODE', { code, email });
+        log.warn('EMAIL SERVICE NOT CONFIGURED - VERIFICATION CODE', { code, email });
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log(`📧 VERIFICATION CODE FOR ${email}: ${code}`);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            message: 'Verification code generated (check console for code)',
-            devMode: true,
-            code // Include code in response for local dev
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return successResponse({
+          success: true,
+          message: 'Verification code generated (check console for code)',
+          devMode: true,
+          code // Include code in response for local dev
+        });
       }
 
       const resend = new Resend(RESEND_API_KEY);
-      
+
       const { error: emailError } = await resend.emails.send({
-        // Use a verified sender. If you want to send from your own domain,
-        // verify it in Resend first, then update this address.
         from: 'AnswerAfter <onboarding@resend.dev>',
-        to: [email],
+        to: [email!],
         subject: 'Verify your email - AnswerAfter',
         html: `
           <!DOCTYPE html>
@@ -142,35 +133,31 @@ serve(async (req) => {
       });
 
       if (emailError) {
-        logStep('Error sending email', { error: emailError });
+        log.error('Error sending email', emailError as Error);
         throw new Error('Failed to send verification email');
       }
 
-      logStep('Email sent successfully', { to: email });
+      log.info('Email sent successfully', { to: email });
 
     } else if (type === 'phone') {
-      if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-        throw new Error('SMS service not configured');
-      }
-
+      const twilioCredentials = getTwilioCredentials();
       const TWILIO_VERIFY_SERVICE_SID = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
-      
+
       if (!TWILIO_VERIFY_SERVICE_SID) {
         throw new Error('Twilio Verify Service not configured. Please add TWILIO_VERIFY_SERVICE_SID secret.');
       }
 
       // Use Twilio Verify API for proper SMS verification
-      const twilioAuth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
       const verifyEndpoint = `https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SERVICE_SID}/Verifications`;
-      
+
       const formData = new URLSearchParams();
-      formData.append('To', phone);
+      formData.append('To', phone!);
       formData.append('Channel', 'sms');
-      
+
       const smsResponse = await fetch(verifyEndpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Basic ${twilioAuth}`,
+          'Authorization': getTwilioAuthHeader(twilioCredentials.accountSid, twilioCredentials.authToken),
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: formData,
@@ -178,27 +165,20 @@ serve(async (req) => {
 
       if (!smsResponse.ok) {
         const smsError = await smsResponse.text();
-        logStep('Error sending SMS via Verify', { error: smsError });
+        log.error('Error sending SMS via Verify', new Error(smsError));
         throw new Error('Failed to send verification SMS');
       }
 
-      logStep('SMS sent successfully via Twilio Verify', { to: '***' + phone.slice(-4) });
+      log.info('SMS sent successfully via Twilio Verify', { to: '***' + phone!.slice(-4) });
     }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Verification ${type === 'email' ? 'email' : 'SMS'} sent successfully` 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return successResponse({
+      success: true,
+      message: `Verification ${type === 'email' ? 'email' : 'SMS'} sent successfully`
+    });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep('ERROR', { message: errorMessage });
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    logger.error('Handler error', error as Error);
+    return errorResponse(error as Error);
   }
 });

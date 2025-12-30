@@ -1,15 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsHeaders } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('twilio-webhook');
 
 // AI conversation using Lovable AI Gateway
 async function getAIResponse(conversationHistory: Array<{role: string, content: string}>, organizationContext: any) {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  
+
   const systemPrompt = `You are a friendly AI receptionist for AnswerAfter, a professional HVAC and plumbing service company.
 
 Your responsibilities:
@@ -68,14 +67,15 @@ serve(async (req) => {
   }
 
   try {
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
     const url = new URL(req.url);
     const contentType = req.headers.get('content-type') || '';
-    
-    console.log('Twilio webhook received:', req.method, url.pathname);
+
+    log.info('Webhook received', { method: req.method, path: url.pathname });
 
     // Parse form data from Twilio
     let formData: Record<string, string> = {};
-    
+
     if (contentType.includes('application/x-www-form-urlencoded')) {
       const body = await req.text();
       const params = new URLSearchParams(body);
@@ -84,8 +84,6 @@ serve(async (req) => {
       });
     }
 
-    console.log('Form data:', JSON.stringify(formData));
-
     // Extract Twilio call data
     const callSid = formData['CallSid'];
     const callerPhone = formData['From'] || 'unknown';
@@ -93,17 +91,14 @@ serve(async (req) => {
     const callStatus = formData['CallStatus'] || '';
     const callDuration = formData['CallDuration'] ? parseInt(formData['CallDuration'], 10) : null;
 
-    console.log(`Call SID: ${callSid}, Status: ${callStatus}, Duration: ${callDuration}`);
+    log.info('Call data', { callSid, status: callStatus, duration: callDuration });
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createServiceClient();
 
     // Handle call completion status callbacks (when customer hangs up)
     if (callStatus === 'completed' || callStatus === 'busy' || callStatus === 'no-answer' || callStatus === 'failed' || callStatus === 'canceled') {
-      console.log(`Call ${callSid} ended with status: ${callStatus}`);
-      
+      log.info('Call ended', { callSid, status: callStatus });
+
       // Find the call record
       const { data: existingCall } = await supabase
         .from('calls')
@@ -124,7 +119,7 @@ serve(async (req) => {
 
         if (events && events.length > 0) {
           // Build conversation for summary
-          const conversationText = events.map(e => 
+          const conversationText = events.map(e =>
             `Customer: ${e.ai_prompt || ''}\nAI: ${e.ai_response || ''}`
           ).join('\n');
 
@@ -135,7 +130,7 @@ serve(async (req) => {
             ], null);
             summary = summaryResponse;
           } catch (e) {
-            console.error('Error generating summary:', e);
+            log.warn('Error generating summary', { error: (e as Error).message });
             summary = `Call with ${events.length} conversation exchanges`;
           }
 
@@ -169,7 +164,7 @@ serve(async (req) => {
           })
           .eq('id', existingCall.id);
 
-        console.log(`Updated call ${existingCall.id}: status=${dbStatus}, outcome=${outcome}, duration=${callDuration}s`);
+        log.info('Call record updated', { callId: existingCall.id, status: dbStatus, outcome, duration: callDuration });
 
         // Deduct credits based on call duration (1 credit per second)
         if (callDuration && callDuration > 0 && existingCall.organization_id) {
@@ -184,13 +179,18 @@ serve(async (req) => {
               subscription.used_credits + callDuration,
               subscription.total_credits
             );
-            
+
             await supabase
               .from('subscriptions')
               .update({ used_credits: newUsedCredits })
               .eq('id', subscription.id);
 
-            console.log(`Deducted ${callDuration} credits for org ${existingCall.organization_id}. New used: ${newUsedCredits}/${subscription.total_credits}`);
+            log.info('Credits deducted', {
+              organizationId: existingCall.organization_id,
+              deducted: callDuration,
+              newUsed: newUsedCredits,
+              total: subscription.total_credits
+            });
           }
         }
       }
@@ -218,9 +218,9 @@ serve(async (req) => {
         .select('elevenlabs_agent_id')
         .eq('organization_id', phoneData.organization_id)
         .maybeSingle();
-      
+
       agentId = agentData?.elevenlabs_agent_id;
-      console.log(`Found agent for organization ${phoneData.organization_id}:`, agentId);
+      log.info('Agent found', { organizationId: phoneData.organization_id, agentId });
 
       // Create or find call record
       const { data: existingCall } = await supabase
@@ -250,23 +250,24 @@ serve(async (req) => {
       const { data: greetingFile } = await supabase.storage
         .from('greetings')
         .getPublicUrl(`${phoneData.organization_id}/greeting.mp3`);
-      
+
       // Check if file exists by trying to fetch its metadata
       const { data: fileList } = await supabase.storage
         .from('greetings')
         .list(phoneData.organization_id);
-      
+
       if (fileList && fileList.some(f => f.name === 'greeting.mp3')) {
         greetingAudioUrl = greetingFile.publicUrl;
-        console.log(`Found greeting audio for org ${phoneData.organization_id}: ${greetingAudioUrl}`);
+        log.info('Greeting audio found', { organizationId: phoneData.organization_id });
       }
     }
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+
     // If no agent ID, use fallback
     if (!agentId) {
-      console.log('No ElevenLabs agent found, using fallback TTS');
-      
-      // If we have a custom greeting audio, play it before fallback
+      log.info('No ElevenLabs agent found, using fallback TTS');
+
       let twiml: string;
       if (greetingAudioUrl) {
         twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -285,18 +286,14 @@ serve(async (req) => {
       }
 
       return new Response(twiml, {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'text/xml',
-        },
+        headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
       });
     }
 
     // Build WebSocket URL to our edge function that bridges Twilio <-> ElevenLabs
-    // Supabase edge functions WebSocket URL format: wss://PROJECT_ID.supabase.co/functions/v1/FUNCTION_NAME
     const wsUrl = `${supabaseUrl.replace('https://', 'wss://')}/functions/v1/elevenlabs-agent?agentId=${agentId}&callSid=${callSid}`;
-    
-    console.log(`Returning Streams TwiML with WebSocket URL: ${wsUrl}`);
+
+    log.info('Returning Streams TwiML', { wsUrl });
 
     // Play custom greeting audio first, then connect to AI agent
     let twiml: string;
@@ -318,15 +315,12 @@ serve(async (req) => {
     }
 
     return new Response(twiml, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/xml',
-      },
+      headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
     });
 
   } catch (error) {
-    console.error('Error in twilio-webhook:', error);
-    
+    logger.error('Handler error', error as Error);
+
     const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna-Neural">We're experiencing technical difficulties. Please try again later or call back during business hours.</Say>
@@ -334,20 +328,7 @@ serve(async (req) => {
 </Response>`;
 
     return new Response(errorTwiml, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/xml',
-      },
+      headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
     });
   }
 });
-
-// Helper to escape XML special characters
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}

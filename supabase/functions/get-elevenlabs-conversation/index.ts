@@ -1,9 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAnonClient, createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { getElevenLabsApiKey, getConversation } from "../_shared/elevenlabs.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger('get-elevenlabs-conversation');
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -31,7 +31,6 @@ interface ElevenLabsConversationDetail {
   };
 }
 
-// Helper to get valid access token
 async function getValidAccessToken(supabase: any, organizationId: string): Promise<string | null> {
   const { data: connection, error } = await supabase
     .from("google_calendar_connections")
@@ -43,7 +42,7 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
 
   const expiresAt = new Date(connection.token_expires_at);
   const now = new Date();
-  
+
   if (now >= expiresAt) {
     const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -74,7 +73,6 @@ async function getValidAccessToken(supabase: any, organizationId: string): Promi
   return connection.access_token;
 }
 
-// Helper to create contact in Google
 async function createGoogleContact(accessToken: string, name: string, phone: string, notes?: string): Promise<boolean> {
   try {
     const contactData = {
@@ -111,7 +109,6 @@ async function createGoogleContact(accessToken: string, name: string, phone: str
   }
 }
 
-// Check if contact already exists
 async function contactExists(accessToken: string, phone: string): Promise<boolean> {
   try {
     const searchUrl = `https://people.googleapis.com/v1/people:searchContacts?query=${encodeURIComponent(phone)}&readMask=phoneNumbers&sources=READ_SOURCE_TYPE_CONTACT&pageSize=10`;
@@ -130,91 +127,52 @@ async function contactExists(accessToken: string, phone: string): Promise<boolea
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("No authorization header", 401);
     }
 
-    // Get conversation ID from URL
     const url = new URL(req.url);
     const conversationId = url.searchParams.get("conversation_id");
-    
+
     if (!conversationId) {
-      return new Response(JSON.stringify({ error: "conversation_id is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("conversation_id is required", 400);
     }
 
-    console.log("Fetching conversation details for:", conversationId);
+    log.info("Fetching conversation details", { conversationId });
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAnonClient();
+    const supabaseAdmin = createServiceClient();
+    const token = authHeader.replace("Bearer ", "");
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("Unauthorized", 401);
     }
 
-    // Get user's organization
     const { data: profile } = await supabase
       .from("profiles")
       .select("organization_id")
       .eq("id", user.id)
       .single();
-    
+
     const organizationId = profile?.organization_id;
 
-    const elevenlabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
-    if (!elevenlabsApiKey) {
-      return new Response(JSON.stringify({ error: "ElevenLabs API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const elevenlabsApiKey = getElevenLabsApiKey();
 
-    // Fetch conversation details from ElevenLabs
-    const apiUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`;
-    
-    const response = await fetch(apiUrl, {
-      headers: {
-        "xi-api-key": elevenlabsApiKey,
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("ElevenLabs API error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "Conversation not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data: ElevenLabsConversationDetail = await response.json();
-    console.log("Conversation data fetched successfully");
+    const data: ElevenLabsConversationDetail = await getConversation(conversationId, elevenlabsApiKey);
+    log.info("Conversation data fetched successfully");
 
     // Extract client data from data collection results
     let callerName: string | null = null;
     let callerPhone: string | null = null;
-    
+
     if (data.analysis?.data_collection_results) {
       const results = data.analysis.data_collection_results;
       if (results.caller_name) callerName = results.caller_name.value;
@@ -235,7 +193,7 @@ Deno.serve(async (req) => {
           }
         }
       } catch (e) {
-        console.error("Error auto-creating contact:", e);
+        log.warn("Error auto-creating contact", { error: (e as Error).message });
       }
     }
 
@@ -246,7 +204,7 @@ Deno.serve(async (req) => {
       caller_phone: callerPhone || "Unknown",
       caller_name: callerName,
       status: data.status === "done" ? "completed" : data.status,
-      outcome: data.analysis?.call_successful === "success" ? "information_provided" : 
+      outcome: data.analysis?.call_successful === "success" ? "information_provided" :
                data.analysis?.call_successful === "failure" ? "no_action" : null,
       is_emergency: false,
       started_at: new Date(data.metadata.start_time_unix_secs * 1000).toISOString(),
@@ -283,17 +241,10 @@ Deno.serve(async (req) => {
       })),
     };
 
-    return new Response(JSON.stringify(transformedData), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return successResponse(transformedData);
+
   } catch (error) {
-    console.error("Error fetching conversation details:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error", details: String(error) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    logger.error("Handler error", error as Error);
+    return errorResponse(error as Error);
   }
 });

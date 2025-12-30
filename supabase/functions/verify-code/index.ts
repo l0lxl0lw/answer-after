@@ -1,42 +1,39 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[VERIFY-CODE] ${step}${detailsStr}`);
-};
+const logger = createLogger('verify-code');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing Supabase credentials');
-    }
+    const supabaseAdmin = createServiceClient();
 
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const body = await parseJsonBody<{
+      type: 'email' | 'phone';
+      email?: string;
+      phone?: string;
+      code: string;
+      userId?: string;
+    }>(req, ['type', 'code']);
 
-    const body = await req.json();
     const { type, email, phone, code, userId } = body;
 
-    logStep('Verification request', { type, email, phone: phone ? '***' + phone.slice(-4) : null });
+    log.info('Verification request', { type, email, phone: phone ? '***' + phone.slice(-4) : null });
 
-    if (!type || !['email', 'phone'].includes(type)) {
-      throw new Error('Invalid verification type');
+    if (!['email', 'phone'].includes(type)) {
+      return errorResponse('Invalid verification type', 400);
     }
 
     if (!code || code.length !== 6) {
-      throw new Error('Invalid verification code');
+      return errorResponse('Invalid verification code', 400);
     }
 
     // Build the query to find the verification code
@@ -61,16 +58,13 @@ serve(async (req) => {
     const { data: verificationCodes, error: fetchError } = await query;
 
     if (fetchError) {
-      logStep('Error fetching verification code', { error: fetchError });
+      log.error('Error fetching verification code', fetchError);
       throw new Error('Failed to verify code');
     }
 
     if (!verificationCodes || verificationCodes.length === 0) {
-      logStep('Invalid or expired code');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid or expired verification code' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      log.info('Invalid or expired code');
+      return errorResponse('Invalid or expired verification code', 400);
     }
 
     const verification = verificationCodes[0];
@@ -82,7 +76,7 @@ serve(async (req) => {
       .eq('id', verification.id);
 
     if (updateError) {
-      logStep('Error updating verification', { error: updateError });
+      log.error('Error updating verification', updateError);
       throw new Error('Failed to mark code as verified');
     }
 
@@ -90,7 +84,7 @@ serve(async (req) => {
     const targetUserId = userId || verification.user_id;
     if (targetUserId) {
       const updateData: { email_verified?: boolean; phone_verified?: boolean; phone?: string } = {};
-      
+
       if (type === 'email') {
         updateData.email_verified = true;
       } else if (type === 'phone') {
@@ -106,30 +100,22 @@ serve(async (req) => {
         .eq('id', targetUserId);
 
       if (profileError) {
-        logStep('Error updating profile', { error: profileError });
-        // Don't fail the whole request, just log it
+        log.warn('Error updating profile', { error: profileError.message });
       } else {
-        logStep('Profile updated', { userId: targetUserId, type });
+        log.info('Profile updated', { userId: targetUserId, type });
       }
     }
 
-    logStep('Verification successful', { type, verificationId: verification.id });
+    log.info('Verification successful', { type, verificationId: verification.id });
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `${type === 'email' ? 'Email' : 'Phone'} verified successfully`,
-        verified: true
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return successResponse({
+      success: true,
+      message: `${type === 'email' ? 'Email' : 'Phone'} verified successfully`,
+      verified: true
+    });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep('ERROR', { message: errorMessage });
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    logger.error('Handler error', error as Error);
+    return errorResponse(error as Error);
   }
 });

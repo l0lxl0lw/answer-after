@@ -1,41 +1,27 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { validateUUID, parseJsonBody } from "../_shared/validation.ts";
+import { deleteAgent, deletePhoneNumber, getElevenLabsApiKey } from "../_shared/elevenlabs.ts";
+import { getTwilioCredentials, makeTwilioRequest, getAccountUrl, getTwilioAuthHeader } from "../_shared/twilio.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[ADMIN-DELETE-ORG] ${step}${detailsStr}`);
-};
+const logger = createLogger('admin-delete-organization');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing required environment variables');
-    }
+    const supabaseAdmin = createServiceClient();
 
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { organizationId } = await parseJsonBody<{ organizationId: string }>(req, ['organizationId']);
+    validateUUID(organizationId, 'organizationId');
 
-    const { organizationId } = await req.json();
-
-    if (!organizationId) {
-      throw new Error('organizationId is required');
-    }
-
-    logStep('Starting deletion process', { organizationId });
+    log.step('Starting deletion process', { organizationId });
 
     // Get organization details
     const { data: org, error: orgError } = await supabaseAdmin
@@ -45,12 +31,12 @@ serve(async (req) => {
       .single();
 
     if (orgError || !org) {
-      throw new Error('Organization not found');
+      return errorResponse('Organization not found', 404);
     }
 
-    logStep('Found organization', { name: org.name });
+    log.info('Found organization', { name: org.name });
 
-    // Get the ElevenLabs agent ID separately
+    // Get the ElevenLabs agent ID
     const { data: agentRecord, error: agentRecordError } = await supabaseAdmin
       .from('organization_agents')
       .select('elevenlabs_agent_id')
@@ -58,100 +44,60 @@ serve(async (req) => {
       .maybeSingle();
 
     if (agentRecordError) {
-      logStep('Error fetching agent record', { error: agentRecordError });
+      log.warn('Error fetching agent record', { error: agentRecordError.message });
     }
 
     // Step 1: Delete ElevenLabs agent if exists
     const agentId = agentRecord?.elevenlabs_agent_id;
-    logStep('ElevenLabs agent check', {
-      agentId,
-      hasApiKey: !!ELEVENLABS_API_KEY,
-      agentRecord
-    });
+    let elevenLabsApiKey: string | null = null;
 
-    if (agentId) {
-      if (!ELEVENLABS_API_KEY) {
-        logStep('WARNING: ELEVENLABS_API_KEY not set, cannot delete agent');
-      } else {
-        logStep('Deleting ElevenLabs agent', { agentId });
+    try {
+      elevenLabsApiKey = getElevenLabsApiKey();
+    } catch {
+      log.warn('ELEVENLABS_API_KEY not set');
+    }
 
-        try {
-          const deleteResponse = await fetch(
-            `https://api.elevenlabs.io/v1/convai/agents/${agentId}`,
-            {
-              method: 'DELETE',
-              headers: {
-                'xi-api-key': ELEVENLABS_API_KEY,
-              },
-            }
-          );
+    log.info('ElevenLabs agent check', { agentId, hasApiKey: !!elevenLabsApiKey });
 
-          const responseText = await deleteResponse.text();
-
-          if (deleteResponse.ok) {
-            logStep('ElevenLabs agent deleted successfully');
-          } else {
-            logStep('Failed to delete ElevenLabs agent', {
-              status: deleteResponse.status,
-              statusText: deleteResponse.statusText,
-              response: responseText,
-            });
-          }
-        } catch (error) {
-          logStep('Error deleting ElevenLabs agent', { error: String(error) });
-        }
+    if (agentId && elevenLabsApiKey) {
+      log.step('Deleting ElevenLabs agent', { agentId });
+      try {
+        await deleteAgent(agentId, elevenLabsApiKey);
+        log.info('ElevenLabs agent deleted successfully');
+      } catch (error) {
+        log.warn('Failed to delete ElevenLabs agent', { error: (error as Error).message });
       }
+    } else if (agentId) {
+      log.warn('Cannot delete agent - no API key');
     } else {
-      logStep('No ElevenLabs agent found for this organization');
+      log.info('No ElevenLabs agent found for this organization');
     }
 
     // Step 2: Delete phone numbers from ElevenLabs and reset Twilio webhooks
-    logStep('Getting phone numbers for organization');
+    log.step('Getting phone numbers for organization');
     const { data: phoneNumbers } = await supabaseAdmin
       .from('phone_numbers')
       .select('phone_number, twilio_sid, elevenlabs_phone_number_id')
       .eq('organization_id', organizationId);
 
     if (phoneNumbers && phoneNumbers.length > 0) {
-      logStep('Processing phone numbers', {
+      log.info('Processing phone numbers', {
         count: phoneNumbers.length,
         numbers: phoneNumbers.map(p => p.phone_number),
       });
 
-      // Delete phone numbers from ElevenLabs first
-      if (ELEVENLABS_API_KEY) {
+      // Delete phone numbers from ElevenLabs
+      if (elevenLabsApiKey) {
         for (const phone of phoneNumbers) {
           if (phone.elevenlabs_phone_number_id) {
             try {
-              logStep('Deleting phone number from ElevenLabs', {
-                phoneNumber: phone.phone_number,
-                elevenlabsId: phone.elevenlabs_phone_number_id,
-              });
-
-              const deleteResponse = await fetch(
-                `https://api.elevenlabs.io/v1/convai/phone-numbers/${phone.elevenlabs_phone_number_id}`,
-                {
-                  method: 'DELETE',
-                  headers: {
-                    'xi-api-key': ELEVENLABS_API_KEY,
-                  },
-                }
-              );
-
-              if (deleteResponse.ok) {
-                logStep('Phone number deleted from ElevenLabs successfully', { phoneNumber: phone.phone_number });
-              } else {
-                const errorText = await deleteResponse.text();
-                logStep('Failed to delete phone number from ElevenLabs', {
-                  phoneNumber: phone.phone_number,
-                  status: deleteResponse.status,
-                  error: errorText,
-                });
-              }
+              log.step('Deleting phone from ElevenLabs', { phoneNumber: phone.phone_number });
+              await deletePhoneNumber(phone.elevenlabs_phone_number_id, elevenLabsApiKey);
+              log.info('Phone deleted from ElevenLabs', { phoneNumber: phone.phone_number });
             } catch (error) {
-              logStep('Error deleting phone number from ElevenLabs', {
+              log.warn('Failed to delete phone from ElevenLabs', {
                 phoneNumber: phone.phone_number,
-                error: String(error),
+                error: (error as Error).message,
               });
             }
           }
@@ -159,128 +105,106 @@ serve(async (req) => {
       }
 
       // Reset Twilio webhooks
-      logStep('Resetting Twilio webhooks for phone numbers');
+      log.step('Resetting Twilio webhooks');
 
-      // Reset Twilio webhooks to default demo URLs
       const twilioSubaccountSid = org.twilio_subaccount_sid;
       const twilioSubaccountAuthToken = org.twilio_subaccount_auth_token;
+
+      let twilioAccountSid: string | null = null;
+      let twilioAuthToken: string | null = null;
+
+      try {
+        const creds = getTwilioCredentials();
+        twilioAccountSid = creds.accountSid;
+        twilioAuthToken = creds.authToken;
+      } catch {
+        log.warn('Twilio credentials not configured');
+      }
+
+      const resetWebhookBody = {
+        VoiceUrl: 'https://demo.twilio.com/welcome/voice/',
+        VoiceMethod: 'POST',
+        SmsUrl: 'https://demo.twilio.com/welcome/sms/reply',
+        SmsMethod: 'POST',
+      };
 
       if (twilioSubaccountSid && twilioSubaccountAuthToken) {
         for (const phone of phoneNumbers) {
           if (phone.twilio_sid) {
             try {
-              logStep('Resetting webhook for phone', { phoneNumber: phone.phone_number, sid: phone.twilio_sid });
-
-              const updateResponse = await fetch(
-                `https://api.twilio.com/2010-04-01/Accounts/${twilioSubaccountSid}/IncomingPhoneNumbers/${phone.twilio_sid}.json`,
+              log.step('Resetting webhook', { phoneNumber: phone.phone_number });
+              await makeTwilioRequest(
+                `${getAccountUrl(twilioSubaccountSid)}/IncomingPhoneNumbers/${phone.twilio_sid}.json`,
                 {
+                  accountSid: twilioSubaccountSid,
+                  authToken: twilioSubaccountAuthToken,
                   method: 'POST',
-                  headers: {
-                    'Authorization': `Basic ${btoa(`${twilioSubaccountSid}:${twilioSubaccountAuthToken}`)}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: new URLSearchParams({
-                    VoiceUrl: 'https://demo.twilio.com/welcome/voice/',
-                    VoiceMethod: 'POST',
-                    SmsUrl: 'https://demo.twilio.com/welcome/sms/reply',
-                    SmsMethod: 'POST',
-                  }),
+                  body: resetWebhookBody,
                 }
               );
-
-              if (updateResponse.ok) {
-                logStep('Twilio webhook reset successfully', { phoneNumber: phone.phone_number });
-              } else {
-                const errorText = await updateResponse.text();
-                logStep('Failed to reset Twilio webhook', {
-                  phoneNumber: phone.phone_number,
-                  status: updateResponse.status,
-                  error: errorText,
-                });
-              }
+              log.info('Webhook reset successfully', { phoneNumber: phone.phone_number });
             } catch (error) {
-              logStep('Error resetting Twilio webhook', {
+              log.warn('Failed to reset webhook', {
                 phoneNumber: phone.phone_number,
-                error: String(error),
+                error: (error as Error).message,
               });
             }
           }
         }
-      } else if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-        // Fallback to main account if subaccount credentials not available
-        logStep('Using main Twilio account to reset webhooks (no subaccount credentials)');
+      } else if (twilioAccountSid && twilioAuthToken) {
+        log.info('Using main Twilio account to reset webhooks');
         for (const phone of phoneNumbers) {
           if (phone.twilio_sid) {
             try {
-              const updateResponse = await fetch(
-                `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers/${phone.twilio_sid}.json`,
+              await makeTwilioRequest(
+                `${getAccountUrl(twilioAccountSid)}/IncomingPhoneNumbers/${phone.twilio_sid}.json`,
                 {
+                  accountSid: twilioAccountSid,
+                  authToken: twilioAuthToken,
                   method: 'POST',
-                  headers: {
-                    'Authorization': `Basic ${btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: new URLSearchParams({
-                    VoiceUrl: 'https://demo.twilio.com/welcome/voice/',
-                    VoiceMethod: 'POST',
-                    SmsUrl: 'https://demo.twilio.com/welcome/sms/reply',
-                    SmsMethod: 'POST',
-                  }),
+                  body: resetWebhookBody,
                 }
               );
-
-              if (updateResponse.ok) {
-                logStep('Twilio webhook reset successfully (main account)', { phoneNumber: phone.phone_number });
-              } else {
-                const errorText = await updateResponse.text();
-                logStep('Failed to reset Twilio webhook (main account)', {
-                  phoneNumber: phone.phone_number,
-                  status: updateResponse.status,
-                  error: errorText,
-                });
-              }
+              log.info('Webhook reset (main account)', { phoneNumber: phone.phone_number });
             } catch (error) {
-              logStep('Error resetting Twilio webhook (main account)', {
+              log.warn('Failed to reset webhook (main account)', {
                 phoneNumber: phone.phone_number,
-                error: String(error),
+                error: (error as Error).message,
               });
             }
           }
         }
       } else {
-        logStep('WARNING: No Twilio credentials available to reset webhooks');
+        log.warn('No Twilio credentials available to reset webhooks');
       }
     }
 
-    // Step 3: Delete database records in proper order (due to foreign keys)
-    // Note: Many tables have ON DELETE CASCADE, but we'll be explicit for clarity
+    // Step 3: Delete database records in proper order
 
     // Delete appointment reminders
-    logStep('Deleting appointment reminders');
+    log.step('Deleting appointment reminders');
     const { error: remindersError } = await supabaseAdmin
       .from('appointment_reminders')
       .delete()
       .eq('organization_id', organizationId);
 
     if (remindersError) {
-      logStep('Error deleting appointment reminders', { error: remindersError });
       throw new Error(`Failed to delete appointment reminders: ${remindersError.message}`);
     }
 
     // Delete appointments
-    logStep('Deleting appointments');
+    log.step('Deleting appointments');
     const { error: appointmentsError } = await supabaseAdmin
       .from('appointments')
       .delete()
       .eq('organization_id', organizationId);
 
     if (appointmentsError) {
-      logStep('Error deleting appointments', { error: appointmentsError });
       throw new Error(`Failed to delete appointments: ${appointmentsError.message}`);
     }
 
-    // Delete call transcripts (via call_id foreign key)
-    logStep('Deleting call transcripts');
+    // Delete call transcripts and events
+    log.step('Deleting call data');
     const { data: calls } = await supabaseAdmin
       .from('calls')
       .select('id')
@@ -289,129 +213,89 @@ serve(async (req) => {
     if (calls && calls.length > 0) {
       const callIds = calls.map(c => c.id);
 
-      const { error: transcriptsError } = await supabaseAdmin
-        .from('call_transcripts')
-        .delete()
-        .in('call_id', callIds);
-
-      if (transcriptsError) {
-        logStep('Error deleting call transcripts', { error: transcriptsError });
-      }
-
-      const { error: eventsError } = await supabaseAdmin
-        .from('call_events')
-        .delete()
-        .in('call_id', callIds);
-
-      if (eventsError) {
-        logStep('Error deleting call events', { error: eventsError });
-      }
+      await supabaseAdmin.from('call_transcripts').delete().in('call_id', callIds);
+      await supabaseAdmin.from('call_events').delete().in('call_id', callIds);
     }
 
     // Delete calls
-    logStep('Deleting calls');
+    log.step('Deleting calls');
     const { error: callsError } = await supabaseAdmin
       .from('calls')
       .delete()
       .eq('organization_id', organizationId);
 
     if (callsError) {
-      logStep('Error deleting calls', { error: callsError });
       throw new Error(`Failed to delete calls: ${callsError.message}`);
     }
 
     // Delete services
-    logStep('Deleting services');
-
-    // First check if there are any services
-    const { data: existingServices, error: servicesCheckError } = await supabaseAdmin
-      .from('services')
-      .select('id')
-      .eq('organization_id', organizationId);
-
-    if (servicesCheckError) {
-      logStep('Error checking services', { error: servicesCheckError });
-    } else {
-      logStep('Found services to delete', { count: existingServices?.length || 0 });
-    }
-
+    log.step('Deleting services');
     const { error: servicesError } = await supabaseAdmin
       .from('services')
       .delete()
       .eq('organization_id', organizationId);
 
     if (servicesError) {
-      logStep('Error deleting services', { error: servicesError });
       throw new Error(`Failed to delete services: ${servicesError.message}`);
     }
 
-    logStep('Services deleted successfully');
-
-    // Delete phone_numbers records (must be after calls are deleted due to FK)
-    // Twilio numbers remain in Twilio for manual reuse
-    logStep('Deleting phone_numbers records');
+    // Delete phone_numbers records
+    log.step('Deleting phone number records');
     const { error: phoneError } = await supabaseAdmin
       .from('phone_numbers')
       .delete()
       .eq('organization_id', organizationId);
 
     if (phoneError) {
-      logStep('Error deleting phone numbers', { error: phoneError });
       throw new Error(`Failed to delete phone numbers: ${phoneError.message}`);
     }
 
-    logStep('Phone numbers deleted successfully');
-
     // Delete purchased credits
-    logStep('Deleting purchased credits');
+    log.step('Deleting purchased credits');
     const { error: creditsError } = await supabaseAdmin
       .from('purchased_credits')
       .delete()
       .eq('organization_id', organizationId);
 
     if (creditsError) {
-      logStep('Error deleting purchased credits', { error: creditsError });
       throw new Error(`Failed to delete purchased credits: ${creditsError.message}`);
     }
 
     // Delete subscriptions
-    logStep('Deleting subscriptions');
+    log.step('Deleting subscriptions');
     const { error: subscriptionsError } = await supabaseAdmin
       .from('subscriptions')
       .delete()
       .eq('organization_id', organizationId);
 
     if (subscriptionsError) {
-      logStep('Error deleting subscriptions', { error: subscriptionsError });
       throw new Error(`Failed to delete subscriptions: ${subscriptionsError.message}`);
     }
 
     // Delete Google calendar connections
-    logStep('Deleting Google calendar connections');
+    log.step('Deleting Google calendar connections');
     const { error: calendarError } = await supabaseAdmin
       .from('google_calendar_connections')
       .delete()
       .eq('organization_id', organizationId);
 
     if (calendarError) {
-      logStep('Error deleting Google calendar connections', { error: calendarError });
       throw new Error(`Failed to delete Google calendar connections: ${calendarError.message}`);
     }
 
     // Delete organization agents
-    logStep('Deleting organization agents');
+    log.step('Deleting organization agents');
     const { error: agentsError } = await supabaseAdmin
       .from('organization_agents')
       .delete()
       .eq('organization_id', organizationId);
 
     if (agentsError) {
-      logStep('Error deleting organization agents', { error: agentsError });
       throw new Error(`Failed to delete organization agents: ${agentsError.message}`);
     }
 
     // Delete user roles and profiles
-    logStep('Deleting user profiles and roles');
+    log.step('Deleting user profiles and roles');
     const { data: profiles } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -427,7 +311,6 @@ serve(async (req) => {
         .in('user_id', userIds);
 
       if (rolesError) {
-        logStep('Error deleting user roles', { error: rolesError });
         throw new Error(`Failed to delete user roles: ${rolesError.message}`);
       }
 
@@ -438,25 +321,21 @@ serve(async (req) => {
         .in('id', userIds);
 
       if (profilesError) {
-        logStep('Error deleting profiles', { error: profilesError });
         throw new Error(`Failed to delete profiles: ${profilesError.message}`);
       }
 
       // Delete auth users
       for (const userId of userIds) {
         try {
-          const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-          if (deleteUserError) {
-            logStep('Error deleting auth user (non-fatal)', { userId, error: deleteUserError });
-          }
+          await supabaseAdmin.auth.admin.deleteUser(userId);
         } catch (error) {
-          logStep('Error deleting auth user (non-fatal)', { userId, error: String(error) });
+          log.warn('Error deleting auth user (non-fatal)', { userId, error: (error as Error).message });
         }
       }
     }
 
     // Step 4: Finally, delete the organization
-    logStep('Deleting organization');
+    log.step('Deleting organization');
     const { error: deleteOrgError } = await supabaseAdmin
       .from('organizations')
       .delete()
@@ -466,22 +345,15 @@ serve(async (req) => {
       throw new Error(`Failed to delete organization: ${deleteOrgError.message}`);
     }
 
-    logStep('Organization deleted successfully', { organizationId });
+    log.info('Organization deleted successfully', { organizationId });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Organization and all resources deleted successfully',
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return successResponse({
+      success: true,
+      message: 'Organization and all resources deleted successfully',
+    });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep('ERROR', { message: errorMessage });
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    logger.error('Handler error', error as Error);
+    return errorResponse(error as Error);
   }
 });

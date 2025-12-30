@@ -26,3 +26,80 @@ export const APP_CONFIG = {
   creditTopupAmount: 300,
   creditTopupPrice: 10,
 } as const;
+
+/**
+ * Subscription plan identifiers
+ */
+export const SUBSCRIPTION_PLANS = {
+  CORE: 'core',
+  GROWTH: 'growth',
+  PRO: 'pro',
+  BUSINESS: 'business',
+  ENTERPRISE: 'enterprise',
+} as const;
+
+export type SubscriptionPlanId = typeof SUBSCRIPTION_PLANS[keyof typeof SUBSCRIPTION_PLANS];
+
+/**
+ * Subscription status values
+ */
+export const SUBSCRIPTION_STATUSES = {
+  ACTIVE: 'active',
+  PAST_DUE: 'past_due',
+  CANCELED: 'canceled',
+  TRIALING: 'trialing',
+  PENDING: 'pending',
+} as const;
+
+export type SubscriptionStatusValue = typeof SUBSCRIPTION_STATUSES[keyof typeof SUBSCRIPTION_STATUSES];
+
+/**
+ * Call status values
+ */
+export const CALL_STATUSES = {
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  VOICEMAIL: 'voicemail',
+} as const;
+
+export type CallStatusValue = typeof CALL_STATUSES[keyof typeof CALL_STATUSES];
+
+/**
+ * Call outcome values
+ */
+export const CALL_OUTCOMES = {
+  BOOKED: 'booked',
+  CALLBACK_REQUESTED: 'callback_requested',
+  INFORMATION_PROVIDED: 'information_provided',
+  ESCALATED: 'escalated',
+  NO_ACTION: 'no_action',
+  VOICEMAIL: 'voicemail',
+} as const;
+
+export type CallOutcomeValue = typeof CALL_OUTCOMES[keyof typeof CALL_OUTCOMES];
+
+/**
+ * Appointment status values
+ */
+export const APPOINTMENT_STATUSES = {
+  SCHEDULED: 'scheduled',
+  CONFIRMED: 'confirmed',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+  NO_SHOW: 'no_show',
+} as const;
+
+export type AppointmentStatusValue = typeof APPOINTMENT_STATUSES[keyof typeof APPOINTMENT_STATUSES];
+
+/**
+ * User role values
+ */
+export const USER_ROLES = {
+  OWNER: 'owner',
+  ADMIN: 'admin',
+  STAFF: 'staff',
+} as const;
+
+export type UserRoleValue = typeof USER_ROLES[keyof typeof USER_ROLES];

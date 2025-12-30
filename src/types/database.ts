@@ -30,9 +30,9 @@ export type AppointmentStatus =
   | 'cancelled'
   | 'no_show';
 
-export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing';
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing' | 'pending';
 
-export type SubscriptionPlan = 'starter' | 'professional' | 'enterprise';
+export type SubscriptionPlan = 'core' | 'growth' | 'pro' | 'business' | 'enterprise';
 
 export type AuditAction = 
   | 'call.created'

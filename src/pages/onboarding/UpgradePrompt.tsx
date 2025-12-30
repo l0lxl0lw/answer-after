@@ -5,7 +5,7 @@ import { ArrowRight, Sparkles, Zap, Check, Loader2 } from "lucide-react";
 import { COMPANY } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { createLogger, getEnvironment } from "@/lib/logger";
+import { createLogger } from "@/lib/logger";
 import { useQuery } from "@tanstack/react-query";
 import { useSubscriptionTiers } from "@/hooks/use-api";
 import { useEffect } from "react";
@@ -14,11 +14,6 @@ const log = createLogger('UpgradePrompt');
 
 // Plan hierarchy for determining upgrades
 const PLAN_HIERARCHY = ['core', 'growth', 'pro', 'business'];
-
-// Get selected plan from localStorage (set during plan selection)
-const getSelectedPlanFromStorage = (): string => {
-  return localStorage.getItem('selectedPlanId') || 'core';
-};
 
 export default function UpgradePrompt() {
   const navigate = useNavigate();
@@ -43,12 +38,7 @@ export default function UpgradePrompt() {
       }
 
       if (!data) {
-        // In local environment, use the plan selected during onboarding
-        if (getEnvironment() === 'local') {
-          const selectedPlan = getSelectedPlanFromStorage();
-          log.debug('No subscription found, using selected plan from localStorage:', selectedPlan);
-          return { plan: selectedPlan, status: 'trialing' };
-        }
+        log.debug('No subscription found in database');
         return null;
       }
 
@@ -59,10 +49,10 @@ export default function UpgradePrompt() {
   });
 
   const isLoading = isLoadingTiers || isLoadingSubscription;
-  // During onboarding, localStorage is the source of truth for selected plan
-  const currentPlanId = getSelectedPlanFromStorage();
+  // Use database as source of truth for plan
+  const currentPlanId = subscriptionData?.plan || 'core';
 
-  log.debug('Selected plan from localStorage:', currentPlanId);
+  log.debug('Current plan from database:', currentPlanId);
 
   // Get current plan details from tiers
   const currentPlan = tiers?.find(t => t.plan_id === currentPlanId);
@@ -79,8 +69,8 @@ export default function UpgradePrompt() {
   // Redirect based on subscription status
   useEffect(() => {
     if (!isLoading) {
-      // If no subscription at all (only in non-local environments)
-      if (!subscriptionData && getEnvironment() !== 'local') {
+      // If no subscription at all, redirect to plan selection
+      if (!subscriptionData) {
         log.warn('No subscription found, redirecting to plan selection');
         navigate("/onboarding/select-plan", { replace: true });
         return;

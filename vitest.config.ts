@@ -6,10 +6,22 @@ export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
+    // Use jsdom for UI and functionality tests, node for integration tests
+    environmentMatchGlobs: [
+      // UI tests use jsdom for React component testing
+      ['tests/ui/**', 'jsdom'],
+      // Functionality tests use jsdom for React component testing
+      ['tests/functionality/**', 'jsdom'],
+      // Integration tests use node
+      ['tests/integration/**', 'node'],
+    ],
+    // Default to node for backwards compatibility
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
-    testTimeout: 30000, // 30 seconds for integration tests
+    testTimeout: 30000,
     hookTimeout: 30000,
+    // Include all test directories
+    include: ['tests/**/*.test.{ts,tsx}'],
   },
   resolve: {
     alias: {

@@ -10,7 +10,13 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, ArrowLeft, CheckCircle2, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 // Format phone number as user types: +1 (XXX) XXX-XXXX
@@ -484,6 +490,7 @@ const Auth = () => {
           maxLength={6}
           value={code}
           onChange={setCode}
+          autoFocus
         >
           <InputOTPGroup>
             <InputOTPSlot index={0} />
@@ -777,7 +784,24 @@ const Auth = () => {
 
                 {/* Phone */}
                 <div className="space-y-2">
-                  <Label htmlFor="signup-phone">Phone Number</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="signup-phone">Work Phone Number</Label>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="inline-flex">
+                            <Info className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[280px]">
+                          <p className="text-sm">
+                            We'll send appointment confirmations and important notifications to this number.
+                            This is typically your business line or the number you use for work communications.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
@@ -869,13 +893,13 @@ const Auth = () => {
                 {/* Terms */}
                 <p className="text-sm text-muted-foreground">
                   By signing up, you agree to our{" "}
-                  <a href="#" className="text-primary hover:underline">
+                  <Link to="/terms" className="text-primary hover:underline">
                     Terms of Service
-                  </a>{" "}
+                  </Link>{" "}
                   and{" "}
-                  <a href="#" className="text-primary hover:underline">
+                  <Link to="/privacy" className="text-primary hover:underline">
                     Privacy Policy
-                  </a>
+                  </Link>
                   .
                 </p>
 

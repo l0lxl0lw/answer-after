@@ -1,29 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { parseJsonBody } from "../_shared/validation.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('generate-greeting-tts');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const { greeting, organizationId } = await req.json();
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
 
-    if (!greeting || !organizationId) {
-      throw new Error('Missing greeting or organizationId');
-    }
+    const body = await parseJsonBody<{
+      greeting: string;
+      organizationId: string;
+    }>(req, ['greeting', 'organizationId']);
+
+    const { greeting, organizationId } = body;
 
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
     if (!ELEVENLABS_API_KEY) {
       throw new Error('ELEVENLABS_API_KEY not configured');
     }
 
-    console.log(`Generating TTS for organization ${organizationId}`);
+    log.info('Generating TTS', { organizationId });
 
     // Generate TTS using ElevenLabs
     const voiceId = 'cjVigY5qzO86Huf0OWal'; // Eric voice
@@ -50,20 +53,17 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs TTS error:', response.status, errorText);
+      log.error('ElevenLabs TTS error', new Error(`${response.status}: ${errorText}`));
       throw new Error(`TTS generation failed: ${response.status}`);
     }
 
     const audioBuffer = await response.arrayBuffer();
-    console.log(`Generated ${audioBuffer.byteLength} bytes of audio`);
+    log.info('Audio generated', { bytes: audioBuffer.byteLength });
 
     // Upload to Supabase Storage
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    const supabase = createServiceClient();
     const fileName = `${organizationId}/greeting.mp3`;
-    
+
     // Delete existing file if any
     await supabase.storage.from('greetings').remove([fileName]);
 
@@ -76,7 +76,7 @@ serve(async (req) => {
       });
 
     if (uploadError) {
-      console.error('Storage upload error:', uploadError);
+      log.error('Storage upload error', uploadError);
       throw new Error(`Failed to upload audio: ${uploadError.message}`);
     }
 
@@ -85,26 +85,17 @@ serve(async (req) => {
       .from('greetings')
       .getPublicUrl(fileName);
 
-    console.log(`Greeting audio saved to: ${urlData.publicUrl}`);
+    log.info('Greeting audio saved', { url: urlData.publicUrl });
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        audioUrl: urlData.publicUrl,
-        audioSize: audioBuffer.byteLength 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return successResponse({
+      success: true,
+      audioUrl: urlData.publicUrl,
+      audioSize: audioBuffer.byteLength
+    });
 
   } catch (error) {
-    console.error('Error in generate-greeting-tts:', error);
+    logger.error('Handler error', error as Error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ error: message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
+    return errorResponse(message, 500);
   }
 });

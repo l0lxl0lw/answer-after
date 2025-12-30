@@ -1,10 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsHeaders } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('reminder-webhook');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -12,15 +11,14 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    const supabase = createServiceClient();
 
     const url = new URL(req.url);
     const reminderId = url.searchParams.get('reminderId');
 
     if (!reminderId) {
-      console.error('Missing reminderId parameter');
+      log.warn('Missing reminderId parameter');
       return new Response('OK', { status: 200 });
     }
 
@@ -30,7 +28,7 @@ serve(async (req) => {
     const callDuration = formData.get('CallDuration') as string;
     const callSid = formData.get('CallSid') as string;
 
-    console.log(`Reminder webhook: ${reminderId}, status: ${callStatus}, duration: ${callDuration}`);
+    log.info('Reminder webhook received', { reminderId, status: callStatus, duration: callDuration });
 
     // Get reminder and appointment details
     const { data: reminder, error: reminderError } = await supabase
@@ -40,15 +38,14 @@ serve(async (req) => {
       .single();
 
     if (reminderError || !reminder) {
-      console.error('Reminder not found:', reminderError);
+      log.error('Reminder not found', reminderError || new Error('No reminder data'));
       return new Response('OK', { status: 200 });
     }
 
     // Handle different call statuses
     if (callStatus === 'completed') {
-      // Call completed - analyze the conversation to determine outcome
-      const outcome = await analyzeCallOutcome(supabase, callSid, reminder);
-      
+      const outcome = await analyzeCallOutcome(supabase, callSid, reminder, log);
+
       await supabase
         .from('appointment_reminders')
         .update({
@@ -72,11 +69,11 @@ serve(async (req) => {
       }
 
       // Notify organization
-      await notifyOrganization(supabase, reminder, outcome);
+      await notifyOrganization(supabase, reminder, outcome, log);
 
       // If reschedule requested, create a follow-up task
       if (outcome === 'reschedule_requested') {
-        await createRescheduleTask(supabase, reminder);
+        await createRescheduleTask(supabase, reminder, log);
       }
 
     } else if (callStatus === 'no-answer' || callStatus === 'busy' || callStatus === 'failed') {
@@ -99,15 +96,16 @@ serve(async (req) => {
     return new Response('OK', { status: 200 });
 
   } catch (error) {
-    console.error('Error in reminder-webhook:', error);
+    logger.error('Handler error', error as Error);
     return new Response('OK', { status: 200 });
   }
 });
 
 async function analyzeCallOutcome(
-  supabase: any, 
-  callSid: string, 
-  reminder: any
+  supabase: any,
+  callSid: string,
+  reminder: any,
+  log: any
 ): Promise<'confirmed' | 'declined' | 'reschedule_requested' | 'no_answer'> {
   // Try to get call transcripts if available
   const { data: transcripts } = await supabase
@@ -117,20 +115,17 @@ async function analyzeCallOutcome(
     .order('created_at', { ascending: true });
 
   if (!transcripts || transcripts.length === 0) {
-    // No transcripts, use AI to analyze based on call metadata
     return 'no_answer';
   }
 
-  // Combine transcripts
   const conversation = transcripts
     .map((t: any) => `${t.speaker}: ${t.content}`)
     .join('\n');
 
-  // Use Lovable AI to analyze the outcome
   try {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
-      console.log('No LOVABLE_API_KEY, defaulting to confirmed');
+      log.info('No LOVABLE_API_KEY, defaulting to confirmed');
       return 'confirmed';
     }
 
@@ -145,7 +140,7 @@ async function analyzeCallOutcome(
         messages: [
           {
             role: 'system',
-            content: `You are analyzing a phone call transcript for an appointment reminder. 
+            content: `You are analyzing a phone call transcript for an appointment reminder.
 Determine the customer's response. Return ONLY one of these exact words:
 - confirmed (customer confirmed the appointment)
 - declined (customer wants to cancel)
@@ -165,19 +160,19 @@ Determine the customer's response. Return ONLY one of these exact words:
     if (response.ok) {
       const data = await response.json();
       const result = data.choices?.[0]?.message?.content?.toLowerCase().trim();
-      
+
       if (['confirmed', 'declined', 'reschedule_requested', 'no_answer'].includes(result)) {
         return result as any;
       }
     }
   } catch (error) {
-    console.error('Error analyzing call outcome:', error);
+    log.error('Error analyzing call outcome', error as Error);
   }
 
-  return 'confirmed'; // Default to confirmed if analysis fails
+  return 'confirmed';
 }
 
-async function notifyOrganization(supabase: any, reminder: any, outcome: string) {
+async function notifyOrganization(supabase: any, reminder: any, outcome: string, log: any) {
   const { data: orgData } = await supabase
     .from('organizations')
     .select('notification_email, notification_phone, name')
@@ -197,15 +192,14 @@ async function notifyOrganization(supabase: any, reminder: any, outcome: string)
   });
 
   const outcomeMessages: Record<string, string> = {
-    confirmed: `✅ CONFIRMED: ${appointment.customer_name} confirmed their appointment for ${formattedDate}`,
-    declined: `❌ CANCELLED: ${appointment.customer_name} cancelled their appointment for ${formattedDate}`,
-    reschedule_requested: `📅 RESCHEDULE: ${appointment.customer_name} requested to reschedule their appointment for ${formattedDate}`,
-    no_answer: `📞 NO ANSWER: Could not reach ${appointment.customer_name} for their appointment on ${formattedDate}`,
+    confirmed: `CONFIRMED: ${appointment.customer_name} confirmed their appointment for ${formattedDate}`,
+    declined: `CANCELLED: ${appointment.customer_name} cancelled their appointment for ${formattedDate}`,
+    reschedule_requested: `RESCHEDULE: ${appointment.customer_name} requested to reschedule their appointment for ${formattedDate}`,
+    no_answer: `NO ANSWER: Could not reach ${appointment.customer_name} for their appointment on ${formattedDate}`,
   };
 
   const message = outcomeMessages[outcome] || `Reminder call completed for ${appointment.customer_name}`;
 
-  // Send email notification if configured
   if (orgData.notification_email) {
     try {
       const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
@@ -231,26 +225,22 @@ async function notifyOrganization(supabase: any, reminder: any, outcome: string)
             `,
           }),
         });
-        console.log('Email notification sent to:', orgData.notification_email);
+        log.info('Email notification sent', { to: orgData.notification_email });
       }
     } catch (error) {
-      console.error('Error sending email notification:', error);
+      log.error('Error sending email notification', error as Error);
     }
   }
 
-  // Could also send SMS notification here if needed
-  console.log(`Notification for ${orgData.name}: ${message}`);
+  log.info('Organization notified', { orgName: orgData.name, message });
 }
 
-async function createRescheduleTask(supabase: any, reminder: any) {
-  // Log the reschedule request for follow-up
-  console.log(`Reschedule requested for appointment ${reminder.appointments.id}`);
-  
-  // You could create a task/ticket in your system here
-  // For now, we'll add a note to the appointment
+async function createRescheduleTask(supabase: any, reminder: any, log: any) {
+  log.info('Reschedule requested', { appointmentId: reminder.appointments.id });
+
   await supabase
     .from('appointments')
-    .update({ 
+    .update({
       notes: `[${new Date().toISOString()}] Customer requested reschedule during reminder call. Please contact to arrange new time.`
     })
     .eq('id', reminder.appointments.id);

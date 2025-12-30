@@ -1,23 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/db.ts";
+import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
+import { createLogger } from "../_shared/logger.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const logger = createLogger('process-scheduled-reminders');
 
 // This function should be called by a cron job every minute
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const log = logger.withContext({ requestId: crypto.randomUUID() });
+    const supabase = createServiceClient();
 
-    console.log('Processing scheduled reminders at:', new Date().toISOString());
+    log.info('Processing scheduled reminders', { timestamp: new Date().toISOString() });
 
     // Find pending reminders that are due (scheduled_time <= now)
     const { data: dueReminders, error } = await supabase
@@ -36,29 +34,24 @@ serve(async (req) => {
       `)
       .eq('status', 'pending')
       .lte('scheduled_time', new Date().toISOString())
-      .in('appointments.status', ['scheduled', 'confirmed']) // Only for active appointments
-      .limit(10); // Process max 10 at a time to avoid timeouts
+      .in('appointments.status', ['scheduled', 'confirmed'])
+      .limit(10);
 
     if (error) {
-      console.error('Error fetching due reminders:', error);
-      return new Response(JSON.stringify({ error: 'Failed to fetch reminders' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      log.error('Error fetching due reminders', error);
+      return errorResponse('Failed to fetch reminders', 500);
     }
 
     if (!dueReminders || dueReminders.length === 0) {
-      console.log('No reminders due at this time');
-      return new Response(JSON.stringify({ processed: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      log.info('No reminders due at this time');
+      return successResponse({ processed: 0 });
     }
 
-    console.log(`Found ${dueReminders.length} reminders to process`);
+    log.info('Found reminders to process', { count: dueReminders.length });
 
     // Check subscription tier for each organization
     const orgIds = [...new Set(dueReminders.map(r => r.organization_id))];
-    
+
     const { data: subscriptions } = await supabase
       .from('subscriptions')
       .select('organization_id, plan')
@@ -77,27 +70,29 @@ serve(async (req) => {
     });
 
     const results: { reminderId: string; success: boolean; error?: string }[] = [];
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     // Process each reminder
     for (const reminder of dueReminders) {
       const orgPlan = orgPlans[reminder.organization_id];
-      
+
       // Check if organization has outbound reminders feature
       if (!allowedPlans.has(orgPlan)) {
-        console.log(`Skipping reminder ${reminder.id} - org plan ${orgPlan} doesn't have outbound reminders`);
-        
+        log.info('Skipping reminder - plan not eligible', { reminderId: reminder.id, plan: orgPlan });
+
         await supabase
           .from('appointment_reminders')
-          .update({ 
+          .update({
             status: 'cancelled',
             notes: 'Subscription plan does not include outbound reminders'
           })
           .eq('id', reminder.id);
-        
-        results.push({ 
-          reminderId: reminder.id, 
-          success: false, 
-          error: 'Plan not eligible' 
+
+        results.push({
+          reminderId: reminder.id,
+          success: false,
+          error: 'Plan not eligible'
         });
         continue;
       }
@@ -114,19 +109,19 @@ serve(async (req) => {
         });
 
         if (response.ok) {
-          console.log(`Successfully initiated reminder call for ${reminder.id}`);
+          log.info('Successfully initiated reminder call', { reminderId: reminder.id });
           results.push({ reminderId: reminder.id, success: true });
         } else {
           const errorText = await response.text();
-          console.error(`Failed to initiate reminder ${reminder.id}:`, errorText);
+          log.error('Failed to initiate reminder', new Error(errorText));
           results.push({ reminderId: reminder.id, success: false, error: errorText });
         }
       } catch (error) {
-        console.error(`Error processing reminder ${reminder.id}:`, error);
-        results.push({ 
-          reminderId: reminder.id, 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
+        log.error('Error processing reminder', error as Error);
+        results.push({
+          reminderId: reminder.id,
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
 
@@ -135,21 +130,16 @@ serve(async (req) => {
     }
 
     const successful = results.filter(r => r.success).length;
-    console.log(`Processed ${dueReminders.length} reminders, ${successful} successful`);
+    log.info('Processing complete', { processed: dueReminders.length, successful });
 
-    return new Response(JSON.stringify({ 
+    return successResponse({
       processed: dueReminders.length,
       successful,
-      results 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      results
     });
 
   } catch (error) {
-    console.error('Error in process-scheduled-reminders:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: corsHeaders
-    });
+    logger.error('Handler error', error as Error);
+    return errorResponse('Internal server error', 500);
   }
 });
