@@ -31,7 +31,6 @@ serve(async (req) => {
         slug,
         created_at,
         is_onboarding_complete,
-        business_phone_number,
         phone_numbers(phone_number),
         subscriptions(plan, status, stripe_subscription_id),
         organization_agents(elevenlabs_agent_id),
@@ -49,8 +48,12 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : (typeof error === 'object' && error !== null && 'message' in error) 
+        ? String((error as { message: unknown }).message) 
+        : String(error);
     console.error('Error in admin-list-organizations:', errorMessage);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
