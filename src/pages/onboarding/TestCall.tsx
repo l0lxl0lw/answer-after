@@ -1,21 +1,35 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles, Phone, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowRight, Sparkles, Phone, CheckCircle2, Loader2, MessageSquare, User, Bot } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { COMPANY } from "@/lib/constants";
 import { formatPhoneDisplay } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger('TestCall');
+
+interface TranscriptMessage {
+  id: string;
+  speaker: string;
+  content: string;
+  timestamp_ms: number | null;
+}
 
 export default function TestCall() {
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [callDetected, setCallDetected] = useState(false);
+  const [callId, setCallId] = useState<string | null>(null);
+  const [callStatus, setCallStatus] = useState<string | null>(null);
+  const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);
   const [isCompleting, setIsCompleting] = useState(false);
 
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -25,31 +39,111 @@ export default function TestCall() {
     loadPhoneNumber();
   }, [user?.organization_id]);
 
+  // Auto-scroll transcripts
   useEffect(() => {
-    if (isListening) {
-      // Set up real-time subscription for new calls
-      const channel = supabase
-        .channel("test-call-listener")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "calls",
-            filter: `organization_id=eq.${user?.organization_id}`,
-          },
-          (payload) => {
-            console.log("New call detected!", payload);
-            handleCallDetected();
-          }
-        )
-        .subscribe();
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcripts]);
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [isListening, user?.organization_id]);
+  // Listen for new calls via realtime + polling fallback
+  useEffect(() => {
+    if (!isListening || !user?.organization_id) return;
+
+    log.debug('Setting up call listener for org:', user.organization_id);
+    const startTime = new Date().toISOString();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("test-call-listener")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "calls",
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        (payload) => {
+          log.debug("New call detected via realtime!", payload);
+          handleCallDetected(payload.new as any);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "calls",
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        (payload) => {
+          log.debug("Call updated:", payload);
+          const call = payload.new as any;
+          if (call.id === callId) {
+            setCallStatus(call.status);
+            if (call.status === 'completed') {
+              handleCallCompleted();
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Polling fallback - check for new calls every 3 seconds
+    const pollInterval = setInterval(async () => {
+      if (callDetected) return; // Already detected
+
+      try {
+        const { data: recentCalls } = await supabase
+          .from('calls')
+          .select('*')
+          .eq('organization_id', user.organization_id)
+          .gte('created_at', startTime)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (recentCalls && recentCalls.length > 0) {
+          log.debug("New call detected via polling!", recentCalls[0]);
+          handleCallDetected(recentCalls[0]);
+        }
+      } catch (error) {
+        log.error('Polling error:', error);
+      }
+    }, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, [isListening, user?.organization_id, callId, callDetected]);
+
+  // Listen for transcripts when call is active
+  useEffect(() => {
+    if (!callId) return;
+
+    log.debug('Setting up transcript listener for call:', callId);
+
+    const channel = supabase
+      .channel("test-call-transcripts")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "call_transcripts",
+          filter: `call_id=eq.${callId}`,
+        },
+        (payload) => {
+          log.debug("New transcript:", payload);
+          const transcript = payload.new as TranscriptMessage;
+          setTranscripts((prev) => [...prev, transcript]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [callId]);
 
   const loadPhoneNumber = async () => {
     if (!user?.organization_id) return;
@@ -60,35 +154,47 @@ export default function TestCall() {
         .select("phone_number")
         .eq("organization_id", user.organization_id)
         .eq("is_active", true)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setPhoneNumber(data.phone_number);
       }
     } catch (error) {
-      console.error("Error loading phone number:", error);
+      log.error("Error loading phone number:", error);
     }
   };
 
-
   const handleStartListening = () => {
     setIsListening(true);
+    setTranscripts([]);
+    setCallId(null);
+    setCallStatus(null);
     toast({
       title: "Listening for calls",
       description: "Go ahead and call your new number!",
     });
   };
 
-  const handleCallDetected = async () => {
+  const handleCallDetected = async (call: any) => {
     setCallDetected(true);
+    setCallId(call.id);
+    setCallStatus(call.status);
+
+    toast({
+      title: "Call connected!",
+      description: "Your AI agent is now talking to you.",
+    });
+  };
+
+  const handleCallCompleted = async () => {
     setIsListening(false);
 
     toast({
-      title: "Call detected!",
+      title: "Call completed!",
       description: "Great! Your AI agent is working perfectly.",
     });
 
-    // Wait a moment for dramatic effect
+    // Wait a moment to show the final transcripts
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Mark onboarding as complete
@@ -118,15 +224,13 @@ export default function TestCall() {
         description: "Welcome to AnswerAfter. Let's go to your dashboard.",
       });
 
-      // Invalidate queries to ensure fresh data on next load
       await queryClient.invalidateQueries({ queryKey: ['onboarding-status'] });
 
-      // Use window.location.href for full page reload to bypass cache issues
       setTimeout(() => {
         window.location.href = "/dashboard?welcome=true";
       }, 1500);
     } catch (error) {
-      console.error("Error completing onboarding:", error);
+      log.error("Error completing onboarding:", error);
       toast({
         title: "Error",
         description: "Failed to complete setup. Please try again.",
@@ -137,6 +241,11 @@ export default function TestCall() {
   };
 
   const handleSkip = () => {
+    completeOnboarding();
+  };
+
+  const handleFinishEarly = () => {
+    // Allow user to finish even if call hasn't completed
     completeOnboarding();
   };
 
@@ -229,11 +338,11 @@ export default function TestCall() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-primary mt-0.5">3.</span>
-                    <span>The agent will respond naturally and helpfully</span>
+                    <span>You'll see the conversation transcript in real-time</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-primary mt-0.5">4.</span>
-                    <span>We'll detect the call and complete your setup</span>
+                    <span>Hang up when you're done to complete setup</span>
                   </li>
                 </ul>
               </div>
@@ -242,10 +351,16 @@ export default function TestCall() {
               <Button
                 size="lg"
                 className="w-full"
-                onClick={handleStartListening}
+                onClick={() => {
+                  toast({
+                    title: "Great!",
+                    description: "Your AI agent is ready. Completing setup...",
+                  });
+                  completeOnboarding();
+                }}
               >
-                <Phone className="w-5 h-5 mr-2" />
-                I'm Ready to Call
+                <CheckCircle2 className="w-5 h-5 mr-2" />
+                I've Verified It Works
               </Button>
 
               {/* Skip Option */}
@@ -266,23 +381,50 @@ export default function TestCall() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-card border-2 border-primary rounded-xl p-8 text-center"
+              className="space-y-4"
             >
-              <div className="relative w-24 h-24 mx-auto mb-4">
-                <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
-                <div className="relative w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Phone className="w-12 h-12 text-primary animate-pulse" />
+              <div className="bg-card border-2 border-primary rounded-xl p-8 text-center">
+                <div className="relative w-24 h-24 mx-auto mb-4">
+                  <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
+                  <div className="relative w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Phone className="w-12 h-12 text-primary animate-pulse" />
+                  </div>
                 </div>
+                <h3 className="font-display text-xl font-bold mb-2">
+                  Listening for your call...
+                </h3>
+                <p className="text-muted-foreground mb-2">
+                  Go ahead and call{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatPhoneDisplay(phoneNumber)}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  We'll automatically detect when your call connects
+                </p>
               </div>
-              <h3 className="font-display text-xl font-bold mb-2">
-                Listening for your call...
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                Go ahead and call{" "}
-                <span className="font-semibold text-foreground">
-                  {formatPhoneDisplay(phoneNumber)}
-                </span>
-              </p>
+
+              {/* Manual confirmation option */}
+              <div className="bg-muted/50 border rounded-xl p-4">
+                <p className="text-sm text-muted-foreground mb-3 text-center">
+                  Already made a test call and heard the AI agent?
+                </p>
+                <Button
+                  variant="default"
+                  className="w-full"
+                  onClick={() => {
+                    toast({
+                      title: "Great!",
+                      description: "Your AI agent is ready. Completing setup...",
+                    });
+                    completeOnboarding();
+                  }}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Yes, I've Tested My Agent
+                </Button>
+              </div>
+
               <div className="flex flex-col gap-2">
                 <Button
                   variant="outline"
@@ -304,21 +446,112 @@ export default function TestCall() {
 
           {callDetected && (
             <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.8 }}
+              key="active-call"
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="bg-success/10 border-2 border-success rounded-xl p-8 text-center"
+              className="space-y-4"
             >
-              <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
-              <h3 className="font-display text-2xl font-bold mb-2">
-                Perfect! Call Detected
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                Your AI agent is working beautifully. Completing your setup...
-              </p>
-              {isCompleting && (
-                <Loader2 className="w-6 h-6 animate-spin text-success mx-auto" />
+              {/* Call Status */}
+              <div className="bg-success/10 border-2 border-success rounded-xl p-6 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="w-3 h-3 bg-success rounded-full animate-pulse" />
+                  <span className="font-semibold text-success">
+                    {callStatus === 'completed' ? 'Call Completed' : 'Call In Progress'}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {callStatus === 'completed'
+                    ? 'Your AI agent handled the call successfully!'
+                    : 'Your AI agent is talking to you now'}
+                </p>
+              </div>
+
+              {/* Live Transcript */}
+              <div className="bg-card border rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/50 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium text-sm">Live Transcript</span>
+                  {transcripts.length === 0 && callStatus !== 'completed' && (
+                    <Loader2 className="w-3 h-3 animate-spin ml-auto text-muted-foreground" />
+                  )}
+                </div>
+                <div className="p-4 max-h-[300px] overflow-y-auto space-y-3">
+                  {transcripts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      {callStatus === 'completed'
+                        ? 'No transcript available for this call'
+                        : 'Waiting for conversation to start...'}
+                    </p>
+                  ) : (
+                    transcripts.map((msg) => (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`flex gap-2 ${
+                          msg.speaker === 'agent' ? 'justify-start' : 'justify-end'
+                        }`}
+                      >
+                        {msg.speaker === 'agent' && (
+                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Bot className="w-3 h-3 text-primary" />
+                          </div>
+                        )}
+                        <div
+                          className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                            msg.speaker === 'agent'
+                              ? 'bg-muted'
+                              : 'bg-primary text-primary-foreground'
+                          }`}
+                        >
+                          {msg.content}
+                        </div>
+                        {msg.speaker !== 'agent' && (
+                          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                            <User className="w-3 h-3 text-primary-foreground" />
+                          </div>
+                        )}
+                      </motion.div>
+                    ))
+                  )}
+                  <div ref={transcriptEndRef} />
+                </div>
+              </div>
+
+              {/* Actions */}
+              {callStatus === 'completed' ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="space-y-4"
+                >
+                  <div className="bg-success/10 border border-success/20 rounded-lg p-4 text-center">
+                    <CheckCircle2 className="w-8 h-8 text-success mx-auto mb-2" />
+                    <p className="font-medium">Test Complete!</p>
+                    <p className="text-sm text-muted-foreground">
+                      Your AI agent is ready to take real calls.
+                    </p>
+                  </div>
+                  {isCompleting ? (
+                    <div className="flex items-center justify-center gap-2 py-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      <span className="text-muted-foreground">Completing setup...</span>
+                    </div>
+                  ) : (
+                    <Button size="lg" className="w-full" onClick={completeOnboarding}>
+                      Continue to Dashboard
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Button>
+                  )}
+                </motion.div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleFinishEarly}
+                >
+                  Finish & Continue
+                </Button>
               )}
             </motion.div>
           )}

@@ -12,87 +12,75 @@ import { useEffect } from "react";
 
 const log = createLogger('UpgradePrompt');
 
-// Mock subscription for local development
-const MOCK_SUBSCRIPTION = {
-  id: 'mock-sub-id',
-  organization_id: 'mock-org-id',
-  plan: 'core',
-  status: 'trialing',
-  subscription_tiers: {
-    plan_id: 'core',
-    name: 'Core',
-    price_cents: 4900,
-    credits: 150,
-    features: ['AI receptionist', 'Call transcripts', 'Basic analytics'],
-  },
+// Plan hierarchy for determining upgrades
+const PLAN_HIERARCHY = ['core', 'growth', 'pro', 'business'];
+
+// Get selected plan from localStorage (set during plan selection)
+const getSelectedPlanFromStorage = (): string => {
+  return localStorage.getItem('selectedPlanId') || 'core';
 };
 
 export default function UpgradePrompt() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data: tiers } = useSubscriptionTiers();
+  const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
 
-  // Fetch user's current subscription
-  const { data: subscription, isLoading } = useQuery({
-    queryKey: ['user-subscription', user?.organization_id],
+  // Fetch user's current subscription plan
+  const { data: subscriptionData, isLoading: isLoadingSubscription } = useQuery({
+    queryKey: ['user-subscription-plan', user?.organization_id],
     queryFn: async () => {
       if (!user?.organization_id) return null;
 
-      // Fetch subscription
-      const { data: subData, error: subError } = await supabase
+      const { data, error } = await supabase
         .from('subscriptions')
-        .select('*')
+        .select('plan, status')
         .eq('organization_id', user.organization_id)
         .maybeSingle();
 
-      if (subError) {
-        log.error('Error fetching subscription:', subError);
+      if (error) {
+        log.error('Error fetching subscription:', error);
         return null;
       }
 
-      if (!subData) {
-        // In local environment, return mock subscription for testing
+      if (!data) {
+        // In local environment, use the plan selected during onboarding
         if (getEnvironment() === 'local') {
-          log.debug('No subscription found, using mock subscription for local dev');
-          return MOCK_SUBSCRIPTION;
+          const selectedPlan = getSelectedPlanFromStorage();
+          log.debug('No subscription found, using selected plan from localStorage:', selectedPlan);
+          return { plan: selectedPlan, status: 'trialing' };
         }
         return null;
       }
 
-      // Fetch the corresponding tier
-      const { data: tierData, error: tierError } = await supabase
-        .from('subscription_tiers')
-        .select('plan_id, name, price_cents, credits, features')
-        .eq('plan_id', subData.plan)
-        .maybeSingle();
-
-      if (tierError) {
-        log.error('Error fetching tier:', tierError);
-        return null;
-      }
-
-      if (!tierData) {
-        log.error('No tier found for plan:', subData.plan);
-        return null;
-      }
-
-      return {
-        ...subData,
-        subscription_tiers: tierData,
-      };
+      log.debug('Subscription fetched:', data);
+      return data;
     },
     enabled: !!user?.organization_id,
   });
 
-  // Get current plan details
-  const currentPlan = subscription?.subscription_tiers;
-  const currentPlanId = currentPlan?.plan_id;
+  const isLoading = isLoadingTiers || isLoadingSubscription;
+  // During onboarding, localStorage is the source of truth for selected plan
+  const currentPlanId = getSelectedPlanFromStorage();
+
+  log.debug('Selected plan from localStorage:', currentPlanId);
+
+  // Get current plan details from tiers
+  const currentPlan = tiers?.find(t => t.plan_id === currentPlanId);
+
+  // Determine upgrade target (next tier up)
+  const currentPlanIndex = PLAN_HIERARCHY.indexOf(currentPlanId);
+  const upgradePlanId = currentPlanIndex >= 0 && currentPlanIndex < PLAN_HIERARCHY.length - 1
+    ? PLAN_HIERARCHY[currentPlanIndex + 1]
+    : null;
+  const upgradePlan = upgradePlanId ? tiers?.find(t => t.plan_id === upgradePlanId) : null;
+
+  log.debug('Plan state:', { currentPlanId, currentPlanIndex, upgradePlanId, hasTiers: !!tiers?.length });
 
   // Redirect based on subscription status
   useEffect(() => {
     if (!isLoading) {
       // If no subscription at all (only in non-local environments)
-      if (!subscription && getEnvironment() !== 'local') {
+      if (!subscriptionData && getEnvironment() !== 'local') {
         log.warn('No subscription found, redirecting to plan selection');
         navigate("/onboarding/select-plan", { replace: true });
         return;
@@ -104,16 +92,7 @@ export default function UpgradePrompt() {
         navigate("/onboarding/setup-services", { replace: true });
       }
     }
-  }, [isLoading, subscription, currentPlanId, navigate]);
-
-  // Determine upgrade target
-  const planHierarchy = ['core', 'growth', 'pro', 'business'];
-  const currentPlanIndex = currentPlanId ? planHierarchy.indexOf(currentPlanId) : 0;
-  const upgradePlanId = currentPlanIndex < planHierarchy.length - 1
-    ? planHierarchy[currentPlanIndex + 1]
-    : null;
-
-  const upgradePlan = tiers?.find(t => t.plan_id === upgradePlanId);
+  }, [isLoading, subscriptionData, currentPlanId, navigate]);
 
   const handleSkip = () => {
     navigate("/onboarding/setup-services");
@@ -123,6 +102,7 @@ export default function UpgradePrompt() {
     navigate("/dashboard/subscriptions");
   };
 
+  // Loading state
   if (isLoading || !currentPlan || !upgradePlan) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">

@@ -366,41 +366,7 @@ serve(async (req) => {
     }
 
     // DO NOT mark onboarding as complete yet - we have more steps
-    // Onboarding will be complete after the test call step
-
-    // Trigger ElevenLabs agent creation if not already done
-    const { data: agentRecord } = await supabaseAdmin
-      .from('organization_agents')
-      .select('elevenlabs_agent_id')
-      .eq('organization_id', org.id)
-      .maybeSingle();
-
-    if (!agentRecord?.elevenlabs_agent_id) {
-      logStep('Creating ElevenLabs agent');
-
-      try {
-        const agentResponse = await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
-            action: 'create-agent',
-            organizationId: org.id,
-          }),
-        });
-
-        const agentResult = await agentResponse.json();
-        if (agentResponse.ok) {
-          logStep('ElevenLabs agent created', { result: agentResult });
-        } else {
-          logStep('ElevenLabs agent creation failed', { status: agentResponse.status, result: agentResult });
-        }
-      } catch (agentError) {
-        logStep('Agent creation error (non-fatal)', { error: String(agentError) });
-      }
-    }
+    // DO NOT create ElevenLabs agent here - that happens in setup-services based on plan
 
     return new Response(
       JSON.stringify({

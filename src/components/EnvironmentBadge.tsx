@@ -11,7 +11,7 @@ export function EnvironmentBadge() {
       case 'local':
         return { label: 'LOCAL', color: 'bg-blue-500' };
       case 'devo':
-        return { label: 'DEVO', color: 'bg-purple-500' };
+        return { label: 'PRE-PROD', color: 'bg-orange-500' };
       default:
         return { label: 'DEV', color: 'bg-purple-500' };
     }
