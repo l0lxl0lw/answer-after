@@ -330,7 +330,7 @@ export default function Subscriptions() {
                         )}
                         asChild
                       >
-                        <Link to={isEnterprise(tier.plan_id) ? LINKS.salesEmail : "/dashboard/settings"}>
+                        <Link to={isEnterprise(tier.plan_id) ? LINKS.salesEmail : "/dashboard/account"}>
                           {isEnterprise(tier.plan_id) ? "Contact Sales" : isUpgrade ? "Upgrade" : isDowngrade ? "Downgrade" : "Select"}
                           <ArrowRight className="w-3.5 h-3.5 ml-1" />
                         </Link>

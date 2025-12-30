@@ -512,7 +512,7 @@ export default function MyAgent() {
                 </CardTitle>
                 <CardDescription>
                   Provide additional business details and call handling instructions. Your agent already uses services defined in{' '}
-                  <Link to="/dashboard/my-services" className="text-primary hover:underline">
+                  <Link to="/dashboard/services" className="text-primary hover:underline">
                     My Services
                   </Link>{' '}
                   to suggest appropriate options to customers.

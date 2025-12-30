@@ -9,9 +9,95 @@ import {
   makeElevenLabsRequest,
   importPhoneNumber,
   assignAgentToPhoneNumber,
+  createCalendarTool,
+  getTool,
 } from "../_shared/elevenlabs.ts";
+import {
+  buildPlaceholderValues,
+  replacePlaceholders,
+  type PlaceholderValues,
+} from "../_shared/placeholder-utils.ts";
 
 const logger = createLogger('elevenlabs-agent');
+
+/**
+ * Build the webhook URL for the calendar-availability endpoint
+ */
+function getCalendarAvailabilityWebhookUrl(): string {
+  const supabaseUrl = config.supabase.url;
+
+  // For local development, use the local functions URL
+  if (config.isLocal) {
+    return 'http://host.docker.internal:54321/functions/v1/calendar-availability';
+  }
+
+  // For hosted Supabase, construct the functions URL
+  // URL format: https://<project-ref>.supabase.co -> https://<project-ref>.supabase.co/functions/v1/<function>
+  return `${supabaseUrl}/functions/v1/calendar-availability`;
+}
+
+/**
+ * Check if organization has Google Calendar connected
+ */
+async function hasGoogleCalendarConnection(supabase: any, organizationId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('google_calendar_connections')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  return !!data;
+}
+
+/**
+ * Setup calendar tool for an agent
+ * Creates the tool if it doesn't exist, returns tool ID if calendar is connected
+ */
+async function setupCalendarTool(
+  supabase: any,
+  organizationId: string,
+  existingToolId: string | null,
+  apiKey: string
+): Promise<string | null> {
+  const log = logger.withContext({ organizationId, action: 'setup-calendar-tool' });
+
+  // Check if org has Google Calendar connected
+  const hasCalendar = await hasGoogleCalendarConnection(supabase, organizationId);
+  if (!hasCalendar) {
+    log.info('No Google Calendar connection, skipping tool setup');
+    return null;
+  }
+
+  // If we have an existing tool ID, verify it still exists
+  if (existingToolId) {
+    const existingTool = await getTool(existingToolId, apiKey);
+    if (existingTool) {
+      log.info('Using existing calendar tool', { toolId: existingToolId });
+      return existingToolId;
+    }
+    log.info('Existing tool not found, creating new one');
+  }
+
+  // Create new calendar tool
+  const webhookUrl = getCalendarAvailabilityWebhookUrl();
+  log.info('Creating calendar tool', { webhookUrl });
+
+  try {
+    const tool = await createCalendarTool(webhookUrl, organizationId, apiKey);
+    log.info('Calendar tool created', { toolId: tool.tool_id });
+
+    // Save tool ID to database
+    await supabase
+      .from('organization_agents')
+      .update({ elevenlabs_calendar_tool_id: tool.tool_id })
+      .eq('organization_id', organizationId);
+
+    return tool.tool_id;
+  } catch (error) {
+    log.error('Failed to create calendar tool', error as Error);
+    return null;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -273,7 +359,16 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
   }
 
   const agentContext = context || agentRecord?.context || '';
-  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
+
+  // Setup calendar tool if Google Calendar is connected
+  const calendarToolId = await setupCalendarTool(
+    supabase,
+    organizationId,
+    agentRecord?.elevenlabs_calendar_tool_id || null,
+    apiKey
+  );
+
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, !!calendarToolId);
 
   const DEFAULT_VOICE_ID = '625jGFaa0zTLtQfxwc6Q';
 
@@ -287,7 +382,8 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
   const modePrefix = '[INBOUND]';
   const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${organizationId}`;
 
-  const agentConfig = {
+  // Build agent config with optional calendar tool
+  const agentConfig: any = {
     name: agentName,
     conversation_config: {
       agent: {
@@ -301,6 +397,12 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
       widget: { avatar: { type: "orb" } }
     }
   };
+
+  // Attach calendar tool if available
+  if (calendarToolId) {
+    agentConfig.conversation_config.agent.tools = [{ id: calendarToolId }];
+    log.info('Calendar tool attached to agent', { calendarToolId });
+  }
 
   try {
     log.info('Creating ElevenLabs agent');
@@ -472,18 +574,19 @@ async function importPhoneNumberToElevenLabs(
   console.log('[ElevenLabs Phone Import] Successfully imported phone and assigned agent');
 }
 
-async function buildAgentPrompt(supabase: any, orgData: any, context: string): Promise<{ prompt: string; firstMessage: string }> {
+async function buildAgentPrompt(supabase: any, orgData: any, context: string, hasCalendarTool: boolean = false): Promise<{ prompt: string; firstMessage: string }> {
   let greeting = '';
-  let content = '';
+  let customInstructions = '';
 
   try {
     const parsed = JSON.parse(context);
     greeting = parsed.greeting || '';
-    content = parsed.content || '';
+    customInstructions = parsed.customInstructions || parsed.content || '';
   } catch {
-    content = context;
+    customInstructions = context;
   }
 
+  // Fetch templates from database
   const { data: templates } = await supabase
     .from('prompt_templates')
     .select('name, template')
@@ -496,22 +599,53 @@ async function buildAgentPrompt(supabase: any, orgData: any, context: string): P
     }
   }
 
+  // Fetch services for this organization
+  const { data: services } = await supabase
+    .from('services')
+    .select('name, price_cents, duration_minutes')
+    .eq('organization_id', orgData.id)
+    .eq('is_active', true);
+
+  // Build placeholder values using shared utility
+  const placeholderValues = buildPlaceholderValues(
+    orgData,
+    services || [],
+    { context }
+  );
+
   const basePromptTemplate = templateMap['agent_base_prompt'] || getDefaultBasePrompt();
   const firstMessageTemplate = templateMap['agent_first_message'] || 'Hello! Thanks for calling {{orgName}}. How can I help you today?';
   const contextPrefix = templateMap['agent_context_prefix'] || 'ADDITIONAL BUSINESS CONTEXT:';
 
-  const replacePlaceholders = (template: string): string => {
-    return template
-      .replace(/\{\{orgName\}\}/g, orgData.name)
-      .replace(/\{\{businessHoursStart\}\}/g, orgData.business_hours_start || '8:00 AM')
-      .replace(/\{\{businessHoursEnd\}\}/g, orgData.business_hours_end || '5:00 PM');
-  };
+  // Use shared replacePlaceholders function
+  const firstMessage = greeting || replacePlaceholders(firstMessageTemplate, placeholderValues);
+  let fullPrompt = replacePlaceholders(basePromptTemplate, placeholderValues);
 
-  const firstMessage = greeting || replacePlaceholders(firstMessageTemplate);
-  let fullPrompt = replacePlaceholders(basePromptTemplate);
+  // Append custom instructions if provided (this is separate from the {{customInstructions}} placeholder)
+  if (customInstructions && customInstructions.trim()) {
+    fullPrompt = `${fullPrompt}\n\n${contextPrefix}\n${customInstructions}`;
+  }
 
-  if (content && content.trim()) {
-    fullPrompt = `${fullPrompt}\n\n${contextPrefix}\n${content}`;
+  // Add calendar tool instructions if the tool is available
+  if (hasCalendarTool) {
+    const calendarToolInstructions = `
+
+APPOINTMENT SCHEDULING:
+You have access to the business calendar through the check_calendar_availability tool.
+
+When a customer asks about availability or wants to schedule an appointment:
+1. Ask what day/time range works best for them (today, tomorrow, this week, or next week)
+2. Use the check_calendar_availability tool to find open slots
+3. Present 2-3 available options to the customer
+4. Confirm their selection and collect any needed information (name, phone, address, service needed)
+
+Example: "I can check our calendar for you. Are you looking for an appointment today, tomorrow, or later this week?"
+
+After using the tool, interpret the results naturally:
+- If slots are available: "I found some openings! How about [time option 1] or [time option 2]?"
+- If no slots found: "I don't see any availability for that time. Would you like me to check [alternative time]?"`;
+
+    fullPrompt = `${fullPrompt}\n${calendarToolInstructions}`;
   }
 
   return { prompt: fullPrompt, firstMessage };
@@ -576,7 +710,16 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
   }
 
   const agentContext = context || agentRecord?.context || '';
-  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
+
+  // Setup calendar tool if Google Calendar is connected
+  const calendarToolId = await setupCalendarTool(
+    supabase,
+    organizationId,
+    agentRecord?.elevenlabs_calendar_tool_id || null,
+    apiKey
+  );
+
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, !!calendarToolId);
 
   let llmModel = 'gemini-2.5-flash';
   try {
@@ -593,6 +736,12 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
       }
     }
   };
+
+  // Attach calendar tool if available
+  if (calendarToolId) {
+    updateConfig.conversation_config.agent.tools = [{ id: calendarToolId }];
+    log.info('Calendar tool attached to agent update', { calendarToolId });
+  }
 
   if (voiceId) {
     updateConfig.conversation_config.tts = { voice_id: voiceId };

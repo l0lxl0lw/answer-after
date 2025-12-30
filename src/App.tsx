@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
+import { getEnvironment } from "@/lib/logger";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import CallHistory from "./pages/CallHistory";
@@ -34,6 +35,9 @@ import AdminAccess from "./pages/AdminAccess";
 
 const queryClient = new QueryClient();
 
+// Admin portal only available in non-production environments
+const isProduction = getEnvironment() === 'prod';
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -48,7 +52,8 @@ const App = () => (
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/login" element={<Auth />} />
-            <Route path="/adminaccess" element={<AdminAccess />} />
+            {/* Admin portal hidden in production - use pre-prod environment instead */}
+            {!isProduction && <Route path="/adminaccess" element={<AdminAccess />} />}
             <Route path="/onboarding/select-plan" element={<ProtectedRoute><SelectPlan /></ProtectedRoute>} />
             <Route path="/onboarding/phone" element={<ProtectedRoute><PhoneSetup /></ProtectedRoute>} />
             <Route path="/onboarding/upgrade-prompt" element={<ProtectedRoute><UpgradePrompt /></ProtectedRoute>} />
@@ -57,16 +62,16 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/calls" element={<ProtectedRoute><CallHistory /></ProtectedRoute>} />
             <Route path="/dashboard/calls/:id" element={<ProtectedRoute><CallDetail /></ProtectedRoute>} />
-            <Route path="/dashboard/sms" element={<ProtectedRoute><SMS /></ProtectedRoute>} />
-            <Route path="/dashboard/schedules" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
-            <Route path="/dashboard/schedules/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
+            <Route path="/dashboard/messages" element={<ProtectedRoute><SMS /></ProtectedRoute>} />
+            <Route path="/dashboard/calendar" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
+            <Route path="/dashboard/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
             <Route path="/dashboard/calendar-setup" element={<ProtectedRoute><CalendarSetupGuide /></ProtectedRoute>} />
             <Route path="/dashboard/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
-            <Route path="/dashboard/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
-            <Route path="/dashboard/my-services" element={<ProtectedRoute><MyServices /></ProtectedRoute>} />
-            <Route path="/dashboard/my-agent" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
+            <Route path="/dashboard/bookings" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
+            <Route path="/dashboard/services" element={<ProtectedRoute><MyServices /></ProtectedRoute>} />
+            <Route path="/dashboard/voice-behavior" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
             <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
-            <Route path="/dashboard/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/dashboard/account" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/dashboard/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

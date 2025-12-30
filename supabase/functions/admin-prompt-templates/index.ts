@@ -3,6 +3,11 @@ import { createServiceClient } from "../_shared/db.ts";
 import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { parseJsonBody } from "../_shared/validation.ts";
+import {
+  PLACEHOLDER_DEFINITIONS,
+  buildPlaceholderValues,
+  replacePlaceholders,
+} from "../_shared/placeholder-utils.ts";
 
 const logger = createLogger('admin-prompt-templates');
 
@@ -13,9 +18,20 @@ serve(async (req) => {
 
   try {
     const supabaseAdmin = createServiceClient();
+    const url = new URL(req.url);
+    const action = url.searchParams.get('action');
 
-    // GET: List all templates
+    // GET: List all templates OR get placeholders
     if (req.method === 'GET') {
+      // GET ?action=placeholders - Return available placeholder definitions
+      if (action === 'placeholders') {
+        return successResponse({
+          success: true,
+          data: PLACEHOLDER_DEFINITIONS,
+        });
+      }
+
+      // Default GET - List all templates
       const { data: templates, error } = await supabaseAdmin
         .from('prompt_templates')
         .select('*')
@@ -29,14 +45,64 @@ serve(async (req) => {
       return successResponse({ success: true, data: templates || [] });
     }
 
-    // POST: Update a template
+    // POST: Update a template OR preview a template
     if (req.method === 'POST') {
-      const body = await parseJsonBody<{
-        id: string;
-        template?: string;
-        description?: string;
-        is_active?: boolean;
-      }>(req, ['id']);
+      const body = await req.json();
+
+      // POST with action=preview - Preview template with real org data
+      if (body.action === 'preview') {
+        const { template, organizationId } = body;
+
+        if (!template) {
+          return errorResponse('Template content is required', 400);
+        }
+
+        if (!organizationId) {
+          return errorResponse('Organization ID is required for preview', 400);
+        }
+
+        // Fetch organization data
+        const { data: org, error: orgError } = await supabaseAdmin
+          .from('organizations')
+          .select('id, name, timezone, business_hours_start, business_hours_end, business_hours_schedule')
+          .eq('id', organizationId)
+          .single();
+
+        if (orgError) {
+          logger.error('Error fetching organization for preview', orgError);
+          return errorResponse('Organization not found', 404);
+        }
+
+        // Fetch services
+        const { data: services } = await supabaseAdmin
+          .from('services')
+          .select('name, price_cents, duration_minutes')
+          .eq('organization_id', organizationId)
+          .eq('is_active', true);
+
+        // Fetch agent context
+        const { data: agent } = await supabaseAdmin
+          .from('organization_agents')
+          .select('context')
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+
+        // Build placeholder values and render
+        const placeholderValues = buildPlaceholderValues(org, services || [], agent);
+        const rendered = replacePlaceholders(template, placeholderValues);
+
+        return successResponse({
+          success: true,
+          rendered,
+          placeholderValues,
+          organization: { id: org.id, name: org.name },
+        });
+      }
+
+      // Default POST - Update a template (requires id)
+      if (!body.id) {
+        return errorResponse('Template ID is required for update', 400);
+      }
 
       const { id, template, description, is_active } = body;
 

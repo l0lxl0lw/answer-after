@@ -277,7 +277,7 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
         {/* Menu Items */}
         <div className="p-2">
           <Link
-            to="/dashboard/settings"
+            to="/dashboard/account"
             onClick={handleMenuItemClick}
             className="flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
           >

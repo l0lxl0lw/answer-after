@@ -405,3 +405,117 @@ export async function generateVoicePreview(
 
   return response.arrayBuffer();
 }
+
+/**
+ * Tool configuration interface
+ */
+export interface ElevenLabsTool {
+  tool_id: string;
+  name: string;
+  type: string;
+}
+
+/**
+ * Create a calendar availability tool for an agent
+ * This tool allows the agent to check Google Calendar for available appointment slots
+ */
+export async function createCalendarTool(
+  webhookUrl: string,
+  organizationId: string,
+  apiKey: string
+): Promise<ElevenLabsTool> {
+  const toolConfig = {
+    type: 'webhook',
+    name: 'check_calendar_availability',
+    description: 'Check the business calendar to find available appointment slots. Use this tool when a customer wants to schedule an appointment or asks about availability. The tool will return available time slots based on the business calendar and existing appointments.',
+    webhook: {
+      url: webhookUrl,
+      method: 'POST',
+      request_headers: {
+        'Content-Type': 'application/json',
+      },
+      request_body: {
+        organization_id: organizationId,
+      },
+    },
+    parameters: {
+      type: 'object',
+      properties: {
+        date_preference: {
+          type: 'string',
+          description: "When the customer wants the appointment. Use 'today' for same-day, 'tomorrow' for next day, 'this_week' for current week, or 'next_week' for looking further ahead. Default to 'this_week' if customer doesn't specify.",
+          enum: ['today', 'tomorrow', 'this_week', 'next_week'],
+        },
+        duration_minutes: {
+          type: 'number',
+          description: 'How long the appointment should be in minutes. Use 60 for standard appointments, 30 for quick consultations.',
+          default: 60,
+        },
+      },
+      required: ['date_preference'],
+    },
+  };
+
+  const result = await makeElevenLabsRequest<{ tool_id: string; name: string; type: string }>(
+    '/convai/tools',
+    {
+      apiKey,
+      method: 'POST',
+      body: { tool_config: toolConfig },
+    }
+  );
+
+  return {
+    tool_id: result.tool_id,
+    name: result.name || 'check_calendar_availability',
+    type: result.type || 'webhook',
+  };
+}
+
+/**
+ * Get a tool by ID
+ */
+export async function getTool(
+  toolId: string,
+  apiKey: string
+): Promise<ElevenLabsTool | null> {
+  try {
+    const result = await makeElevenLabsRequest<ElevenLabsTool>(
+      `/convai/tools/${toolId}`,
+      { apiKey }
+    );
+    return result;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Delete a tool
+ */
+export async function deleteTool(
+  toolId: string,
+  apiKey: string
+): Promise<void> {
+  await makeElevenLabsRequest(
+    `/convai/tools/${toolId}`,
+    {
+      apiKey,
+      method: 'DELETE',
+    }
+  );
+}
+
+/**
+ * List all tools
+ */
+export async function listTools(
+  apiKey: string
+): Promise<ElevenLabsTool[]> {
+  const result = await makeElevenLabsRequest<{ tools: ElevenLabsTool[] }>(
+    '/convai/tools',
+    { apiKey }
+  );
+
+  return result.tools || [];
+}

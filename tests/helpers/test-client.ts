@@ -189,4 +189,160 @@ export class TestClient {
 
     return false;
   }
+
+  /**
+   * Update a user's subscription to a specific plan.
+   * Used for testing different plan scenarios.
+   */
+  async updateSubscriptionPlan(email: string, plan: string, credits?: number): Promise<void> {
+    const { data: profile } = await this.serviceRoleClient
+      .from('profiles')
+      .select('organization_id')
+      .eq('email', email)
+      .single();
+
+    if (!profile?.organization_id) {
+      throw new Error(`No organization found for email: ${email}`);
+    }
+
+    // Get the tier to get the correct credits
+    const tier = await this.getSubscriptionTier(plan);
+    const totalCredits = credits ?? tier?.credits ?? 250;
+
+    const { error } = await this.serviceRoleClient
+      .from('subscriptions')
+      .update({
+        plan,
+        total_credits: totalCredits,
+        used_credits: 0
+      })
+      .eq('organization_id', profile.organization_id);
+
+    if (error) {
+      throw new Error(`Failed to update subscription plan: ${error.message}`);
+    }
+
+    console.log(`[TestClient] Updated subscription to ${plan} plan with ${totalCredits} credits`);
+  }
+
+  /**
+   * Get subscription tier details including feature flags.
+   */
+  async getSubscriptionTier(planId: string) {
+    const { data, error } = await this.serviceRoleClient
+      .from('subscription_tiers')
+      .select('*')
+      .eq('plan_id', planId)
+      .single();
+
+    if (error) {
+      console.error(`[TestClient] Error fetching tier ${planId}:`, error.message);
+      return null;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get all subscription tiers.
+   */
+  async getAllSubscriptionTiers() {
+    const { data, error } = await this.serviceRoleClient
+      .from('subscription_tiers')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+
+    if (error) {
+      console.error('[TestClient] Error fetching tiers:', error.message);
+      return [];
+    }
+
+    return data;
+  }
+
+  /**
+   * Provision organization with a specific plan.
+   * Wraps the provision-organization edge function call.
+   */
+  async provisionOrganizationWithPlan(
+    accessToken: string,
+    organizationName: string,
+    notificationPhone: string,
+    planId: string = 'core',
+    timezone: string = 'America/New_York'
+  ) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'provision-organization',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: {
+          organizationName,
+          notificationPhone,
+          timezone,
+          planId,
+        },
+      }
+    );
+
+    if (error) {
+      throw new Error(`Provision failed: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Create a full test user with organization provisioned on a specific plan.
+   * Returns the user data and session for further testing.
+   */
+  async createUserWithPlan(testUser: TestUser, plan: string = 'core') {
+    // Sign up user
+    const { data: authData, error: signUpError } = await this.supabase.auth.signUp({
+      email: testUser.email,
+      password: testUser.password,
+      options: {
+        data: {
+          full_name: testUser.name,
+          organization_name: testUser.organizationName,
+        },
+      },
+    });
+
+    if (signUpError) {
+      throw new Error(`Sign up failed: ${signUpError.message}`);
+    }
+
+    const userId = authData.user!.id;
+    testUser.id = userId;
+
+    // Wait for profile creation trigger
+    await this.waitForProfileCreation(userId);
+
+    // Sign in to get session
+    const { data: sessionData, error: signInError } = await this.supabase.auth.signInWithPassword({
+      email: testUser.email,
+      password: testUser.password,
+    });
+
+    if (signInError) {
+      throw new Error(`Sign in failed: ${signInError.message}`);
+    }
+
+    // Provision organization with specified plan
+    const provisionResult = await this.provisionOrganizationWithPlan(
+      sessionData.session!.access_token,
+      testUser.organizationName,
+      testUser.phone,
+      plan
+    );
+
+    return {
+      user: authData.user,
+      session: sessionData.session,
+      organizationId: provisionResult.organizationId,
+    };
+  }
 }

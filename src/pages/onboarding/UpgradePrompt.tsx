@@ -6,10 +6,10 @@ import { COMPANY } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { createLogger } from "@/lib/logger";
 import { useCurrentSubscriptionTier, useSubscriptionTiers } from "@/hooks/use-api";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 // Feature gating uses DB flags from subscription_tiers table:
-// - has_custom_ai_training: Pro/Business plans have this, skip upgrade prompt for them
+// - Only Business (top tier) skips this page since there's no upgrade available
 
 const log = createLogger('UpgradePrompt');
 
@@ -37,16 +37,28 @@ export default function UpgradePrompt() {
   // Get current plan details from tiers (use currentTier from hook)
   const currentPlan = currentTier;
 
-  // Determine upgrade target (next tier up)
-  const currentPlanIndex = PLAN_HIERARCHY.indexOf(currentPlanId);
-  const upgradePlanId = currentPlanIndex >= 0 && currentPlanIndex < PLAN_HIERARCHY.length - 1
-    ? PLAN_HIERARCHY[currentPlanIndex + 1]
-    : null;
-  const upgradePlan = upgradePlanId ? tiers?.find(t => t.plan_id === upgradePlanId) : null;
+  // Determine upgrade targets based on current plan
+  const upgradePlans = useMemo(() => {
+    if (!tiers) return [];
 
-  log.debug('Plan state:', { currentPlanId, currentPlanIndex, upgradePlanId, hasTiers: !!tiers?.length });
+    if (currentPlanId === 'core') {
+      // Core shows both Growth and Pro as upgrade options
+      return tiers.filter(t => t.plan_id === 'growth' || t.plan_id === 'pro')
+        .sort((a, b) => (a.price_cents || 0) - (b.price_cents || 0));
+    }
 
-  // Redirect based on subscription status and feature flags
+    // All others show just next tier up
+    const currentPlanIndex = PLAN_HIERARCHY.indexOf(currentPlanId);
+    const nextPlanId = currentPlanIndex >= 0 && currentPlanIndex < PLAN_HIERARCHY.length - 1
+      ? PLAN_HIERARCHY[currentPlanIndex + 1]
+      : null;
+    const nextPlan = nextPlanId ? tiers.find(t => t.plan_id === nextPlanId) : null;
+    return nextPlan ? [nextPlan] : [];
+  }, [currentPlanId, tiers]);
+
+  log.debug('Plan state:', { currentPlanId, upgradePlans: upgradePlans.map(p => p.plan_id) });
+
+  // Redirect based on subscription status - only Business skips (top tier)
   useEffect(() => {
     if (!isLoading) {
       // If no subscription at all, redirect to plan selection
@@ -56,14 +68,13 @@ export default function UpgradePrompt() {
         return;
       }
 
-      // Skip upgrade prompt for plans with custom AI training (Pro/Business)
-      // Using DB feature flag instead of hardcoded plan name check
-      if (features.hasCustomAiTraining) {
-        log.debug('Plan with custom AI training detected, skipping upgrade prompt');
+      // Only skip upgrade prompt for Business (top tier - no upgrade available)
+      if (currentPlanId === 'business') {
+        log.debug('Business plan detected (top tier), skipping upgrade prompt');
         navigate("/onboarding/setup-services", { replace: true });
       }
     }
-  }, [isLoading, subscriptionData, features.hasCustomAiTraining, navigate]);
+  }, [isLoading, subscriptionData, currentPlanId, navigate]);
 
   const handleSkip = () => {
     navigate("/onboarding/setup-services");
@@ -73,8 +84,15 @@ export default function UpgradePrompt() {
     navigate("/dashboard/subscriptions");
   };
 
+  // Helper to compute features gained by upgrading (only NEW features)
+  const getNewFeatures = (toPlan: typeof currentPlan) => {
+    if (!currentPlan || !toPlan) return [];
+    const fromFeatures = new Set(currentPlan.features as string[]);
+    return ((toPlan.features as string[]) || []).filter(f => !fromFeatures.has(f));
+  };
+
   // Loading state
-  if (isLoading || !currentPlan || !upgradePlan) {
+  if (isLoading || !currentPlan || upgradePlans.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -85,6 +103,10 @@ export default function UpgradePrompt() {
   const formatPrice = (priceCents: number) => {
     return Math.floor(priceCents / 100);
   };
+
+  // Determine grid columns based on number of cards (1 current + N upgrade options)
+  const totalCards = 1 + upgradePlans.length;
+  const gridCols = totalCards === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3';
 
   return (
     <div className="min-h-screen bg-background">
@@ -103,7 +125,7 @@ export default function UpgradePrompt() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Intro */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -117,12 +139,12 @@ export default function UpgradePrompt() {
             Get More from Your AI Agent
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Unlock advanced features and handle more calls with {upgradePlan.name}. Upgrade now or continue with your current plan.
+            Unlock advanced features and handle more calls with an upgraded plan. Upgrade now or continue with your current plan.
           </p>
         </motion.div>
 
         {/* Comparison Cards */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
+        <div className={`grid ${gridCols} gap-6 mb-8`}>
           {/* Current Plan */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -162,57 +184,69 @@ export default function UpgradePrompt() {
             </Button>
           </motion.div>
 
-          {/* Upgrade Plan */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-gradient-to-br from-primary/10 to-accent/10 border-2 border-primary rounded-xl p-6 relative"
-          >
-            {/* Popular Badge */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-              <span className="inline-block px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                Recommended
-              </span>
-            </div>
+          {/* Upgrade Plan(s) */}
+          {upgradePlans.map((upgradePlan, index) => {
+            const newFeatures = getNewFeatures(upgradePlan);
+            const isRecommended = index === 0; // First upgrade option is recommended
 
-            <div className="mb-4">
-              <h3 className="font-display text-xl font-bold mb-1">{upgradePlan.name}</h3>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">${formatPrice(upgradePlan.price_cents)}</span>
-                <span className="text-muted-foreground text-sm">/month</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                ${formatPrice(upgradePlan.price_cents - currentPlan.price_cents)} more than {currentPlan.name}
-              </p>
-            </div>
+            return (
+              <motion.div
+                key={upgradePlan.plan_id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 + index * 0.1 }}
+                className={`${isRecommended ? 'bg-gradient-to-br from-primary/10 to-accent/10 border-2 border-primary' : 'bg-card border'} rounded-xl p-6 relative`}
+              >
+                {/* Recommended Badge */}
+                {isRecommended && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="inline-block px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+                      Recommended
+                    </span>
+                  </div>
+                )}
 
-            <ul className="space-y-3">
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm font-medium">{upgradePlan.credits} credits/month (~{Math.floor(upgradePlan.credits / 3)} calls)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm font-medium">+{upgradePlan.credits - currentPlan.credits} more credits</span>
-              </li>
-              {upgradePlan.features && (upgradePlan.features as string[]).map((feature: string, idx: number) => (
-                <li key={idx} className="flex items-start gap-3">
-                  <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-sm font-medium">{feature}</span>
-                </li>
-              ))}
-            </ul>
+                <div className="mb-4">
+                  <h3 className="font-display text-xl font-bold mb-1">{upgradePlan.name}</h3>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold">${formatPrice(upgradePlan.price_cents)}</span>
+                    <span className="text-muted-foreground text-sm">/month</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    ${formatPrice(upgradePlan.price_cents - currentPlan.price_cents)} more than {currentPlan.name}
+                  </p>
+                </div>
 
-            <Button
-              size="lg"
-              className="w-full mt-6 bg-primary hover:bg-primary/90"
-              onClick={handleUpgrade}
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Upgrade to {upgradePlan.name}
-            </Button>
-          </motion.div>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <Check className={`w-5 h-5 ${isRecommended ? 'text-primary' : 'text-success'} flex-shrink-0 mt-0.5`} />
+                    <span className="text-sm font-medium">{upgradePlan.credits} credits/month (~{Math.floor(upgradePlan.credits / 3)} calls)</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Sparkles className={`w-5 h-5 ${isRecommended ? 'text-primary' : 'text-success'} flex-shrink-0 mt-0.5`} />
+                    <span className="text-sm font-medium">+{upgradePlan.credits - currentPlan.credits} more credits</span>
+                  </li>
+                  {/* Show only NEW features gained by upgrading */}
+                  {newFeatures.map((feature: string, idx: number) => (
+                    <li key={idx} className="flex items-start gap-3">
+                      <Sparkles className={`w-5 h-5 ${isRecommended ? 'text-primary' : 'text-success'} flex-shrink-0 mt-0.5`} />
+                      <span className="text-sm font-medium">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  size="lg"
+                  className={`w-full mt-6 ${isRecommended ? 'bg-primary hover:bg-primary/90' : ''}`}
+                  variant={isRecommended ? 'default' : 'outline'}
+                  onClick={handleUpgrade}
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Upgrade to {upgradePlan.name}
+                </Button>
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* Info Box */}

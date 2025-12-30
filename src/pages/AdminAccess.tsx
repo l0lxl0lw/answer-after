@@ -17,9 +17,15 @@ const AdminAccess = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Get credentials from environment or use defaults
-    const adminUsername = import.meta.env.VITE_ADMIN_USERNAME || 'admin';
-    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'answerafter2025';
+    // Get credentials from environment - no defaults for security
+    const adminUsername = import.meta.env.VITE_ADMIN_USERNAME;
+    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD;
+
+    // Check if credentials are configured
+    if (!adminUsername || !adminPassword) {
+      setError('Admin credentials not configured. Set VITE_ADMIN_USERNAME and VITE_ADMIN_PASSWORD environment variables.');
+      return;
+    }
 
     if (username === adminUsername && password === adminPassword) {
       setIsAuthenticated(true);

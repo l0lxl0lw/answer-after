@@ -37,7 +37,7 @@ export default function Integrations() {
     setIsConnecting(true);
     try {
       // Get the redirect URL for OAuth callback
-      const redirectUrl = `${window.location.origin}/dashboard/schedules/callback`;
+      const redirectUrl = `${window.location.origin}/dashboard/calendar/callback`;
       
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
         body: { action: 'authorize', redirectUrl }

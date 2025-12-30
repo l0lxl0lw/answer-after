@@ -12,6 +12,8 @@ export default defineConfig({
       ['tests/ui/**', 'jsdom'],
       // Functionality tests use jsdom for React component testing
       ['tests/functionality/**', 'jsdom'],
+      // E2E tests use jsdom with real Supabase calls
+      ['tests/e2e/**', 'jsdom'],
       // Integration tests use node
       ['tests/integration/**', 'node'],
     ],

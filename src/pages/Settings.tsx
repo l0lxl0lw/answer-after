@@ -282,7 +282,7 @@ export default function Settings() {
         description: 'Your 30-day free trial has started. We\'ll remind you 3 days before it ends.',
       });
       // Clear the query param
-      window.history.replaceState({}, '', '/dashboard/settings');
+      window.history.replaceState({}, '', '/dashboard/account');
     }
   }, [searchParams]);
 

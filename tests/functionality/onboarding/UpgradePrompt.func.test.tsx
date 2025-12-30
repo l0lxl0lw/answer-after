@@ -156,17 +156,18 @@ describe('UpgradePrompt Functionality', () => {
   });
 
   describe('Plan Hierarchy', () => {
-    it('Core plan shows Growth as upgrade target', async () => {
+    it('Core plan shows BOTH Growth AND Pro as upgrade targets', async () => {
       render(<UpgradePrompt />, { wrapper: createWrapper() });
 
       await waitFor(() => {
         expect(screen.getByText('Growth')).toBeInTheDocument();
+        expect(screen.getByText('Pro')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Upgrade to Growth/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Upgrade to Pro/i })).toBeInTheDocument();
       });
     });
 
     it('Growth plan shows Pro as upgrade target', async () => {
-      // Growth plan: hasCustomAiTraining=false, shows upgrade prompt
       mockCurrentTierData = {
         subscription: { plan: 'growth', status: 'active' },
         currentPlanId: 'growth',
@@ -195,8 +196,8 @@ describe('UpgradePrompt Functionality', () => {
       });
     });
 
-    it('Pro plan auto-redirects to /onboarding/setup-services (hasCustomAiTraining=true)', async () => {
-      // Pro plan: hasCustomAiTraining=true (DB flag), skips upgrade prompt
+    it('Pro plan shows Business as upgrade target (not auto-skip)', async () => {
+      // Pro plan: shows upgrade to Business option (only Business auto-skips)
       mockCurrentTierData = {
         subscription: { plan: 'pro', status: 'active' },
         currentPlanId: 'pro',
@@ -208,7 +209,7 @@ describe('UpgradePrompt Functionality', () => {
           hasCallRecordings: true,
           hasApiAccess: false,
           hasPrioritySupport: true,
-          hasCustomAiTraining: true, // This DB flag triggers the skip
+          hasCustomAiTraining: true,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
           hasVoiceSelection: false,
@@ -220,12 +221,14 @@ describe('UpgradePrompt Functionality', () => {
       render(<UpgradePrompt />, { wrapper: createWrapper() });
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/onboarding/setup-services', { replace: true });
+        expect(screen.getByText('Business')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Upgrade to Business/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Continue with Pro/i })).toBeInTheDocument();
       });
     });
 
-    it('Business plan auto-redirects to /onboarding/setup-services (hasCustomAiTraining=true)', async () => {
-      // Business plan: hasCustomAiTraining=true (DB flag), skips upgrade prompt
+    it('Business plan auto-redirects to /onboarding/setup-services (top tier)', async () => {
+      // Business plan: top tier, no upgrade available - skips upgrade prompt
       mockCurrentTierData = {
         subscription: { plan: 'business', status: 'active' },
         currentPlanId: 'business',
@@ -237,7 +240,7 @@ describe('UpgradePrompt Functionality', () => {
           hasCallRecordings: true,
           hasApiAccess: true,
           hasPrioritySupport: true,
-          hasCustomAiTraining: true, // This DB flag triggers the skip
+          hasCustomAiTraining: true,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
           hasVoiceSelection: true,

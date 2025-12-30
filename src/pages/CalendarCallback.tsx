@@ -58,7 +58,7 @@ export default function CalendarCallback() {
 
   const exchangeCodeForTokens = async () => {
     try {
-      const redirectUrl = `${window.location.origin}/dashboard/schedules/callback`;
+      const redirectUrl = `${window.location.origin}/dashboard/calendar/callback`;
       
       const { data, error: fnError } = await supabase.functions.invoke("google-calendar-auth", {
         body: { 
@@ -138,7 +138,7 @@ export default function CalendarCallback() {
         description: "Please reconnect your Google Calendar",
         variant: "destructive"
       });
-      navigate("/dashboard/schedules/onboarding");
+      navigate("/dashboard/calendar/onboarding");
       return;
     }
 
@@ -176,7 +176,7 @@ export default function CalendarCallback() {
       
       // Redirect after a brief moment
       setTimeout(() => {
-        navigate("/dashboard/schedules");
+        navigate("/dashboard/calendar");
       }, 2000);
     } catch (err) {
       console.error("Save connection error:", err);
@@ -357,7 +357,7 @@ export default function CalendarCallback() {
                   <h2 className="text-xl font-semibold mb-2">Connection Failed</h2>
                   <p className="text-muted-foreground">{error}</p>
                 </div>
-                <Button variant="outline" onClick={() => navigate("/dashboard/schedules/onboarding")}>
+                <Button variant="outline" onClick={() => navigate("/dashboard/calendar/onboarding")}>
                   Try Again
                 </Button>
               </div>

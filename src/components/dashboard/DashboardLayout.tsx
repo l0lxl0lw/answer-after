@@ -46,24 +46,24 @@ const sidebarSections = [
   {
     label: "Agent",
     links: [
-      { name: "Voice & Behavior", href: "/dashboard/my-agent", icon: Bot },
-      { name: "Services", href: "/dashboard/my-services", icon: Wrench },
+      { name: "Voice & Behavior", href: "/dashboard/voice-behavior", icon: Bot },
+      { name: "Services", href: "/dashboard/services", icon: Wrench },
     ],
   },
   {
     label: "Activity",
     links: [
       { name: "Call Log", href: "/dashboard/calls", icon: PhoneCall },
-      { name: "Messages", href: "/dashboard/sms", icon: MessageSquare },
-      { name: "Bookings", href: "/dashboard/appointments", icon: Calendar },
+      { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
+      { name: "Bookings", href: "/dashboard/bookings", icon: Calendar },
     ],
   },
   {
     label: "Settings",
     links: [
-      { name: "Calendar", href: "/dashboard/schedules", icon: Calendar },
+      { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
       { name: "Contacts", href: "/dashboard/contacts", icon: Users },
-      { name: "Account", href: "/dashboard/settings", icon: Settings },
+      { name: "Account", href: "/dashboard/account", icon: Settings },
       { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
     ],
   },

@@ -1,9 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import {
@@ -14,6 +36,9 @@ import {
   Eye,
   Sparkles,
   Info,
+  Plus,
+  ChevronDown,
+  Building2,
 } from 'lucide-react';
 
 interface PromptTemplate {
@@ -26,11 +51,24 @@ interface PromptTemplate {
   updated_at: string;
 }
 
-const PLACEHOLDER_INFO = [
-  { placeholder: '{{orgName}}', description: 'Organization name', example: 'ABC Plumbing' },
-  { placeholder: '{{businessHoursStart}}', description: 'Business opening time', example: '8:00 AM' },
-  { placeholder: '{{businessHoursEnd}}', description: 'Business closing time', example: '5:00 PM' },
-];
+interface Organization {
+  id: string;
+  name: string;
+}
+
+interface PlaceholderDefinition {
+  key: string;
+  placeholder: string;
+  description: string;
+  example: string;
+  category: string;
+}
+
+interface PreviewResult {
+  rendered: string;
+  placeholderValues: Record<string, string>;
+  organization: { id: string; name: string };
+}
 
 const TEMPLATE_INFO: Record<string, { title: string; purpose: string }> = {
   agent_base_prompt: {
@@ -49,13 +87,24 @@ const TEMPLATE_INFO: Record<string, { title: string; purpose: string }> = {
 
 const PromptTemplatesManager = () => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [placeholderDefs, setPlaceholderDefs] = useState<PlaceholderDefinition[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [editedTemplates, setEditedTemplates] = useState<Record<string, string>>({});
+  const [previewData, setPreviewData] = useState<Record<string, PreviewResult>>({});
+  const [previewLoading, setPreviewLoading] = useState<Record<string, boolean>>({});
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({ name: '', template: '', description: '' });
   const { toast } = useToast();
 
+  // Fetch templates and placeholder definitions on mount
   useEffect(() => {
     fetchTemplates();
+    fetchPlaceholders();
+    fetchOrganizations();
   }, []);
 
   const fetchTemplates = async () => {
@@ -82,8 +131,89 @@ const PromptTemplatesManager = () => {
     }
   };
 
+  const fetchPlaceholders = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-prompt-templates?action=placeholders', {
+        method: 'GET',
+      });
+
+      if (error) {
+        console.error('Error fetching placeholders:', error);
+        return;
+      }
+
+      setPlaceholderDefs(data?.data || []);
+    } catch (error) {
+      console.error('Error fetching placeholders:', error);
+    }
+  };
+
+  const fetchOrganizations = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-list-organizations', {
+        method: 'GET',
+      });
+
+      if (error) {
+        console.error('Error fetching organizations:', error);
+        return;
+      }
+
+      const orgs = data?.organizations || [];
+      setOrganizations(orgs);
+      if (orgs.length > 0 && !selectedOrgId) {
+        setSelectedOrgId(orgs[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+    }
+  };
+
+  // Debounced preview fetching
+  const fetchPreview = useCallback(async (templateId: string, templateContent: string) => {
+    if (!selectedOrgId || !templateContent) return;
+
+    setPreviewLoading((prev) => ({ ...prev, [templateId]: true }));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-prompt-templates', {
+        body: {
+          action: 'preview',
+          template: templateContent,
+          organizationId: selectedOrgId,
+        },
+      });
+
+      if (error) {
+        console.error('Preview error:', error);
+        return;
+      }
+
+      setPreviewData((prev) => ({ ...prev, [templateId]: data }));
+    } catch (error) {
+      console.error('Error fetching preview:', error);
+    } finally {
+      setPreviewLoading((prev) => ({ ...prev, [templateId]: false }));
+    }
+  }, [selectedOrgId]);
+
+  // Fetch preview when org changes
+  useEffect(() => {
+    if (selectedOrgId) {
+      templates.forEach((template) => {
+        const currentValue = editedTemplates[template.id] ?? template.template;
+        fetchPreview(template.id, currentValue);
+      });
+    }
+  }, [selectedOrgId, templates]);
+
   const handleTemplateChange = (id: string, value: string) => {
     setEditedTemplates((prev) => ({ ...prev, [id]: value }));
+    // Debounce preview update
+    const timeoutId = setTimeout(() => {
+      fetchPreview(id, value);
+    }, 500);
+    return () => clearTimeout(timeoutId);
   };
 
   const hasChanges = (template: PromptTemplate) => {
@@ -92,15 +222,15 @@ const PromptTemplatesManager = () => {
   };
 
   const handleSave = async (template: PromptTemplate) => {
-    const newTemplate = editedTemplates[template.id];
-    if (!newTemplate || newTemplate === template.template) return;
+    const newTemplateContent = editedTemplates[template.id];
+    if (!newTemplateContent || newTemplateContent === template.template) return;
 
     try {
       setSaving(template.id);
       const { data, error } = await supabase.functions.invoke('admin-prompt-templates', {
         body: {
           id: template.id,
-          template: newTemplate,
+          template: newTemplateContent,
         },
       });
 
@@ -108,7 +238,6 @@ const PromptTemplatesManager = () => {
         throw new Error(error.message || 'Failed to update template');
       }
 
-      // Update local state
       setTemplates((prev) =>
         prev.map((t) => (t.id === template.id ? data.data : t))
       );
@@ -138,13 +267,69 @@ const PromptTemplatesManager = () => {
       const { [template.id]: _, ...rest } = prev;
       return rest;
     });
+    fetchPreview(template.id, template.template);
   };
 
-  const getPreview = (template: string) => {
-    return template
-      .replace(/\{\{orgName\}\}/g, 'ABC Plumbing')
-      .replace(/\{\{businessHoursStart\}\}/g, '8:00 AM')
-      .replace(/\{\{businessHoursEnd\}\}/g, '5:00 PM');
+  const handleCreateTemplate = async () => {
+    if (!newTemplate.name || !newTemplate.template) {
+      toast({
+        title: 'Error',
+        description: 'Name and template content are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setCreatingTemplate(true);
+      const { data, error } = await supabase.functions.invoke('admin-prompt-templates', {
+        method: 'PUT',
+        body: {
+          name: newTemplate.name,
+          template: newTemplate.template,
+          description: newTemplate.description || null,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to create template');
+      }
+
+      setTemplates((prev) => [...prev, data.data]);
+      setNewTemplate({ name: '', template: '', description: '' });
+      setCreateDialogOpen(false);
+
+      toast({
+        title: 'Created',
+        description: `Template "${newTemplate.name}" created successfully`,
+      });
+    } catch (error) {
+      console.error('Error creating template:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create template',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingTemplate(false);
+    }
+  };
+
+  // Group placeholders by category
+  const placeholdersByCategory = useMemo(() => {
+    const grouped: Record<string, PlaceholderDefinition[]> = {};
+    placeholderDefs.forEach((p) => {
+      if (!grouped[p.category]) {
+        grouped[p.category] = [];
+      }
+      grouped[p.category].push(p);
+    });
+    return grouped;
+  }, [placeholderDefs]);
+
+  const truncateValue = (value: string, maxLength: number = 60) => {
+    if (value.length <= maxLength) return value;
+    return value.substring(0, maxLength) + '...';
   };
 
   if (loading) {
@@ -162,30 +347,111 @@ const PromptTemplatesManager = () => {
       {/* Header Card */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-indigo-600" />
-            <CardTitle>Prompt Templates</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-6 w-6 text-indigo-600" />
+              <CardTitle>Prompt Templates</CardTitle>
+            </div>
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Template
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Create New Template</DialogTitle>
+                  <DialogDescription>
+                    Add a new prompt template to the system.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Template Name (snake_case)</Label>
+                    <Input
+                      value={newTemplate.name}
+                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g., agent_emergency_handler"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input
+                      value={newTemplate.description}
+                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="What is this template used for?"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Template Content</Label>
+                    <Textarea
+                      value={newTemplate.template}
+                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, template: e.target.value }))}
+                      className="font-mono min-h-[200px]"
+                      placeholder="Enter template with {{placeholders}}..."
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateTemplate} disabled={creatingTemplate}>
+                    {creatingTemplate && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
           <CardDescription>
             Edit the system-wide AI agent prompt templates. Changes affect all new agent updates.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Placeholders Info */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <div className="flex items-start gap-2">
               <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div className="text-sm">
-                <p className="font-medium text-amber-800 mb-2">Available Placeholders</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  {PLACEHOLDER_INFO.map((p) => (
-                    <div key={p.placeholder} className="bg-white rounded px-3 py-2 border border-amber-200">
-                      <code className="text-xs font-mono text-amber-700">{p.placeholder}</code>
-                      <p className="text-xs text-slate-600 mt-1">{p.description}</p>
+              <div className="text-sm w-full">
+                <p className="font-medium text-amber-800 mb-3">Available Placeholders</p>
+                {Object.entries(placeholdersByCategory).map(([category, placeholders]) => (
+                  <div key={category} className="mb-3">
+                    <p className="text-xs uppercase text-amber-600 font-semibold mb-2">{category}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {placeholders.map((p) => (
+                        <div key={p.placeholder} className="bg-white rounded px-3 py-2 border border-amber-200">
+                          <code className="text-xs font-mono text-amber-700">{p.placeholder}</code>
+                          <p className="text-xs text-slate-600 mt-1">{p.description}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
+          </div>
+
+          {/* Organization Selector */}
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border">
+            <Building2 className="h-5 w-5 text-slate-600" />
+            <div className="flex-1">
+              <Label className="text-sm font-medium">Preview with Organization</Label>
+              <p className="text-xs text-slate-500">Select an organization to see how templates render with real data</p>
+            </div>
+            <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="Select organization" />
+              </SelectTrigger>
+              <SelectContent>
+                {organizations.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -195,6 +461,8 @@ const PromptTemplatesManager = () => {
         const info = TEMPLATE_INFO[template.name] || { title: template.name, purpose: '' };
         const currentValue = editedTemplates[template.id] ?? template.template;
         const changed = hasChanges(template);
+        const preview = previewData[template.id];
+        const isPreviewLoading = previewLoading[template.id];
 
         return (
           <Card key={template.id} className={changed ? 'ring-2 ring-indigo-500' : ''}>
@@ -243,39 +511,75 @@ const PromptTemplatesManager = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="edit" className="w-full">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="edit" className="gap-2">
+              {/* Side-by-side layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left: Editor */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm font-medium">
                     <Code2 className="h-4 w-4" />
-                    Edit
-                  </TabsTrigger>
-                  <TabsTrigger value="preview" className="gap-2">
-                    <Eye className="h-4 w-4" />
-                    Preview
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="edit">
+                    Template Editor
+                  </Label>
                   <Textarea
                     value={currentValue}
                     onChange={(e) => handleTemplateChange(template.id, e.target.value)}
-                    className="font-mono text-sm min-h-[200px] resize-y"
+                    className="font-mono text-sm min-h-[300px] resize-y"
                     placeholder="Enter template..."
                   />
-                  <p className="text-xs text-slate-500 mt-2">
+                  <p className="text-xs text-slate-500">
                     Last updated: {new Date(template.updated_at).toLocaleString()}
                   </p>
-                </TabsContent>
+                </div>
 
-                <TabsContent value="preview">
-                  <div className="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-sm whitespace-pre-wrap min-h-[200px]">
-                    {getPreview(currentValue)}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Preview with sample values: orgName="ABC Plumbing", businessHoursStart="8:00 AM", businessHoursEnd="5:00 PM"
-                  </p>
-                </TabsContent>
-              </Tabs>
+                {/* Right: Preview */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm font-medium">
+                    <Eye className="h-4 w-4" />
+                    Live Preview
+                    {preview?.organization && (
+                      <span className="text-xs text-slate-500 font-normal ml-2">
+                        ({preview.organization.name})
+                      </span>
+                    )}
+                  </Label>
+
+                  {isPreviewLoading ? (
+                    <div className="flex items-center justify-center h-[300px] bg-slate-100 rounded-lg">
+                      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                    </div>
+                  ) : preview?.rendered ? (
+                    <div className="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-sm whitespace-pre-wrap min-h-[300px] max-h-[400px] overflow-auto">
+                      {preview.rendered}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-100 p-4 rounded-lg min-h-[300px] flex items-center justify-center text-slate-500">
+                      {selectedOrgId ? 'Loading preview...' : 'Select an organization to preview'}
+                    </div>
+                  )}
+
+                  {/* Placeholder values breakdown */}
+                  {preview?.placeholderValues && (
+                    <Collapsible>
+                      <CollapsibleTrigger className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+                        <ChevronDown className="h-4 w-4" />
+                        View placeholder values
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-2 text-xs bg-slate-50 p-3 rounded space-y-2 max-h-[200px] overflow-auto">
+                          {Object.entries(preview.placeholderValues).map(([key, value]) => (
+                            <div key={key} className="flex items-start gap-2">
+                              <code className="font-mono text-indigo-600 whitespace-nowrap">{`{{${key}}}`}</code>
+                              <span className="text-slate-400">=</span>
+                              <span className="text-slate-700 break-all">
+                                {value ? truncateValue(String(value)) : <em className="text-slate-400">(empty)</em>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         );
@@ -286,7 +590,7 @@ const PromptTemplatesManager = () => {
           <CardContent className="text-center py-12 text-slate-500">
             <Code2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No prompt templates found in the database.</p>
-            <p className="text-sm mt-2">Templates will be created when the system initializes.</p>
+            <p className="text-sm mt-2">Click "Create Template" to add one.</p>
           </CardContent>
         </Card>
       )}

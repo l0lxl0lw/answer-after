@@ -158,7 +158,7 @@ describe('Signup Flow Integration Tests', () => {
       expect(agent?.context).toBeTruthy();
     });
 
-    it('should append (local) to organization name when running locally', async () => {
+    it('should use exact organization name provided', async () => {
       // Arrange: Create and sign in user
       const { data: authData } = await testClient.supabase.auth.signUp({
         email: testUser.email,
@@ -191,9 +191,9 @@ describe('Signup Flow Integration Tests', () => {
         },
       });
 
-      // Assert: Organization name has (local) suffix
+      // Assert: Organization name matches exactly what was provided
       const organization = await testClient.getOrganizationByEmail(testUser.email);
-      expect(organization?.name).toBe(`${testUser.organizationName} (local)`);
+      expect(organization?.name).toBe(testUser.organizationName);
     });
 
     it('should not allow duplicate organization creation for same user', async () => {
