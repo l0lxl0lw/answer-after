@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -81,6 +61,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "appointment_reminders_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointment_reminders_organization_id_fkey"
             columns: ["organization_id"]
@@ -473,7 +460,6 @@ export type Database = {
       phone_numbers: {
         Row: {
           created_at: string
-          elevenlabs_phone_number_id: string | null
           friendly_name: string | null
           id: string
           is_active: boolean
@@ -487,7 +473,6 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          elevenlabs_phone_number_id?: string | null
           friendly_name?: string | null
           id?: string
           is_active?: boolean
@@ -501,7 +486,6 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          elevenlabs_phone_number_id?: string | null
           friendly_name?: string | null
           id?: string
           is_active?: boolean
@@ -1044,9 +1028,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["owner", "admin", "staff"],
@@ -1070,4 +1051,3 @@ export const Constants = {
     },
   },
 } as const
-
