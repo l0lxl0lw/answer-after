@@ -33,12 +33,10 @@ export const isProductionEnvironment = (): boolean => {
 
 /**
  * Determine if Stripe integration should be skipped
- * Returns true ONLY for truly local development (localhost Supabase)
- * Lovable preview and production should always use Stripe
+ * Now enabled in all environments including local (using test mode)
  */
 export const shouldSkipStripe = (): boolean => {
-  const env = getEnvironment();
-  // Only skip for local environment (localhost Supabase)
-  // Devo (Lovable preview) and prod should use Stripe
-  return env === 'local';
+  // Stripe is now enabled in all environments
+  // Local uses test mode keys, prod uses live keys
+  return false;
 };

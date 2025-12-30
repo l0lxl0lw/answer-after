@@ -24,6 +24,23 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
+    // Safety check: Ensure we're using test keys in non-production environments
+    const isTestKey = stripeKey.startsWith("sk_test_");
+    const isLiveKey = stripeKey.startsWith("sk_live_");
+
+    if (!isTestKey && !isLiveKey) {
+      throw new Error("Invalid STRIPE_SECRET_KEY format");
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const isLocalEnv = supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1");
+
+    if (isLocalEnv && !isTestKey) {
+      throw new Error("SAFETY: Local environment requires Stripe test keys (sk_test_*). Live keys are not allowed in local development.");
+    }
+
+    logStep("Stripe key verified", { isTestMode: isTestKey, isLocalEnv });
+
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
     if (!webhookSecret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
 
@@ -111,10 +128,12 @@ serve(async (req) => {
           break;
         }
 
-        // Determine plan from metadata or price
+        // Determine plan from metadata - log all metadata for debugging
+        logStep("Session metadata", { metadata: session.metadata });
+
         const planFromMetadata = session.metadata?.plan || 'core';
-        
-        logStep("Triggering onboarding flow", { organizationId, plan: planFromMetadata });
+
+        logStep("Triggering onboarding flow", { organizationId, plan: planFromMetadata, rawPlanMetadata: session.metadata?.plan });
 
         // Trigger the onboarding flow
         const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -148,7 +167,7 @@ serve(async (req) => {
       case "customer.subscription.created": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-        
+
         // Get customer email to find organization
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted || !('email' in customer) || !customer.email) {
@@ -173,24 +192,24 @@ serve(async (req) => {
         // Check if this is a $1 first month subscription that needs schedule setup
         const switchToRegular = subscription.metadata?.switch_to_regular === 'true';
         const regularPriceId = subscription.metadata?.regular_price_id;
-        
+
         if (switchToRegular && regularPriceId) {
-          logStep("Setting up subscription schedule for $1 promo", { 
-            subscriptionId: subscription.id, 
-            regularPriceId 
+          logStep("Setting up subscription schedule for $1 promo", {
+            subscriptionId: subscription.id,
+            regularPriceId
           });
-          
+
           try {
             // Create a subscription schedule from this subscription
             const schedule = await stripe.subscriptionSchedules.create({
               from_subscription: subscription.id,
             });
-            
+
             // Update the schedule with phases:
             // Phase 1 (current): $1 for 1 month
             // Phase 2: Regular pricing ongoing
             const currentPhaseEnd = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
-            
+
             await stripe.subscriptionSchedules.update(schedule.id, {
               phases: [
                 {
@@ -204,19 +223,55 @@ serve(async (req) => {
               ],
               end_behavior: 'release', // Release to regular subscription after phases complete
             });
-            
-            logStep("Subscription schedule created", { 
-              scheduleId: schedule.id, 
-              phaseEndDate: new Date(currentPhaseEnd * 1000).toISOString() 
+
+            logStep("Subscription schedule created", {
+              scheduleId: schedule.id,
+              phaseEndDate: new Date(currentPhaseEnd * 1000).toISOString()
             });
           } catch (scheduleError) {
             logStep("Error creating subscription schedule", { error: String(scheduleError) });
           }
         }
 
-        // Determine subscription status and plan
+        // Determine subscription status and plan - check multiple sources
         let statusCreate = subscription.status;
-        let planCreate = subscription.metadata?.plan_id || "core";
+        let planCreate = subscription.metadata?.plan_id;
+
+        // Fallback 1: Check price metadata
+        if (!planCreate) {
+          const priceId = subscription.items.data[0]?.price?.id;
+          if (priceId) {
+            try {
+              const price = await stripe.prices.retrieve(priceId);
+              planCreate = price.metadata?.plan_id;
+              logStep("Got plan from price metadata", { priceId, plan: planCreate });
+            } catch (e) {
+              logStep("Could not retrieve price", { priceId, error: String(e) });
+            }
+          }
+        }
+
+        // Fallback 2: Check if subscription already exists with a plan (don't overwrite with 'core')
+        if (!planCreate) {
+          const { data: existingSub } = await supabaseClient
+            .from("subscriptions")
+            .select("plan")
+            .eq("organization_id", organizationIdCreate)
+            .maybeSingle();
+
+          if (existingSub?.plan && existingSub.plan !== 'core') {
+            planCreate = existingSub.plan;
+            logStep("Preserving existing plan", { plan: planCreate });
+          }
+        }
+
+        // Final fallback
+        planCreate = planCreate || "core";
+
+        logStep("Subscription plan determined", {
+          fromMetadata: subscription.metadata?.plan_id,
+          finalPlan: planCreate
+        });
 
         // Update or insert subscription in database
         const { error: upsertErrorCreate } = await supabaseClient
@@ -245,7 +300,7 @@ serve(async (req) => {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-        
+
         // Get customer email to find organization
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted || !('email' in customer) || !customer.email) {
@@ -261,28 +316,51 @@ serve(async (req) => {
           .single();
 
         if (profileError || !profile?.organization_id) {
-          logStep("Profile not found", { email: profileError });
+          logStep("Profile not found", { email: customer.email, error: profileError });
           break;
         }
 
         const organizationId = profile.organization_id;
 
-        // Determine subscription status and plan from metadata or price
+        // Determine subscription status and plan - check multiple sources
         let status = subscription.status;
-        let plan = subscription.metadata?.plan_id || "core";
+        let plan = subscription.metadata?.plan_id;
 
-        // Fallback: get plan from price metadata
-        if (!subscription.metadata?.plan_id) {
+        // Fallback 1: Check price metadata
+        if (!plan) {
           const priceId = subscription.items.data[0]?.price?.id;
           if (priceId) {
             try {
               const price = await stripe.prices.retrieve(priceId);
-              plan = price.metadata?.plan_id || "core";
-            } catch {
-              // Use default
+              plan = price.metadata?.plan_id;
+              logStep("Got plan from price metadata", { priceId, plan });
+            } catch (e) {
+              logStep("Could not retrieve price", { priceId, error: String(e) });
             }
           }
         }
+
+        // Fallback 2: Check if subscription already exists with a plan (don't overwrite with 'core')
+        if (!plan) {
+          const { data: existingSub } = await supabaseClient
+            .from("subscriptions")
+            .select("plan")
+            .eq("organization_id", organizationId)
+            .maybeSingle();
+
+          if (existingSub?.plan && existingSub.plan !== 'core') {
+            plan = existingSub.plan;
+            logStep("Preserving existing plan", { plan });
+          }
+        }
+
+        // Final fallback
+        plan = plan || "core";
+
+        logStep("Subscription plan determined", {
+          fromMetadata: subscription.metadata?.plan_id,
+          finalPlan: plan
+        });
 
         // Update subscription in database
         const { error: upsertError } = await supabaseClient

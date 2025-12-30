@@ -60,7 +60,24 @@ serve(async (req) => {
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-    logStep("Stripe key verified");
+
+    // Safety check: Ensure we're using test keys in non-production environments
+    const isTestKey = stripeKey.startsWith("sk_test_");
+    const isLiveKey = stripeKey.startsWith("sk_live_");
+
+    if (!isTestKey && !isLiveKey) {
+      throw new Error("Invalid STRIPE_SECRET_KEY format");
+    }
+
+    // In local/development, require test keys to prevent accidental charges
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const isLocalEnv = supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1");
+
+    if (isLocalEnv && !isTestKey) {
+      throw new Error("SAFETY: Local environment requires Stripe test keys (sk_test_*). Live keys are not allowed in local development.");
+    }
+
+    logStep("Stripe key verified", { isTestMode: isTestKey, isLocalEnv });
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
@@ -198,10 +215,11 @@ serve(async (req) => {
       },
     });
 
-    logStep("Checkout session created", { 
-      sessionId: session.id, 
+    logStep("Checkout session created", {
+      sessionId: session.id,
+      planId: planId,
+      sessionMetadataPlan: session.metadata?.plan,
       url: session.url,
-      planId,
       regularPrice: regularMonthlyPrice,
       couponDiscount: discountAmount,
       firstMonthTotal: firstMonthTargetPrice,

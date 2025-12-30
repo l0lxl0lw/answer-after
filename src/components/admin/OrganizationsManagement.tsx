@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { Trash2, AlertTriangle, Loader2, Building2, Phone, Calendar, CreditCard, Search } from 'lucide-react';
+import { Trash2, AlertTriangle, Loader2, Building2, Phone, Calendar, CreditCard, Search, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +42,7 @@ const OrganizationsManagement = () => {
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const { toast } = useToast();
 
   const filteredOrganizations = useMemo(() => {
@@ -67,9 +68,19 @@ const OrganizationsManagement = () => {
     fetchOrganizations();
   }, []);
 
-  const fetchOrganizations = async () => {
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchOrganizations(true);
+    setRefreshing(false);
+    toast({
+      title: 'Refreshed',
+      description: 'Organization list has been updated',
+    });
+  };
+
+  const fetchOrganizations = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
 
       // Call admin endpoint which uses service role to bypass RLS
       const { data, error } = await supabase.functions.invoke('admin-list-organizations', {
@@ -157,14 +168,24 @@ const OrganizationsManagement = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search by name, slug, email, phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex gap-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search by name, slug, email, phone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
 
           {filteredOrganizations.length === 0 ? (

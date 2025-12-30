@@ -23,9 +23,25 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    // Safety check: Ensure we're using test keys in non-production environments
+    const isTestKey = stripeKey.startsWith("sk_test_");
+    const isLiveKey = stripeKey.startsWith("sk_live_");
+
+    if (!isTestKey && !isLiveKey) {
+      throw new Error("Invalid STRIPE_SECRET_KEY format");
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    
+
+    const isLocalEnv = supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1");
+
+    if (isLocalEnv && !isTestKey) {
+      throw new Error("SAFETY: Local environment requires Stripe test keys (sk_test_*). Live keys are not allowed in local development.");
+    }
+
+    logStep("Stripe key verified", { isTestMode: isTestKey, isLocalEnv });
+
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("Missing Supabase credentials");
     }
