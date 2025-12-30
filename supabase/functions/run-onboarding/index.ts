@@ -85,8 +85,36 @@ serve(async (req) => {
     let subaccountSid = org.twilio_subaccount_sid;
     let subaccountAuthToken = org.twilio_subaccount_auth_token;
 
-    if (!subaccountSid) {
-      // Append environment suffix to Twilio subaccount name
+    // In LOCAL environment, always use the local subaccount - never create new ones
+    const LOCAL_SUBACCOUNT_SID = Deno.env.get('LOCAL_SUBACCOUNT_SID');
+    const LOCAL_SUBACCOUNT_AUTH_TOKEN = Deno.env.get('LOCAL_SUBACCOUNT_AUTH_TOKEN');
+
+    if (config.isLocal && LOCAL_SUBACCOUNT_SID && LOCAL_SUBACCOUNT_AUTH_TOKEN) {
+      logStep('LOCAL environment - using local subaccount', { sid: LOCAL_SUBACCOUNT_SID });
+      subaccountSid = LOCAL_SUBACCOUNT_SID;
+      subaccountAuthToken = LOCAL_SUBACCOUNT_AUTH_TOKEN;
+
+      // Save local subaccount to org so elevenlabs-agent can use it
+      const { error: updateError } = await supabase
+        .from('organizations')
+        .update({
+          twilio_subaccount_sid: subaccountSid,
+          twilio_subaccount_auth_token: subaccountAuthToken
+        })
+        .eq('id', organizationId);
+
+      if (updateError) {
+        logStep('Failed to save local subaccount to org', { error: updateError });
+      }
+
+      results.push({
+        step: 'create_twilio_subaccount',
+        success: true,
+        message: 'Using local subaccount (LOCAL environment)',
+        data: { subaccountSid }
+      });
+    } else if (!subaccountSid) {
+      // Production/staging: Create new subaccount
       const baseName = `AnswerAfter-${org.name.substring(0, 20)}-${organizationId.substring(0, 8)}`;
       const friendlyName = config.appendEnvironmentSuffix(baseName).replace(/\s+/g, '-');
 
@@ -172,19 +200,105 @@ serve(async (req) => {
         message: 'Phone number already provisioned',
         data: { phoneNumber }
       });
+    } else if (config.isLocal) {
+      // LOCAL environment: Get existing phone from local subaccount, never purchase new
+      logStep('LOCAL environment - fetching existing phone from local subaccount');
+
+      const listUrl = `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/IncomingPhoneNumbers.json?PageSize=1`;
+      const listResponse = await fetch(listUrl, {
+        headers: {
+          'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`
+        }
+      });
+
+      if (!listResponse.ok) {
+        const errorText = await listResponse.text();
+        logStep('Failed to list local phone numbers', { error: errorText });
+        results.push({
+          step: 'search_phone_numbers',
+          success: false,
+          message: `Failed to list local phone numbers: ${errorText}`
+        });
+      } else {
+        const listResult = await listResponse.json();
+
+        if (!listResult.incoming_phone_numbers || listResult.incoming_phone_numbers.length === 0) {
+          logStep('No phone numbers in local subaccount');
+          results.push({
+            step: 'search_phone_numbers',
+            success: false,
+            message: 'No phone numbers in local subaccount - please add one manually'
+          });
+        } else {
+          const existingNumber = listResult.incoming_phone_numbers[0];
+          phoneNumber = existingNumber.phone_number;
+          phoneTwilioSid = existingNumber.sid;
+
+          logStep('Using existing local phone number', { phoneNumber, sid: phoneTwilioSid });
+
+          // Update webhook URL to point to local
+          const webhookUrl = `${SUPABASE_URL}/functions/v1/twilio-webhook`;
+          await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/IncomingPhoneNumbers/${phoneTwilioSid}.json`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: new URLSearchParams({
+                VoiceUrl: webhookUrl,
+                VoiceMethod: 'POST'
+              })
+            }
+          );
+
+          // Save to database (upsert - might already exist for different org)
+          const { error: phoneInsertError } = await supabase
+            .from('phone_numbers')
+            .upsert({
+              organization_id: organizationId,
+              phone_number: phoneNumber,
+              friendly_name: existingNumber.friendly_name || 'Local Dev Line',
+              is_shared: true, // Mark as shared since it's reused
+              is_active: true,
+              twilio_sid: phoneTwilioSid,
+              provisioned_at: new Date().toISOString()
+            }, {
+              onConflict: 'phone_number',
+              ignoreDuplicates: false
+            });
+
+          if (phoneInsertError) {
+            logStep('Failed to save phone number', { error: phoneInsertError });
+            // Try updating existing record instead
+            await supabase
+              .from('phone_numbers')
+              .update({ organization_id: organizationId, is_active: true })
+              .eq('phone_number', phoneNumber);
+          }
+
+          results.push({
+            step: 'purchase_phone_number',
+            success: true,
+            message: 'Using existing local phone number (LOCAL environment)',
+            data: { phoneNumber, twilioSid: phoneTwilioSid }
+          });
+        }
+      }
     } else {
-      // Search for available numbers
+      // Production/staging: Search and purchase new numbers
       const searchParams = new URLSearchParams({
         VoiceEnabled: 'true',
         Limit: '5'
       });
-      
+
       if (areaCode) {
         searchParams.set('AreaCode', areaCode);
       }
 
       const searchUrl = `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/AvailablePhoneNumbers/US/Local.json?${searchParams}`;
-      
+
       const searchResponse = await fetch(searchUrl, {
         headers: {
           'Authorization': `Basic ${btoa(`${subaccountSid}:${subaccountAuthToken}`)}`
@@ -202,7 +316,7 @@ serve(async (req) => {
         // Continue with other steps, phone can be added later
       } else {
         const searchResult = await searchResponse.json();
-        
+
         if (!searchResult.available_phone_numbers || searchResult.available_phone_numbers.length === 0) {
           logStep('No phone numbers available');
           results.push({
@@ -220,7 +334,7 @@ serve(async (req) => {
           logStep('Step 3: Purchasing phone number');
 
           const webhookUrl = `${SUPABASE_URL}/functions/v1/twilio-webhook`;
-          
+
           const purchaseResponse = await fetch(
             `https://api.twilio.com/2010-04-01/Accounts/${subaccountSid}/IncomingPhoneNumbers.json`,
             {
@@ -292,13 +406,15 @@ serve(async (req) => {
       .eq('organization_id', organizationId)
       .maybeSingle();
 
-    if (agentRecord?.elevenlabs_agent_id) {
-      logStep('ElevenLabs agent already exists', { agentId: agentRecord.elevenlabs_agent_id });
+    let agentId = agentRecord?.elevenlabs_agent_id;
+
+    if (agentId) {
+      logStep('ElevenLabs agent already exists', { agentId });
       results.push({
         step: 'create_elevenlabs_agent',
         success: true,
         message: 'ElevenLabs agent already exists',
-        data: { agentId: agentRecord.elevenlabs_agent_id }
+        data: { agentId }
       });
     } else {
       // Create agent via the elevenlabs-agent function
@@ -322,12 +438,13 @@ serve(async (req) => {
       const agentResult = await agentResponse.json();
       
       if (agentResult.success) {
-        logStep('ElevenLabs agent created', { agentId: agentResult.agent_id });
+        agentId = agentResult.agent_id;
+        logStep('ElevenLabs agent created', { agentId });
         results.push({
           step: 'create_elevenlabs_agent',
           success: true,
           message: 'ElevenLabs agent created successfully',
-          data: { agentId: agentResult.agent_id }
+          data: { agentId }
         });
       } else {
         logStep('ElevenLabs agent creation failed', { error: agentResult.error });
@@ -337,6 +454,51 @@ serve(async (req) => {
           message: `Failed to create ElevenLabs agent: ${agentResult.error}`
         });
       }
+    }
+
+    // ============================================
+    // STEP 4b: Import/Assign Phone to ElevenLabs Agent
+    // ============================================
+    // Always call import-phone - it handles both:
+    // 1. Phone not imported yet → import and assign agent
+    // 2. Phone already imported → reassign to new agent
+    if (agentId && phoneNumber) {
+      logStep('Step 4b: Importing/assigning phone to ElevenLabs agent');
+
+      const importResponse = await fetch(`${SUPABASE_URL}/functions/v1/elevenlabs-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          action: 'import-phone',
+          organizationId: organizationId,
+          agentId: agentId,
+          phoneNumber: phoneNumber
+        }),
+      });
+
+      const importResult = await importResponse.json();
+
+      if (importResult.success) {
+        logStep('Phone imported/assigned to ElevenLabs', { phoneNumberId: importResult.phone_number_id });
+        results.push({
+          step: 'import_phone_elevenlabs',
+          success: true,
+          message: 'Phone imported/assigned to ElevenLabs',
+          data: { phoneNumberId: importResult.phone_number_id }
+        });
+      } else {
+        logStep('Phone import/assign failed', { error: importResult.error });
+        results.push({
+          step: 'import_phone_elevenlabs',
+          success: false,
+          message: `Failed to import/assign phone: ${importResult.error}`
+        });
+      }
+    } else {
+      logStep('Skipping phone import - missing agentId or phoneNumber', { agentId: !!agentId, phoneNumber: !!phoneNumber });
     }
 
     // ============================================

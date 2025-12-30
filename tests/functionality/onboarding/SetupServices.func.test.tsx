@@ -28,7 +28,8 @@ let mockCurrentTierData = {
     hasCustomAiTraining: false,  // DB flag: has_custom_ai_training
     hasSlaGuarantee: false,
     hasHipaaCompliance: false,
-    phoneLines: 1,
+    hasVoiceSelection: false,
+    hasMultiLanguage: false,
     credits: 600,
   },
 };
@@ -143,7 +144,8 @@ describe('SetupServices Functionality', () => {
         hasCustomAiTraining: false,
         hasSlaGuarantee: false,
         hasHipaaCompliance: false,
-        phoneLines: 1,
+        hasVoiceSelection: false,
+        hasMultiLanguage: false,
         credits: 600,
       },
     };
@@ -185,7 +187,8 @@ describe('SetupServices Functionality', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 250,
         },
       };
@@ -240,7 +243,8 @@ describe('SetupServices Functionality', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 600,
         },
       };
@@ -288,7 +292,8 @@ describe('SetupServices Functionality', () => {
           hasCustomAiTraining: true,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 1400,
         },
       };
@@ -318,7 +323,8 @@ describe('SetupServices Functionality', () => {
           hasCustomAiTraining: true,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 2,
+          hasVoiceSelection: true,
+          hasMultiLanguage: true,
           credits: 3000,
         },
       };
@@ -350,7 +356,8 @@ describe('SetupServices Functionality', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 600,
         },
       };
@@ -426,7 +433,8 @@ describe('SetupServices Functionality', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 600,
         },
       };

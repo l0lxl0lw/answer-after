@@ -40,31 +40,31 @@ const sidebarSections = [
   {
     label: null, // No label for top section
     links: [
-      { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     ],
   },
   {
-    label: "Configure",
+    label: "Agent",
     links: [
-      { name: "My Agent", href: "/dashboard/my-agent", icon: Bot },
-      { name: "My Services", href: "/dashboard/my-services", icon: Wrench },
-      { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
+      { name: "Voice & Behavior", href: "/dashboard/my-agent", icon: Bot },
+      { name: "Services", href: "/dashboard/my-services", icon: Wrench },
     ],
   },
   {
-    label: "Monitor",
+    label: "Activity",
     links: [
-      { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
-      { name: "SMS", href: "/dashboard/sms", icon: MessageSquare },
-      { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
+      { name: "Call Log", href: "/dashboard/calls", icon: PhoneCall },
+      { name: "Messages", href: "/dashboard/sms", icon: MessageSquare },
+      { name: "Bookings", href: "/dashboard/appointments", icon: Calendar },
     ],
   },
   {
-    label: "Manage",
+    label: "Settings",
     links: [
-      { name: "Schedules", href: "/dashboard/schedules", icon: Calendar },
+      { name: "Calendar", href: "/dashboard/schedules", icon: Calendar },
       { name: "Contacts", href: "/dashboard/contacts", icon: Users },
-      { name: "Settings", href: "/dashboard/settings", icon: Settings },
+      { name: "Account", href: "/dashboard/settings", icon: Settings },
+      { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
     ],
   },
 ];

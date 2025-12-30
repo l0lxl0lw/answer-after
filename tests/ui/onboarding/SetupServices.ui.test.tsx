@@ -28,7 +28,8 @@ let mockCurrentTierData = {
     hasCustomAiTraining: false,  // Growth does NOT have this
     hasSlaGuarantee: false,
     hasHipaaCompliance: false,
-    phoneLines: 1,
+    hasVoiceSelection: false,
+    hasMultiLanguage: false,
     credits: 600,
   },
 };
@@ -143,7 +144,8 @@ describe('SetupServices UI', () => {
         hasCustomAiTraining: false,
         hasSlaGuarantee: false,
         hasHipaaCompliance: false,
-        phoneLines: 1,
+        hasVoiceSelection: false,
+        hasMultiLanguage: false,
         credits: 600,
       },
     };
@@ -199,7 +201,8 @@ describe('SetupServices UI', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 600,
         },
       };
@@ -265,7 +268,8 @@ describe('SetupServices UI', () => {
           hasCustomAiTraining: true,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 1400,
         },
       };
@@ -307,7 +311,8 @@ describe('SetupServices UI', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 250,
         },
       };

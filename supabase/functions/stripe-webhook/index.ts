@@ -241,6 +241,14 @@ serve(async (req) => {
 
         planCreate = planCreate || "core";
 
+        // Safely convert timestamps to ISO strings
+        const periodStart = subscription.current_period_start
+          ? new Date(subscription.current_period_start * 1000).toISOString()
+          : new Date().toISOString();
+        const periodEnd = subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // Default 30 days
+
         const { error: upsertErrorCreate } = await supabaseClient
           .from("subscriptions")
           .upsert({
@@ -249,8 +257,8 @@ serve(async (req) => {
             stripe_customer_id: customerId,
             plan: planCreate,
             status: statusCreate,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
             cancel_at_period_end: subscription.cancel_at_period_end,
           }, {
             onConflict: "organization_id",
@@ -318,6 +326,14 @@ serve(async (req) => {
 
         plan = plan || "core";
 
+        // Safely convert timestamps to ISO strings
+        const periodStartUpdate = subscription.current_period_start
+          ? new Date(subscription.current_period_start * 1000).toISOString()
+          : new Date().toISOString();
+        const periodEndUpdate = subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
         const { error: upsertError } = await supabaseClient
           .from("subscriptions")
           .upsert({
@@ -326,8 +342,8 @@ serve(async (req) => {
             stripe_customer_id: customerId,
             plan: plan,
             status: status,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_start: periodStartUpdate,
+            current_period_end: periodEndUpdate,
             cancel_at_period_end: subscription.cancel_at_period_end,
           }, {
             onConflict: "organization_id",

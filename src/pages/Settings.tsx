@@ -410,7 +410,7 @@ export default function Settings() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+          <h1 className="text-2xl font-bold text-foreground">Account</h1>
           <p className="text-muted-foreground mt-1">
             Manage your organization, phone numbers, and preferences
           </p>
@@ -586,55 +586,26 @@ export default function Settings() {
                     Your Phone Line
                   </CardTitle>
                   <CardDescription>
-                    Phone line allocation based on your subscription plan
+                    Your dedicated phone line for business calls
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {subLoading ? (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading plan info...
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Phone className="h-6 w-6 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-lg">
-                              {features.phoneLines === 0 ? 'Shared Phone Line' : 'Dedicated Phone Line'}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {features.phoneLines === 0
-                                ? 'Your calls are handled on a shared line with other free users'
-                                : `You have ${features.phoneLines} dedicated phone line${features.phoneLines > 1 ? 's' : ''} for your business`
-                              }
-                            </p>
-                          </div>
-                        </div>
-                        <Badge
-                          variant={features.phoneLines === 0 ? 'secondary' : 'default'}
-                          className="text-sm px-3 py-1"
-                        >
-                          {features.phoneLines === 0 ? 'Shared' : 'Dedicated'}
-                        </Badge>
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Phone className="h-6 w-6 text-primary" />
                       </div>
-
-                      {features.phoneLines === 0 && (
-                        <div className="p-4 rounded-lg border border-primary/20 bg-primary/5">
-                          <p className="text-sm text-muted-foreground">
-                            <strong className="text-foreground">Want a dedicated phone line?</strong>{' '}
-                            Upgrade your plan to get your own dedicated phone number for your business.
-                          </p>
-                          <Button variant="outline" size="sm" className="mt-3" onClick={() => window.location.href = '/dashboard/subscriptions'}>
-                            View Plans
-                          </Button>
-                        </div>
-                      )}
+                      <div>
+                        <p className="font-semibold text-lg">Dedicated Phone Line</p>
+                        <p className="text-sm text-muted-foreground">
+                          You have 1 dedicated phone line for your business
+                        </p>
+                      </div>
                     </div>
-                  )}
+                    <Badge variant="default" className="text-sm px-3 py-1">
+                      Dedicated
+                    </Badge>
+                  </div>
                 </CardContent>
               </Card>
 

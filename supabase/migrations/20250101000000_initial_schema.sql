@@ -177,7 +177,6 @@ CREATE TABLE public.subscription_tiers (
   period text NOT NULL DEFAULT '/month',
   credits integer NOT NULL DEFAULT 0,
   credits_cost_per_thousand numeric,
-  phone_lines integer NOT NULL DEFAULT 1,
   features jsonb NOT NULL DEFAULT '[]'::jsonb,
   has_custom_agent boolean NOT NULL DEFAULT false,
   has_outbound_reminders boolean NOT NULL DEFAULT false,
@@ -187,6 +186,8 @@ CREATE TABLE public.subscription_tiers (
   has_custom_ai_training boolean NOT NULL DEFAULT false,
   has_sla_guarantee boolean NOT NULL DEFAULT false,
   has_hipaa_compliance boolean NOT NULL DEFAULT false,
+  has_voice_selection boolean NOT NULL DEFAULT false,
+  has_multi_language boolean NOT NULL DEFAULT false,
   support_level text NOT NULL DEFAULT 'standard',
   stripe_monthly_price_id text,
   is_active boolean NOT NULL DEFAULT true,
@@ -514,7 +515,6 @@ INSERT INTO public.subscription_tiers (
   price_cents,
   period,
   credits,
-  phone_lines,
   features,
   has_custom_agent,
   has_outbound_reminders,
@@ -523,6 +523,8 @@ INSERT INTO public.subscription_tiers (
   has_priority_support,
   has_custom_ai_training,
   has_sla_guarantee,
+  has_voice_selection,
+  has_multi_language,
   support_level,
   is_active,
   is_visible,
@@ -537,7 +539,6 @@ INSERT INTO public.subscription_tiers (
     2900,
     '/mo',
     250,
-    1,
     '["24/7 AI call answering", "Email support"]'::jsonb,
     false,
     false,
@@ -546,6 +547,8 @@ INSERT INTO public.subscription_tiers (
     false,
     false,
     false,
+    false,  -- has_voice_selection
+    false,  -- has_multi_language
     'email',
     true,
     true,
@@ -560,7 +563,6 @@ INSERT INTO public.subscription_tiers (
     9900,
     '/mo',
     600,
-    1,
     '["Everything in Core", "Define services for your agent", "Priority email support"]'::jsonb,
     true,
     false,
@@ -569,6 +571,8 @@ INSERT INTO public.subscription_tiers (
     true,
     false,
     false,
+    false,  -- has_voice_selection
+    false,  -- has_multi_language
     'priority_email',
     true,
     true,
@@ -583,7 +587,6 @@ INSERT INTO public.subscription_tiers (
     19900,
     '/mo',
     1400,
-    1,
     '["Everything in Growth", "Reminder rules included", "Define context for your agent", "Priority support"]'::jsonb,
     true,
     true,
@@ -592,6 +595,8 @@ INSERT INTO public.subscription_tiers (
     true,
     true,
     false,
+    false,  -- has_voice_selection
+    false,  -- has_multi_language
     'priority',
     true,
     true,
@@ -606,8 +611,7 @@ INSERT INTO public.subscription_tiers (
     49900,
     '/mo',
     3000,
-    2,
-    '["Everything in Pro", "Dedicated support", "Advanced reporting"]'::jsonb,
+    '["Everything in Pro", "Voice selection", "Multi-language (2 max)", "Dedicated support", "Advanced reporting"]'::jsonb,
     true,
     true,
     true,
@@ -615,6 +619,8 @@ INSERT INTO public.subscription_tiers (
     true,
     true,
     false,
+    true,   -- has_voice_selection
+    true,   -- has_multi_language
     'dedicated',
     true,
     true,
@@ -629,7 +635,6 @@ INSERT INTO public.subscription_tiers (
     0,
     '',
     0,
-    0,
     '["Everything in Business", "Custom usage limits", "Dedicated onboarding", "Custom integrations", "SLA guarantee", "Enterprise support"]'::jsonb,
     true,
     true,
@@ -638,6 +643,8 @@ INSERT INTO public.subscription_tiers (
     true,
     true,
     true,
+    true,   -- has_voice_selection
+    true,   -- has_multi_language
     'enterprise',
     true,
     true,

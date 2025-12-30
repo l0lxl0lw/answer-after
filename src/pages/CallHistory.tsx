@@ -255,7 +255,7 @@ export default function CallHistory() {
           transition={{ duration: 0.3 }}
         >
           <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">
-            Conversation History
+            Call Log
           </h1>
           <p className="text-muted-foreground">
             View all AI agent conversations with transcripts and details

@@ -1,7 +1,7 @@
-import { createAnonClient } from "../_shared/db.ts";
+import { createAnonClient, createServiceClient, createUserClient } from "../_shared/db.ts";
 import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
 import { createLogger } from "../_shared/logger.ts";
-import { getTwilioCredentials, makeTwilioRequest, getAccountUrl } from "../_shared/twilio.ts";
+import { getTwilioCredentials, makeTwilioRequest, getAccountUrl, getSubaccount, isLocalSubaccountMode, getLocalSubaccountConfig } from "../_shared/twilio.ts";
 
 const logger = createLogger('get-twilio-calls');
 
@@ -32,36 +32,59 @@ interface TransformedCall {
 }
 
 Deno.serve(async (req) => {
+  const log = logger.withContext({ requestId: crypto.randomUUID() });
+  log.info("Request received", { method: req.method });
+
   if (req.method === "OPTIONS") {
     return corsPreflightResponse();
   }
 
   try {
-    const log = logger.withContext({ requestId: crypto.randomUUID() });
-
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      log.warn("No authorization header");
       return errorResponse("No authorization header", 401);
     }
 
-    const supabase = createAnonClient();
     const token = authHeader.replace("Bearer ", "");
+
+    // Create client with user's JWT for RLS-protected queries
+    const supabase = createUserClient(token);
 
     // Get authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
+      log.warn("Unauthorized", { error: userError?.message });
       return errorResponse("Unauthorized", 401);
     }
 
+    log.info("User authenticated", { userId: user.id });
+
     // Get user's profile to find organization and signup time
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("organization_id, created_at")
       .eq("id", user.id)
       .single();
 
+    log.info("Profile lookup", { profile, error: profileError?.message });
+
     if (!profile?.organization_id) {
+      log.warn("User not in organization", { userId: user.id, profile });
       return errorResponse("User not in organization", 400);
+    }
+
+    // Get organization details including subaccount
+    const supabaseAdmin = createServiceClient();
+    const { data: org, error: orgError } = await supabaseAdmin
+      .from("organizations")
+      .select("twilio_subaccount_sid")
+      .eq("id", profile.organization_id)
+      .single();
+
+    if (orgError) {
+      log.warn("Failed to get organization", { error: orgError });
+      return errorResponse("Failed to get organization", 500);
     }
 
     // Get organization's phone numbers
@@ -75,9 +98,37 @@ Deno.serve(async (req) => {
     }
 
     const toNumbers = phoneNumbers?.map(p => p.phone_number) || [];
-    log.info("Fetching calls for phone numbers", { count: toNumbers.length });
+    log.info("Fetching calls for phone numbers", { count: toNumbers.length, subaccountSid: org?.twilio_subaccount_sid });
 
-    const twilioCredentials = getTwilioCredentials();
+    // If no phone numbers, return empty list
+    if (toNumbers.length === 0) {
+      return successResponse({
+        calls: [],
+        meta: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+      });
+    }
+
+    // Get Twilio credentials - use subaccount if available
+    const masterCredentials = getTwilioCredentials();
+    let twilioCredentials = masterCredentials;
+
+    // Check if using local subaccount mode
+    if (isLocalSubaccountMode()) {
+      const localConfig = getLocalSubaccountConfig();
+      if (localConfig.sid && localConfig.authToken) {
+        twilioCredentials = { accountSid: localConfig.sid, authToken: localConfig.authToken };
+        log.info("Using local subaccount credentials");
+      }
+    } else if (org?.twilio_subaccount_sid) {
+      // Get subaccount auth token from Twilio
+      try {
+        const subaccount = await getSubaccount(org.twilio_subaccount_sid, masterCredentials);
+        twilioCredentials = { accountSid: subaccount.sid, authToken: subaccount.authToken };
+        log.info("Using organization subaccount credentials");
+      } catch (e) {
+        log.warn("Failed to get subaccount credentials, falling back to master", { error: String(e) });
+      }
+    }
 
     // Parse query parameters
     const url = new URL(req.url);
@@ -99,7 +150,7 @@ Deno.serve(async (req) => {
 
         const data = await makeTwilioRequest<{ calls: TwilioCall[] }>(
           `${getAccountUrl(twilioCredentials.accountSid)}/Calls.json?${params}`,
-          twilioCredentials
+          { accountSid: twilioCredentials.accountSid, authToken: twilioCredentials.authToken }
         );
 
         log.info(`Found calls for ${toNumber}`, { count: data.calls?.length || 0 });

@@ -621,7 +621,6 @@ export interface SubscriptionTier {
   price_cents: number;
   credits: number;
   features: string[];
-  phone_lines: number;
   has_custom_agent: boolean;
   has_outbound_reminders: boolean;
   has_priority_support: boolean;
@@ -630,6 +629,8 @@ export interface SubscriptionTier {
   has_sla_guarantee: boolean;
   has_hipaa_compliance: boolean;
   has_custom_ai_training: boolean;
+  has_voice_selection: boolean;
+  has_multi_language: boolean;
   support_level: string;
   is_popular: boolean;
   is_active: boolean;
@@ -683,7 +684,8 @@ export function useCurrentSubscriptionTier() {
       hasCustomAiTraining: currentTier?.has_custom_ai_training ?? false,
       hasSlaGuarantee: currentTier?.has_sla_guarantee ?? false,
       hasHipaaCompliance: currentTier?.has_hipaa_compliance ?? false,
-      phoneLines: currentTier?.phone_lines ?? 1,
+      hasVoiceSelection: currentTier?.has_voice_selection ?? false,
+      hasMultiLanguage: currentTier?.has_multi_language ?? false,
       credits: currentTier?.credits ?? 250,
     },
   };

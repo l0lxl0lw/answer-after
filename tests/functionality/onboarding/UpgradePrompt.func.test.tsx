@@ -28,7 +28,8 @@ let mockCurrentTierData = {
     hasCustomAiTraining: false,  // DB flag: determines if upgrade prompt is skipped
     hasSlaGuarantee: false,
     hasHipaaCompliance: false,
-    phoneLines: 1,
+    hasVoiceSelection: false,
+    hasMultiLanguage: false,
     credits: 250,
   },
 };
@@ -143,7 +144,8 @@ describe('UpgradePrompt Functionality', () => {
         hasCustomAiTraining: false,
         hasSlaGuarantee: false,
         hasHipaaCompliance: false,
-        phoneLines: 1,
+        hasVoiceSelection: false,
+        hasMultiLanguage: false,
         credits: 250,
       },
     };
@@ -179,7 +181,8 @@ describe('UpgradePrompt Functionality', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 600,
         },
       };
@@ -208,7 +211,8 @@ describe('UpgradePrompt Functionality', () => {
           hasCustomAiTraining: true, // This DB flag triggers the skip
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 1400,
         },
       };
@@ -236,7 +240,8 @@ describe('UpgradePrompt Functionality', () => {
           hasCustomAiTraining: true, // This DB flag triggers the skip
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 2,
+          hasVoiceSelection: true,
+          hasMultiLanguage: true,
           credits: 3000,
         },
       };
@@ -307,7 +312,8 @@ describe('UpgradePrompt Functionality', () => {
           hasCustomAiTraining: false,
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 250,
         },
       };

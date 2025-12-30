@@ -39,6 +39,10 @@ serve(async (req) => {
       if (body.action === 'rename-agent') {
         return await handleRenameAgent(supabase, body.organizationId, body.name);
       }
+
+      if (body.action === 'import-phone') {
+        return await handleImportPhone(supabase, body.organizationId, body.agentId, body.phoneNumber);
+      }
     }
 
     // Handle WebSocket upgrade for Twilio <-> ElevenLabs bridge
@@ -317,7 +321,14 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
     try {
       await importPhoneNumberToElevenLabs(supabase, organizationId, agentData.agent_id, agentName, apiKey);
     } catch (importError) {
-      log.warn('Phone import failed', { error: (importError as Error).message });
+      const err = importError as Error;
+      log.error('Phone import failed', {
+        error: err.message,
+        stack: err.stack,
+        organizationId,
+        agentId: agentData.agent_id
+      });
+      console.error('[ElevenLabs Phone Import] FAILED:', err.message, err.stack);
     }
 
     return successResponse({
@@ -337,71 +348,126 @@ async function importPhoneNumberToElevenLabs(
   organizationId: string,
   agentId: string,
   agentLabel: string,
-  apiKey: string
+  apiKey: string,
+  phoneNumberParam?: string  // Optional: if provided, query by phone number directly
 ): Promise<void> {
-  console.log(`[ElevenLabs Phone Import] Starting for org: ${organizationId}, agent: ${agentId}`);
+  console.log(`[ElevenLabs Phone Import] Starting for org: ${organizationId}, agent: ${agentId}, phone: ${phoneNumberParam || 'not provided'}`);
 
-  const USE_LOCAL_SUBACCOUNT = Deno.env.get('USE_LOCAL_SUBACCOUNT') === 'true';
-  const LOCAL_SUBACCOUNT_SID = Deno.env.get('LOCAL_SUBACCOUNT_SID');
-  const LOCAL_SUBACCOUNT_AUTH_TOKEN = Deno.env.get('LOCAL_SUBACCOUNT_AUTH_TOKEN');
+  // Always use the org's actual subaccount credentials - this is where the phone was purchased
+  const { data: orgData, error: orgError } = await supabase
+    .from('organizations')
+    .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
+    .eq('id', organizationId)
+    .single();
 
-  let twilioSid: string | undefined;
-  let twilioToken: string | undefined;
+  if (orgError) {
+    console.error('[ElevenLabs Phone Import] Error fetching org:', orgError);
+  }
 
-  if (USE_LOCAL_SUBACCOUNT || config.isLocal) {
-    twilioSid = LOCAL_SUBACCOUNT_SID;
-    twilioToken = LOCAL_SUBACCOUNT_AUTH_TOKEN;
+  let twilioSid = orgData?.twilio_subaccount_sid;
+  let twilioToken = orgData?.twilio_subaccount_auth_token;
+
+  // Fallback to local subaccount only if org has no subaccount (for testing with pre-existing phones)
+  if (!twilioSid || !twilioToken) {
+    const USE_LOCAL_SUBACCOUNT = Deno.env.get('USE_LOCAL_SUBACCOUNT') === 'true';
+    if (USE_LOCAL_SUBACCOUNT || config.isLocal) {
+      twilioSid = Deno.env.get('LOCAL_SUBACCOUNT_SID');
+      twilioToken = Deno.env.get('LOCAL_SUBACCOUNT_AUTH_TOKEN');
+      console.log(`[ElevenLabs Phone Import] Org has no subaccount, falling back to local: ${twilioSid ? twilioSid.substring(0, 10) + '...' : 'MISSING'}`);
+    }
   } else {
-    const { data: orgData } = await supabase
-      .from('organizations')
-      .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
-      .eq('id', organizationId)
-      .single();
-
-    twilioSid = orgData?.twilio_subaccount_sid;
-    twilioToken = orgData?.twilio_subaccount_auth_token;
+    console.log(`[ElevenLabs Phone Import] Using org subaccount: ${twilioSid.substring(0, 10)}...`);
   }
 
   if (!twilioSid || !twilioToken) {
-    console.log('[ElevenLabs Phone Import] No Twilio credentials available');
-    return;
+    throw new Error(`[ElevenLabs Phone Import] No Twilio credentials available - twilioSid: ${!!twilioSid}, twilioToken: ${!!twilioToken}`);
   }
 
-  const { data: phoneData } = await supabase
-    .from('phone_numbers')
-    .select('id, phone_number, elevenlabs_phone_number_id')
-    .eq('organization_id', organizationId)
-    .eq('is_active', true)
-    .maybeSingle();
+  // Query phone: prefer by phone number if provided, otherwise by org_id
+  let phoneData;
+  let phoneError;
+
+  if (phoneNumberParam) {
+    // Query by phone number directly (more reliable in LOCAL mode)
+    console.log(`[ElevenLabs Phone Import] Querying by phone number: ${phoneNumberParam}`);
+    const result = await supabase
+      .from('phone_numbers')
+      .select('id, phone_number, elevenlabs_phone_number_id')
+      .eq('phone_number', phoneNumberParam)
+      .maybeSingle();
+    phoneData = result.data;
+    phoneError = result.error;
+  } else {
+    // Fallback: query by organization_id
+    console.log(`[ElevenLabs Phone Import] Querying by organization_id: ${organizationId}`);
+    const result = await supabase
+      .from('phone_numbers')
+      .select('id, phone_number, elevenlabs_phone_number_id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .maybeSingle();
+    phoneData = result.data;
+    phoneError = result.error;
+  }
+
+  if (phoneError) {
+    throw new Error(`[ElevenLabs Phone Import] Error fetching phone: ${JSON.stringify(phoneError)}`);
+  }
 
   if (!phoneData) {
-    console.log('[ElevenLabs Phone Import] No phone number found');
-    return;
+    throw new Error(`[ElevenLabs Phone Import] No phone number found - phoneNumber: ${phoneNumberParam}, orgId: ${organizationId}`);
   }
+
+  console.log(`[ElevenLabs Phone Import] Found phone: ${phoneData.phone_number}, elevenlabs_id: ${phoneData.elevenlabs_phone_number_id || 'none'}`);
 
   // If already imported, just assign agent
   if (phoneData.elevenlabs_phone_number_id) {
-    console.log('[ElevenLabs Phone Import] Phone already imported, assigning agent');
+    console.log('[ElevenLabs Phone Import] Phone already imported, assigning agent to:', phoneData.elevenlabs_phone_number_id);
     await assignAgentToPhoneNumber(phoneData.elevenlabs_phone_number_id, agentId, apiKey);
+    console.log('[ElevenLabs Phone Import] Agent assigned successfully');
     return;
   }
 
   // Import phone number
-  const importResult = await importPhoneNumber(
-    phoneData.phone_number,
-    agentLabel,
-    twilioSid,
-    twilioToken,
-    apiKey
-  );
+  console.log(`[ElevenLabs Phone Import] Importing phone ${phoneData.phone_number} to ElevenLabs...`);
+  console.log(`[ElevenLabs Phone Import] Using Twilio SID: ${twilioSid}, Token: ${twilioToken?.substring(0, 8)}...`);
+
+  let importResult;
+  try {
+    importResult = await importPhoneNumber(
+      phoneData.phone_number,
+      agentLabel,
+      twilioSid,
+      twilioToken,
+      apiKey
+    );
+    console.log('[ElevenLabs Phone Import] Import result:', JSON.stringify(importResult));
+  } catch (importErr) {
+    const err = importErr as Error;
+    console.error('[ElevenLabs Phone Import] ElevenLabs API error:', err.message);
+    console.error('[ElevenLabs Phone Import] Full error:', JSON.stringify({
+      message: err.message,
+      stack: err.stack,
+      phone: phoneData.phone_number,
+      twilioSid,
+    }));
+    throw importErr; // Re-throw to be caught by outer handler
+  }
 
   // Save phone number ID
-  await supabase
+  const { error: updateError } = await supabase
     .from('phone_numbers')
     .update({ elevenlabs_phone_number_id: importResult.phone_number_id })
     .eq('id', phoneData.id);
 
+  if (updateError) {
+    console.error('[ElevenLabs Phone Import] Error saving phone_number_id:', updateError);
+  } else {
+    console.log('[ElevenLabs Phone Import] Saved elevenlabs_phone_number_id:', importResult.phone_number_id);
+  }
+
   // Assign agent
+  console.log('[ElevenLabs Phone Import] Assigning agent to phone...');
   await assignAgentToPhoneNumber(importResult.phone_number_id, agentId, apiKey);
   console.log('[ElevenLabs Phone Import] Successfully imported phone and assigned agent');
 }
@@ -546,6 +612,25 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
       .update({ context: agentContext || null })
       .eq('organization_id', organizationId);
 
+    // Import phone number if not already imported (ensures phone is linked to agent)
+    const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
+    const modePrefix = '[INBOUND]';
+    const agentLabel = `${envPrefix}${modePrefix} ${orgData.name} - ${organizationId}`;
+
+    try {
+      await importPhoneNumberToElevenLabs(supabase, organizationId, agentRecord.elevenlabs_agent_id, agentLabel, apiKey);
+      log.info('Phone import completed during update');
+    } catch (importError) {
+      const err = importError as Error;
+      log.error('Phone import failed during update', {
+        error: err.message,
+        stack: err.stack,
+        organizationId,
+        agentId: agentRecord.elevenlabs_agent_id
+      });
+      // Don't fail the whole update if phone import fails
+    }
+
     return successResponse({
       success: true,
       agent_id: agentRecord.elevenlabs_agent_id,
@@ -605,5 +690,56 @@ async function handleRenameAgent(supabase: any, organizationId: string, name: st
   } catch (error) {
     log.error('Error renaming ElevenLabs agent', error as Error);
     return errorResponse(error as Error);
+  }
+}
+
+async function handleImportPhone(supabase: any, organizationId: string, agentId: string, phoneNumber?: string) {
+  const log = logger.withContext({ organizationId, agentId, phoneNumber, action: 'import-phone' });
+
+  let apiKey: string;
+  try {
+    apiKey = getElevenLabsApiKey();
+  } catch {
+    return errorResponse('ElevenLabs API key not configured', 500);
+  }
+
+  if (!organizationId || !agentId) {
+    return errorResponse('Organization ID and Agent ID are required', 400);
+  }
+
+  log.step('Importing phone to ElevenLabs', { phoneNumber });
+
+  // Get org name for label
+  const { data: orgData } = await supabase
+    .from('organizations')
+    .select('name')
+    .eq('id', organizationId)
+    .single();
+
+  const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
+  const modePrefix = '[INBOUND]';
+  const agentLabel = `${envPrefix}${modePrefix} ${orgData?.name || 'Unknown'} - ${organizationId}`;
+
+  try {
+    await importPhoneNumberToElevenLabs(supabase, organizationId, agentId, agentLabel, apiKey, phoneNumber);
+
+    // Get the phone number ID that was just imported
+    const { data: phoneData } = await supabase
+      .from('phone_numbers')
+      .select('elevenlabs_phone_number_id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    return successResponse({
+      success: true,
+      phone_number_id: phoneData?.elevenlabs_phone_number_id,
+      message: 'Phone imported successfully'
+    });
+
+  } catch (error) {
+    const err = error as Error;
+    log.error('Error importing phone', err);
+    return errorResponse(err);
   }
 }

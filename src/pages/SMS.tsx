@@ -223,7 +223,7 @@ const SMS = () => {
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div>
-            <h1 className="text-2xl font-bold mb-1">SMS Messages</h1>
+            <h1 className="text-2xl font-bold mb-1">Messages</h1>
             <p className="text-muted-foreground text-sm">
               View and manage automated SMS communications.
             </p>

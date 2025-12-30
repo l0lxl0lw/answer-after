@@ -27,7 +27,8 @@ let mockCurrentTierData = {
     hasCustomAiTraining: false,
     hasSlaGuarantee: false,
     hasHipaaCompliance: false,
-    phoneLines: 1,
+    hasVoiceSelection: false,
+    hasMultiLanguage: false,
     credits: 250,
   },
 };
@@ -140,7 +141,8 @@ describe('UpgradePrompt UI', () => {
         hasCustomAiTraining: false,
         hasSlaGuarantee: false,
         hasHipaaCompliance: false,
-        phoneLines: 1,
+        hasVoiceSelection: false,
+        hasMultiLanguage: false,
         credits: 250,
       },
     };
@@ -231,7 +233,8 @@ describe('UpgradePrompt UI', () => {
           hasCustomAiTraining: false, // Still shows upgrade prompt
           hasSlaGuarantee: false,
           hasHipaaCompliance: false,
-          phoneLines: 1,
+          hasVoiceSelection: false,
+          hasMultiLanguage: false,
           credits: 600,
         },
       };

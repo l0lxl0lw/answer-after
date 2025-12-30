@@ -283,7 +283,7 @@ const MyServices = () => {
       <DashboardLayout>
         <div className="space-y-6">
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-            <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">My Services</h1>
+            <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Services</h1>
             <p className="text-muted-foreground">Define the services your AI agent can offer</p>
           </motion.div>
 
@@ -315,7 +315,7 @@ const MyServices = () => {
         >
           <div>
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">
-              My Services
+              Services
             </h1>
             <p className="text-muted-foreground">
               The AI uses this list to validate customer requests.

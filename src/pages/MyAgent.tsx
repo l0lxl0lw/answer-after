@@ -10,7 +10,9 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/use-api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useQuery } from '@tanstack/react-query';
 
 // Import voice preview audio files
@@ -60,6 +62,7 @@ export default function MyAgent() {
   const [agentContent, setAgentContent] = useState('');
   const [selectedVoiceId, setSelectedVoiceId] = useState<VoiceId>('veda_sky');
   const [playingVoiceId, setPlayingVoiceId] = useState<VoiceId | null>(null);
+  const [hidePricesFromCustomers, setHidePricesFromCustomers] = useState(false);
   
   const [isSavingGreeting, setIsSavingGreeting] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
@@ -67,14 +70,14 @@ export default function MyAgent() {
   const [hasCustomAgentAccess, setHasCustomAgentAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check tier for context access (Pro+)
+  // Check tier for feature access
   const { data: tierData } = useQuery({
     queryKey: ['subscription-tier-agent', subscription?.plan],
     queryFn: async () => {
       if (!subscription?.plan) return null;
       const { data } = await supabase
         .from('subscription_tiers')
-        .select('has_custom_agent, has_outbound_reminders')
+        .select('has_custom_agent, has_outbound_reminders, has_voice_selection')
         .eq('plan_id', subscription.plan)
         .single();
       return data;
@@ -84,6 +87,8 @@ export default function MyAgent() {
 
   // Context editing requires Pro+ (has_outbound_reminders is true for Pro+)
   const hasContextAccess = tierData?.has_outbound_reminders === true;
+  // Voice selection requires Business+ (has_voice_selection is true for Business+)
+  const hasVoiceAccess = tierData?.has_voice_selection === true;
 
   // Check if user has custom agent access based on subscription tier
   useEffect(() => {
@@ -124,6 +129,7 @@ export default function MyAgent() {
             const parsed = JSON.parse(data.context);
             setCustomGreeting(parsed.greeting || '');
             setAgentContent(parsed.content || '');
+            setHidePricesFromCustomers(parsed.hidePricesFromCustomers ?? false);
             // Load saved voice (defaults to veda_sky if not set)
             if (parsed.voiceId && VOICES.some(v => v.id === parsed.voiceId)) {
               setSelectedVoiceId(parsed.voiceId);
@@ -144,10 +150,15 @@ export default function MyAgent() {
     return text.trim().split(/\s+/).filter(Boolean).length;
   };
 
-  const saveAgentData = async (greeting: string, content: string, voiceId?: VoiceId | null) => {
+  const saveAgentData = async (greeting: string, content: string, voiceId?: VoiceId | null, hidePrices?: boolean) => {
     if (!user?.organization_id) return;
-    
-    const contextData = JSON.stringify({ greeting, content, voiceId: voiceId || selectedVoiceId });
+
+    const contextData = JSON.stringify({
+      greeting,
+      content,
+      voiceId: voiceId || selectedVoiceId,
+      hidePricesFromCustomers: hidePrices ?? hidePricesFromCustomers
+    });
 
     const { data: existingAgent } = await supabase
       .from('organization_agents')
@@ -171,9 +182,9 @@ export default function MyAgent() {
     return existingAgent;
   };
 
-  const updateElevenLabsAgent = async (voiceId?: VoiceId | null) => {
+  const updateElevenLabsAgent = async (voiceId?: VoiceId | null, hidePrices?: boolean) => {
     if (!user?.organization_id) return;
-    
+
     const { data: existingAgent } = await supabase
       .from('organization_agents')
       .select('elevenlabs_agent_id')
@@ -185,13 +196,14 @@ export default function MyAgent() {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
         await supabase.functions.invoke('elevenlabs-agent', {
-          body: { 
+          body: {
             action: 'update-agent',
             organizationId: user.organization_id,
-            context: JSON.stringify({ 
-              greeting: customGreeting, 
-              content: agentContent, 
-              voiceId: voiceId || selectedVoiceId 
+            context: JSON.stringify({
+              greeting: customGreeting,
+              content: agentContent,
+              voiceId: voiceId || selectedVoiceId,
+              hidePricesFromCustomers: hidePrices ?? hidePricesFromCustomers
             }),
             voiceId: voice?.elevenlabs_voice_id
           },
@@ -347,7 +359,7 @@ export default function MyAgent() {
       <DashboardLayout>
         <div className="p-6 max-w-5xl mx-auto space-y-6">
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-            <h1 className="text-2xl font-bold text-foreground">My Agent</h1>
+            <h1 className="text-2xl font-bold text-foreground">Voice & Behavior</h1>
             <p className="text-muted-foreground mt-1">Customize your AI voice agent</p>
           </motion.div>
 
@@ -372,7 +384,7 @@ export default function MyAgent() {
     <DashboardLayout>
       <div className="p-6 max-w-5xl mx-auto space-y-6">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold text-foreground">My Agent</h1>
+          <h1 className="text-2xl font-bold text-foreground">Voice & Behavior</h1>
           <p className="text-muted-foreground mt-1">Customize your AI voice agent's behavior</p>
         </motion.div>
 
@@ -407,62 +419,88 @@ export default function MyAgent() {
             </CardContent>
           </Card>
 
-          {/* Agent Voice */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mic className="h-5 w-5" />
-                Agent Voice
-              </CardTitle>
-              <CardDescription>
-                Select the voice your AI agent will use when speaking to callers
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Select value={selectedVoiceId || ''} onValueChange={(value) => setSelectedVoiceId(value as VoiceId)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a voice" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VOICES.map((voice) => (
-                    <SelectItem key={voice.id} value={voice.id}>
-                      <div className="flex flex-col">
-                        <span>{voice.name}</span>
-                        <span className="text-xs text-muted-foreground">{voice.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex justify-between items-center">
-                {selectedVoiceId && (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handlePreviewVoice(selectedVoiceId)}
-                  >
-                    {playingVoiceId === selectedVoiceId ? (
-                      <>
-                        <Square className="h-4 w-4 mr-2" />
-                        Stop Preview
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Preview Voice
-                      </>
-                    )}
-                  </Button>
-                )}
-                <div className={selectedVoiceId ? '' : 'ml-auto'}>
-                  <Button onClick={handleSaveVoice} disabled={isSavingVoice || !selectedVoiceId}>
-                    {isSavingVoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save Voice
+          {/* Agent Voice - Gated for Business+ */}
+          {hasVoiceAccess ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mic className="h-5 w-5" />
+                  Agent Voice
+                </CardTitle>
+                <CardDescription>
+                  Select the voice your AI agent will use when speaking to callers
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Select value={selectedVoiceId || ''} onValueChange={(value) => setSelectedVoiceId(value as VoiceId)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a voice" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VOICES.map((voice) => (
+                      <SelectItem key={voice.id} value={voice.id}>
+                        <div className="flex flex-col">
+                          <span>{voice.name}</span>
+                          <span className="text-xs text-muted-foreground">{voice.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex justify-between items-center">
+                  {selectedVoiceId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePreviewVoice(selectedVoiceId)}
+                    >
+                      {playingVoiceId === selectedVoiceId ? (
+                        <>
+                          <Square className="h-4 w-4 mr-2" />
+                          Stop Preview
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Preview Voice
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  <div className={selectedVoiceId ? '' : 'ml-auto'}>
+                    <Button onClick={handleSaveVoice} disabled={isSavingVoice || !selectedVoiceId}>
+                      {isSavingVoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                      Save Voice
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mic className="h-5 w-5" />
+                  Agent Voice
+                </CardTitle>
+                <CardDescription>
+                  Select the voice your AI agent will use when speaking to callers
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-6">
+                  <Crown className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <h3 className="font-medium mb-1">Choose Your Agent's Voice</h3>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+                    Select from multiple professional voices for your AI agent. Available on Business plans and above.
+                  </p>
+                  <Button variant="outline" onClick={() => navigate('/dashboard/subscriptions')}>
+                    Upgrade to Business
                   </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Agent Content - Gated for Pro+ */}
           {hasContextAccess ? (
@@ -473,7 +511,11 @@ export default function MyAgent() {
                   Agent Knowledge & Instructions
                 </CardTitle>
                 <CardDescription>
-                  Provide details about your business, services, pricing, and how the agent should handle calls
+                  Provide additional business details and call handling instructions. Your agent already uses services defined in{' '}
+                  <Link to="/dashboard/my-services" className="text-primary hover:underline">
+                    My Services
+                  </Link>{' '}
+                  to suggest appropriate options to customers.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -483,18 +525,27 @@ export default function MyAgent() {
 About the business:
 We are ABC Plumbing, serving the Dallas area since 1985.
 
-Services and pricing:
-- Emergency repairs: $149 call-out fee
-- Water heater installation: Starting at $899
-- Drain cleaning: $75
-
 How to handle calls:
 - Always be friendly and professional
 - Ask for caller's name and phone number
-- For emergencies, collect address immediately"
+- For emergencies, collect address immediately
+
+Additional notes:
+- We offer 10% senior discount
+- Weekend appointments available"
                   value={agentContent}
                   onChange={(e) => setAgentContent(e.target.value)}
                 />
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="hidePrices"
+                    checked={hidePricesFromCustomers}
+                    onCheckedChange={(checked) => setHidePricesFromCustomers(checked === true)}
+                  />
+                  <Label htmlFor="hidePrices" className="text-sm font-normal cursor-pointer">
+                    Don't share pricing with customers (agent will ask them to inquire for quotes)
+                  </Label>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className={`text-sm ${getWordCount(agentContent) > MAX_CONTENT_WORDS ? 'text-destructive' : 'text-muted-foreground'}`}>
                     {getWordCount(agentContent)} / {MAX_CONTENT_WORDS} words
@@ -514,7 +565,7 @@ How to handle calls:
                   Agent Knowledge & Instructions
                 </CardTitle>
                 <CardDescription>
-                  Provide details about your business, services, pricing, and how the agent should handle calls
+                  Provide additional business details and call handling instructions
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -522,7 +573,7 @@ How to handle calls:
                   <Crown className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                   <h3 className="font-medium mb-1">Define Custom Context</h3>
                   <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
-                    Train your AI agent with custom business knowledge, pricing information, and call handling instructions. Available on Pro plans and above.
+                    Train your AI agent with custom business knowledge and call handling instructions. Control whether to share pricing with customers. Available on Pro plans and above.
                   </p>
                   <Button variant="outline" onClick={() => navigate('/dashboard/subscriptions')}>
                     Upgrade to Pro

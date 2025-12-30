@@ -43,6 +43,27 @@ export function createAnonClient(): SupabaseClient {
 }
 
 /**
+ * Create a client with user's JWT for RLS-protected queries
+ */
+export function createUserClient(jwt: string): SupabaseClient {
+  if (!config.supabase.anonKey) {
+    throw new EdgeFunctionError(
+      'Anon key not configured',
+      'CONFIG_ERROR',
+      500
+    );
+  }
+
+  return createClient(config.supabase.url, config.supabase.anonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+      },
+    },
+  });
+}
+
+/**
  * Get user from authorization header
  */
 export async function getUserFromAuth(

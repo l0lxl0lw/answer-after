@@ -74,7 +74,7 @@ export default function Schedules() {
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div>
-            <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Schedule</h1>
+            <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Calendar</h1>
             <p className="text-muted-foreground">
               View and manage your appointments via Google Calendar
             </p>

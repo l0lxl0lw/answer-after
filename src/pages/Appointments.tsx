@@ -80,7 +80,7 @@ export default function Appointments() {
         >
           <div>
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">
-              Appointments
+              Bookings
             </h1>
             <p className="text-muted-foreground">
               View and manage scheduled service appointments
@@ -140,7 +140,7 @@ export default function Appointments() {
             <CardHeader>
               <CardTitle className="font-display text-lg flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-primary" />
-                Appointments ({meta?.total || 0})
+                Bookings ({meta?.total || 0})
               </CardTitle>
             </CardHeader>
             <CardContent>

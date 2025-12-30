@@ -11,7 +11,6 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     price_cents: 2900,        // $29/month
     credits: 250,
     features: ['AI call answering', 'Appointment booking', 'SMS notifications', 'Call recordings'],
-    phone_lines: 1,
     has_custom_agent: false,
     has_outbound_reminders: false,
     has_priority_support: false,
@@ -20,6 +19,8 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     has_sla_guarantee: false,
     has_hipaa_compliance: false,
     has_custom_ai_training: false,
+    has_voice_selection: false,   // Core does NOT have voice selection
+    has_multi_language: false,    // Core does NOT have multi-language
     support_level: 'email',
     is_popular: false,
     is_active: true,
@@ -32,10 +33,9 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     plan_id: 'growth',
     name: 'Growth',
     description: 'For growing businesses',
-    price_cents: 9900,        // $99/month (not $79)
+    price_cents: 9900,        // $99/month
     credits: 600,
     features: ['Custom greeting', 'Service configuration', 'Priority support', 'Call recordings'],
-    phone_lines: 1,           // 1 phone line (not 2)
     has_custom_agent: true,
     has_outbound_reminders: false,  // Growth does NOT have outbound reminders
     has_priority_support: true,
@@ -44,6 +44,8 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     has_sla_guarantee: false,
     has_hipaa_compliance: false,
     has_custom_ai_training: false,
+    has_voice_selection: false,   // Growth does NOT have voice selection
+    has_multi_language: false,    // Growth does NOT have multi-language
     support_level: 'priority',
     is_popular: true,
     is_active: true,
@@ -56,10 +58,9 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     plan_id: 'pro',
     name: 'Pro',
     description: 'Advanced features',
-    price_cents: 19900,       // $199/month (not $149)
+    price_cents: 19900,       // $199/month
     credits: 1400,
     features: ['Custom instructions', 'Outbound reminders', 'Dedicated support', 'Custom AI training'],
-    phone_lines: 1,           // 1 phone line (not 5)
     has_custom_agent: true,
     has_outbound_reminders: true,   // Pro has outbound reminders
     has_priority_support: true,
@@ -68,6 +69,8 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     has_sla_guarantee: false,
     has_hipaa_compliance: false,
     has_custom_ai_training: true,
+    has_voice_selection: false,   // Pro does NOT have voice selection
+    has_multi_language: false,    // Pro does NOT have multi-language
     support_level: 'dedicated',
     is_popular: false,
     is_active: true,
@@ -80,10 +83,9 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     plan_id: 'business',
     name: 'Business',
     description: 'Enterprise-ready',
-    price_cents: 49900,       // $499/month (not $299)
+    price_cents: 49900,       // $499/month
     credits: 3000,
-    features: ['API access', 'Custom AI training', 'Multiple phone lines', 'Enterprise support'],
-    phone_lines: 2,           // 2 phone lines (not 10)
+    features: ['API access', 'Voice selection', 'Multi-language (2 max)', 'Enterprise support'],
     has_custom_agent: true,
     has_outbound_reminders: true,
     has_priority_support: true,
@@ -92,6 +94,8 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     has_sla_guarantee: false,       // Business does NOT have SLA guarantee
     has_hipaa_compliance: false,    // Business does NOT have HIPAA
     has_custom_ai_training: true,
+    has_voice_selection: true,    // Business has voice selection
+    has_multi_language: true,     // Business has multi-language (2 max)
     support_level: 'enterprise',
     is_popular: false,
     is_active: true,
@@ -111,7 +115,6 @@ export const mockEnterpriseTier: SubscriptionTier = {
   price_cents: 0,            // 0 in DB (custom pricing)
   credits: 0,                // 0 in DB (custom allocation)
   features: ['Everything in Business', 'Custom integrations', 'Dedicated account manager'],
-  phone_lines: 0,            // 0 in DB (custom allocation)
   has_custom_agent: true,
   has_outbound_reminders: true,
   has_priority_support: true,
@@ -120,6 +123,8 @@ export const mockEnterpriseTier: SubscriptionTier = {
   has_sla_guarantee: true,   // Enterprise has SLA
   has_hipaa_compliance: true, // Enterprise has HIPAA
   has_custom_ai_training: true,
+  has_voice_selection: true,  // Enterprise has voice selection
+  has_multi_language: true,   // Enterprise has multi-language
   support_level: 'enterprise',
   is_popular: false,
   is_active: true,
