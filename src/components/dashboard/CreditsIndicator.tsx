@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/hooks/use-api";
 import { useTotalAvailableCredits, useCreateCreditTopup } from "@/hooks/use-credits";
+import { toast } from "sonner";
 import {
   Popover,
   PopoverContent,
@@ -59,20 +61,49 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
   const createTopup = useCreateCreditTopup();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const { theme, setTheme } = useTheme();
 
-  const totalCredits = subscription?.total_credits ?? 1000;
-  const usedCredits = subscription?.used_credits ?? 0;
-  const subscriptionRemaining = totalCredits - usedCredits;
-  const remainingCredits = subscriptionRemaining + purchasedCredits;
-  const percentageUsed = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
-  const percentageRemaining = 100 - percentageUsed;
-  
-  // Warning thresholds
-  const isLowBalance = percentageRemaining <= 25;
-  const isCriticalBalance = percentageRemaining <= 10;
+  // Handle topup success - invalidate cache and show toast
+  useEffect(() => {
+    const topupSuccess = searchParams.get('topup');
+    const creditsAdded = searchParams.get('credits');
+
+    if (topupSuccess === 'success') {
+      // Invalidate purchased credits cache to fetch fresh data
+      queryClient.invalidateQueries({ queryKey: ['purchased-credits'] });
+
+      // Show success toast
+      toast.success('Credits added!', {
+        description: `${creditsAdded || '300'} credits have been added to your account.`,
+      });
+
+      // Clean up URL params
+      searchParams.delete('topup');
+      searchParams.delete('credits');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, queryClient]);
+
+  const planTotalCredits = subscription?.total_credits ?? 1000;
+  const planUsedCredits = subscription?.used_credits ?? 0;
+  const planRemainingCredits = planTotalCredits - planUsedCredits;
+
+  // Total available = plan remaining + purchased bonus credits
+  const totalAvailableCredits = planRemainingCredits + purchasedCredits;
+  const totalPoolCredits = planTotalCredits + purchasedCredits;
+
+  // Percentage is based on total available vs total pool
+  const percentageRemaining = totalPoolCredits > 0
+    ? (totalAvailableCredits / totalPoolCredits) * 100
+    : 0;
+
+  // Warning thresholds based on total available
+  const isLowBalance = totalAvailableCredits <= 100 || percentageRemaining <= 25;
+  const isCriticalBalance = totalAvailableCredits <= 25 || percentageRemaining <= 10;
 
   // SVG circle calculations
   const size = 40;
@@ -136,10 +167,12 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
           )}
         />
       </svg>
-      {/* Percentage text */}
+      {/* Credit count - format large numbers */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] font-medium text-foreground">
-          {Math.round(percentageRemaining)}%
+        <span className="text-[9px] font-semibold text-foreground">
+          {totalAvailableCredits >= 1000
+            ? `${(totalAvailableCredits / 1000).toFixed(1)}k`
+            : totalAvailableCredits}
         </span>
       </div>
     </div>
@@ -167,7 +200,7 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="right" className="text-xs">
-            {remainingCredits.toLocaleString()} credits remaining ({Math.round(percentageRemaining)}%)
+            {totalAvailableCredits.toLocaleString()} credits available
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -183,48 +216,55 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CircularProgress />
-              <span className="font-medium">Balance</span>
+              <div>
+                <span className={cn(
+                  "text-xl font-bold",
+                  isCriticalBalance && "text-destructive",
+                  isLowBalance && !isCriticalBalance && "text-warning"
+                )}>
+                  {totalAvailableCredits.toLocaleString()}
+                </span>
+                <span className="text-sm text-muted-foreground ml-1">credits</span>
+              </div>
             </div>
-            <div className="flex gap-1">
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                className="h-7 text-xs px-2"
-                onClick={handleTopup}
-                disabled={createTopup.isPending}
-              >
-                {createTopup.isPending ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <>
-                    <Plus className="w-3 h-3 mr-1" />
-                    Top Up
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs px-2"
+              onClick={handleTopup}
+              disabled={createTopup.isPending}
+            >
+              {createTopup.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="w-3 h-3 mr-1" />
+                  Top Up
+                </>
+              )}
+            </Button>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm pl-12">
-            <span className="text-muted-foreground">Plan credits</span>
-            <span className={cn(
-              "text-right font-medium",
-              isCriticalBalance && "text-destructive",
-              isLowBalance && !isCriticalBalance && "text-warning"
-            )}>
-              {subscriptionRemaining.toLocaleString()}
-            </span>
+
+          {/* Breakdown */}
+          <div className="space-y-1.5 text-sm border-t border-border pt-3">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Monthly plan</span>
+              <span>
+                <span className="font-medium">{planRemainingCredits.toLocaleString()}</span>
+                <span className="text-muted-foreground"> / {planTotalCredits.toLocaleString()}</span>
+              </span>
+            </div>
             {purchasedCredits > 0 && (
-              <>
-                <span className="text-muted-foreground">Purchased</span>
-                <span className="text-right font-medium text-success">+{purchasedCredits.toLocaleString()}</span>
-              </>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Bonus credits</span>
+                <span className="font-medium text-success">+{purchasedCredits.toLocaleString()}</span>
+              </div>
             )}
-            <span className="text-muted-foreground font-medium">Total</span>
-            <span className="text-right font-semibold">{remainingCredits.toLocaleString()}</span>
           </div>
+
           {isLowBalance && (
             <p className={cn(
-              "text-xs pl-12",
+              "text-xs",
               isCriticalBalance ? "text-destructive" : "text-warning"
             )}>
               {isCriticalBalance ? "Credits running low!" : "Consider upgrading or topping up"}

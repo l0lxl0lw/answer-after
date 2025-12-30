@@ -149,13 +149,13 @@ describe('SelectPlan UI', () => {
       expect(screen.getByText('Business')).toBeInTheDocument();
     });
 
-    it('displays correct pricing ($29, $79, $149, $299)', () => {
+    it('displays correct pricing ($29, $99, $199, $499)', () => {
       render(<SelectPlan />, { wrapper: createWrapper() });
 
       expect(screen.getByText('$29')).toBeInTheDocument();
-      expect(screen.getByText('$79')).toBeInTheDocument();
-      expect(screen.getByText('$149')).toBeInTheDocument();
-      expect(screen.getByText('$299')).toBeInTheDocument();
+      expect(screen.getByText('$99')).toBeInTheDocument();
+      expect(screen.getByText('$199')).toBeInTheDocument();
+      expect(screen.getByText('$499')).toBeInTheDocument();
     });
 
     it('shows "Most Popular" badge on Growth tier', () => {

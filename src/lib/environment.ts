@@ -33,10 +33,11 @@ export const isProductionEnvironment = (): boolean => {
 
 /**
  * Determine if Stripe integration should be skipped
- * Now enabled in all environments including local (using test mode)
+ * Stripe is enabled in all environments (local uses test mode keys)
+ * For local dev, run: stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook
  */
 export const shouldSkipStripe = (): boolean => {
-  // Stripe is now enabled in all environments
+  // Stripe is enabled in all environments
   // Local uses test mode keys, prod uses live keys
   return false;
 };

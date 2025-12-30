@@ -1,21 +1,22 @@
 import type { SubscriptionTier } from '@/hooks/use-api';
 
-// Mock subscription tiers matching the database schema
+// Mock subscription tiers matching the ACTUAL database schema
+// Last verified: 2024-12-30 from local Supabase
 export const mockSubscriptionTiers: SubscriptionTier[] = [
   {
     id: 'tier-1',
     plan_id: 'core',
     name: 'Core',
     description: 'Perfect for getting started',
-    price_cents: 2900,
+    price_cents: 2900,        // $29/month
     credits: 250,
-    features: ['AI call answering', 'Appointment booking', 'SMS notifications', 'Basic support'],
+    features: ['AI call answering', 'Appointment booking', 'SMS notifications', 'Call recordings'],
     phone_lines: 1,
     has_custom_agent: false,
     has_outbound_reminders: false,
     has_priority_support: false,
     has_api_access: false,
-    has_call_recordings: false,
+    has_call_recordings: true,  // Core DOES have call recordings
     has_sla_guarantee: false,
     has_hipaa_compliance: false,
     has_custom_ai_training: false,
@@ -31,12 +32,12 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     plan_id: 'growth',
     name: 'Growth',
     description: 'For growing businesses',
-    price_cents: 7900,
+    price_cents: 9900,        // $99/month (not $79)
     credits: 600,
     features: ['Custom greeting', 'Service configuration', 'Priority support', 'Call recordings'],
-    phone_lines: 2,
+    phone_lines: 1,           // 1 phone line (not 2)
     has_custom_agent: true,
-    has_outbound_reminders: true,
+    has_outbound_reminders: false,  // Growth does NOT have outbound reminders
     has_priority_support: true,
     has_api_access: false,
     has_call_recordings: true,
@@ -55,14 +56,14 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     plan_id: 'pro',
     name: 'Pro',
     description: 'Advanced features',
-    price_cents: 14900,
+    price_cents: 19900,       // $199/month (not $149)
     credits: 1400,
-    features: ['Custom instructions', 'API access', 'Dedicated support', 'Advanced analytics'],
-    phone_lines: 5,
+    features: ['Custom instructions', 'Outbound reminders', 'Dedicated support', 'Custom AI training'],
+    phone_lines: 1,           // 1 phone line (not 5)
     has_custom_agent: true,
-    has_outbound_reminders: true,
+    has_outbound_reminders: true,   // Pro has outbound reminders
     has_priority_support: true,
-    has_api_access: true,
+    has_api_access: false,          // Pro does NOT have API access
     has_call_recordings: true,
     has_sla_guarantee: false,
     has_hipaa_compliance: false,
@@ -79,17 +80,17 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
     plan_id: 'business',
     name: 'Business',
     description: 'Enterprise-ready',
-    price_cents: 29900,
+    price_cents: 49900,       // $499/month (not $299)
     credits: 3000,
-    features: ['HIPAA compliance', 'Custom AI training', 'SLA guarantee', 'White-label option'],
-    phone_lines: 10,
+    features: ['API access', 'Custom AI training', 'Multiple phone lines', 'Enterprise support'],
+    phone_lines: 2,           // 2 phone lines (not 10)
     has_custom_agent: true,
     has_outbound_reminders: true,
     has_priority_support: true,
-    has_api_access: true,
+    has_api_access: true,           // Only Business+ has API access
     has_call_recordings: true,
-    has_sla_guarantee: true,
-    has_hipaa_compliance: true,
+    has_sla_guarantee: false,       // Business does NOT have SLA guarantee
+    has_hipaa_compliance: false,    // Business does NOT have HIPAA
     has_custom_ai_training: true,
     support_level: 'enterprise',
     is_popular: false,
@@ -100,23 +101,24 @@ export const mockSubscriptionTiers: SubscriptionTier[] = [
   },
 ];
 
-// Mock enterprise tier (should be filtered out)
+// Mock enterprise tier (should be filtered out in UI)
+// Last verified: 2024-12-30 from local Supabase
 export const mockEnterpriseTier: SubscriptionTier = {
   id: 'tier-5',
   plan_id: 'enterprise',
   name: 'Enterprise',
   description: 'Custom solutions',
-  price_cents: -1,
-  credits: 10000,
+  price_cents: 0,            // 0 in DB (custom pricing)
+  credits: 0,                // 0 in DB (custom allocation)
   features: ['Everything in Business', 'Custom integrations', 'Dedicated account manager'],
-  phone_lines: 100,
+  phone_lines: 0,            // 0 in DB (custom allocation)
   has_custom_agent: true,
   has_outbound_reminders: true,
   has_priority_support: true,
   has_api_access: true,
   has_call_recordings: true,
-  has_sla_guarantee: true,
-  has_hipaa_compliance: true,
+  has_sla_guarantee: true,   // Enterprise has SLA
+  has_hipaa_compliance: true, // Enterprise has HIPAA
   has_custom_ai_training: true,
   support_level: 'enterprise',
   is_popular: false,

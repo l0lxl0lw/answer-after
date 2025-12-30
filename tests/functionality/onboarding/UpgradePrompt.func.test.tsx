@@ -13,9 +13,29 @@ import {
 // Mock navigate function
 const mockNavigate = vi.fn();
 
-// Mock useQuery for subscription
-let mockSubscriptionQuery = {
-  data: { plan: 'core', status: 'trial' },
+// Mock for useCurrentSubscriptionTier hook - tests DB-driven feature gating
+let mockCurrentTierData = {
+  subscription: { plan: 'core', status: 'trial' },
+  currentPlanId: 'core',
+  currentTier: mockSubscriptionTiers[0],
+  isLoading: false,
+  features: {
+    hasCustomAgent: false,
+    hasOutboundReminders: false,
+    hasCallRecordings: true,
+    hasApiAccess: false,
+    hasPrioritySupport: false,
+    hasCustomAiTraining: false,  // DB flag: determines if upgrade prompt is skipped
+    hasSlaGuarantee: false,
+    hasHipaaCompliance: false,
+    phoneLines: 1,
+    credits: 250,
+  },
+};
+
+// Mock for useSubscriptionTiers
+let mockTiersData = {
+  data: mockSubscriptionTiers,
   isLoading: false,
   error: null,
 };
@@ -40,20 +60,11 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock useSubscriptionTiers
-const mockUseSubscriptionTiers = vi.fn();
+// Mock use-api hooks - now uses DB feature flags
 vi.mock('@/hooks/use-api', () => ({
-  useSubscriptionTiers: () => mockUseSubscriptionTiers(),
+  useSubscriptionTiers: () => mockTiersData,
+  useCurrentSubscriptionTier: () => mockCurrentTierData,
 }));
-
-// Mock useQuery
-vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual('@tanstack/react-query');
-  return {
-    ...actual,
-    useQuery: () => mockSubscriptionQuery,
-  };
-});
 
 // Mock AuthContext
 const mockSession = createMockSession();
@@ -111,17 +122,30 @@ describe('UpgradePrompt Functionality', () => {
     mockNavigate.mockClear();
 
     // Default: return subscription tiers
-    mockUseSubscriptionTiers.mockReturnValue({
+    mockTiersData = {
       data: mockSubscriptionTiers,
       isLoading: false,
       error: null,
-    });
+    };
 
-    // Default: core subscription
-    mockSubscriptionQuery = {
-      data: { plan: 'core', status: 'trial' },
+    // Default: core subscription (hasCustomAiTraining=false, shows upgrade prompt)
+    mockCurrentTierData = {
+      subscription: { plan: 'core', status: 'trial' },
+      currentPlanId: 'core',
+      currentTier: mockSubscriptionTiers[0],
       isLoading: false,
-      error: null,
+      features: {
+        hasCustomAgent: false,
+        hasOutboundReminders: false,
+        hasCallRecordings: true,
+        hasApiAccess: false,
+        hasPrioritySupport: false,
+        hasCustomAiTraining: false,
+        hasSlaGuarantee: false,
+        hasHipaaCompliance: false,
+        phoneLines: 1,
+        credits: 250,
+      },
     };
   });
 
@@ -140,10 +164,24 @@ describe('UpgradePrompt Functionality', () => {
     });
 
     it('Growth plan shows Pro as upgrade target', async () => {
-      mockSubscriptionQuery = {
-        data: { plan: 'growth', status: 'active' },
+      // Growth plan: hasCustomAiTraining=false, shows upgrade prompt
+      mockCurrentTierData = {
+        subscription: { plan: 'growth', status: 'active' },
+        currentPlanId: 'growth',
+        currentTier: mockSubscriptionTiers[1],
         isLoading: false,
-        error: null,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: false,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 600,
+        },
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });
@@ -154,11 +192,25 @@ describe('UpgradePrompt Functionality', () => {
       });
     });
 
-    it('Pro plan auto-redirects to /onboarding/setup-services', async () => {
-      mockSubscriptionQuery = {
-        data: { plan: 'pro', status: 'active' },
+    it('Pro plan auto-redirects to /onboarding/setup-services (hasCustomAiTraining=true)', async () => {
+      // Pro plan: hasCustomAiTraining=true (DB flag), skips upgrade prompt
+      mockCurrentTierData = {
+        subscription: { plan: 'pro', status: 'active' },
+        currentPlanId: 'pro',
+        currentTier: mockSubscriptionTiers[2],
         isLoading: false,
-        error: null,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: true,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: true, // This DB flag triggers the skip
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 1400,
+        },
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });
@@ -168,11 +220,25 @@ describe('UpgradePrompt Functionality', () => {
       });
     });
 
-    it('Business plan auto-redirects to /onboarding/setup-services', async () => {
-      mockSubscriptionQuery = {
-        data: { plan: 'business', status: 'active' },
+    it('Business plan auto-redirects to /onboarding/setup-services (hasCustomAiTraining=true)', async () => {
+      // Business plan: hasCustomAiTraining=true (DB flag), skips upgrade prompt
+      mockCurrentTierData = {
+        subscription: { plan: 'business', status: 'active' },
+        currentPlanId: 'business',
+        currentTier: mockSubscriptionTiers[3],
         isLoading: false,
-        error: null,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: true,
+          hasCallRecordings: true,
+          hasApiAccess: true,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: true, // This DB flag triggers the skip
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 2,
+          credits: 3000,
+        },
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });
@@ -213,10 +279,9 @@ describe('UpgradePrompt Functionality', () => {
 
   describe('Error Handling', () => {
     it('redirects to /onboarding/select-plan when no subscription exists', async () => {
-      mockSubscriptionQuery = {
-        data: null,
-        isLoading: false,
-        error: null,
+      mockCurrentTierData = {
+        ...mockCurrentTierData,
+        subscription: null,
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });
@@ -227,10 +292,24 @@ describe('UpgradePrompt Functionality', () => {
     });
 
     it('defaults to Core when plan field is missing', async () => {
-      mockSubscriptionQuery = {
-        data: { status: 'trial' }, // No plan field
+      // currentPlanId defaults to 'core' when subscription.plan is missing
+      mockCurrentTierData = {
+        subscription: { status: 'trial' }, // No plan field
+        currentPlanId: 'core',
+        currentTier: mockSubscriptionTiers[0],
         isLoading: false,
-        error: null,
+        features: {
+          hasCustomAgent: false,
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: false,
+          hasCustomAiTraining: false,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 250,
+        },
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });

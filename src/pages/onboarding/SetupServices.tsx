@@ -9,8 +9,12 @@ import { ArrowRight, Sparkles, Plus, Trash2, Loader2, Wrench, Zap } from "lucide
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useCurrentSubscriptionTier } from "@/hooks/use-api";
 import { COMPANY } from "@/lib/constants";
+
+// Feature gating now uses DB flags from subscription_tiers table:
+// - has_custom_agent: Controls access to greeting/service customization (Growth+)
+// - has_custom_ai_training: Controls access to custom instructions (Pro+)
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger('SetupServices');
@@ -21,8 +25,6 @@ interface Service {
   price: string;
   duration: string;
 }
-
-type PlanTier = 'core' | 'growth' | 'pro' | 'business';
 
 export default function SetupServices() {
   const [greeting, setGreeting] = useState("");
@@ -37,56 +39,33 @@ export default function SetupServices() {
   const { toast } = useToast();
   const { session, user } = useAuth();
 
-  // Fetch user's current plan
-  const { data: subscription, isLoading: isLoadingPlan } = useQuery({
-    queryKey: ['user-plan', user?.organization_id],
-    queryFn: async () => {
-      if (!user?.organization_id) return null;
+  // Use the new hook that provides tier data with feature flags
+  const { currentPlanId, currentTier, features, isLoading: isLoadingPlan } = useCurrentSubscriptionTier();
 
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('plan')
-        .eq('organization_id', user.organization_id)
-        .maybeSingle();
+  log.debug('Current plan from database:', currentPlanId, 'Tier:', currentTier?.name);
 
-      if (error) {
-        log.error('Error fetching subscription:', error);
-        return null;
-      }
+  // Plan capabilities - now using DB feature flags instead of hardcoded plan names
+  // has_custom_agent = true for Growth, Pro, Business (enables greeting & service customization)
+  // has_custom_ai_training = true for Pro, Business (enables custom instructions)
+  const hasGreetingSetup = features.hasCustomAgent;
+  const hasServiceSetup = features.hasCustomAgent;
+  const hasContextSetup = features.hasCustomAiTraining;
 
-      if (!data) {
-        log.debug('No subscription found in database');
-        return null;
-      }
-
-      return data;
-    },
-    enabled: !!user?.organization_id,
-  });
-
-  // Use database as source of truth for plan
-  const currentPlan = (subscription?.plan as PlanTier) || 'core';
-  log.debug('Current plan from database:', currentPlan);
-
-  // Plan capabilities
-  const hasGreetingSetup = currentPlan !== 'core'; // Growth, Pro, Business
-  const hasServiceSetup = currentPlan !== 'core'; // Growth, Pro, Business
-  const hasContextSetup = currentPlan === 'pro' || currentPlan === 'business'; // Pro, Business only
-
-  // Core plan: Auto-create agent with defaults and skip
+  // Core plan (no custom agent): Auto-create agent with defaults and skip
+  // Using feature flag instead of hardcoded plan name check
   useEffect(() => {
-    if (!isLoadingPlan && currentPlan === 'core' && user?.organization_id && session) {
-      log.debug('Core plan detected, auto-creating default agent');
+    if (!isLoadingPlan && !features.hasCustomAgent && user?.organization_id && session) {
+      log.debug('Plan without custom agent detected, auto-creating default agent');
       handleCoreAutoSetup();
     }
-  }, [isLoadingPlan, currentPlan, user?.organization_id, session]);
+  }, [isLoadingPlan, features.hasCustomAgent, user?.organization_id, session]);
 
-  // Load existing data for non-core plans
+  // Load existing data for plans with custom agent capability
   useEffect(() => {
-    if (currentPlan !== 'core') {
+    if (features.hasCustomAgent) {
       loadExistingData();
     }
-  }, [user?.organization_id, currentPlan]);
+  }, [user?.organization_id, features.hasCustomAgent]);
 
   const loadExistingData = async () => {
     if (!user?.organization_id) return;
@@ -287,7 +266,7 @@ export default function SetupServices() {
       // Create or update ElevenLabs agent
       const action = existingAgent?.elevenlabs_agent_id ? "update-agent" : "create-agent";
 
-      log.debug(`${action} for plan:`, currentPlan);
+      log.debug(`${action} for plan:`, currentPlanId);
 
       const { error: agentError } = await supabase.functions.invoke("elevenlabs-agent", {
         headers: {
@@ -334,8 +313,8 @@ export default function SetupServices() {
     );
   }
 
-  // Core plan: Show auto-setup message
-  if (currentPlan === 'core') {
+  // Plans without custom agent capability: Show auto-setup message
+  if (!features.hasCustomAgent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <motion.div
@@ -361,8 +340,8 @@ export default function SetupServices() {
     );
   }
 
-  // Growth/Pro/Business: Show form
-  const stepNumber = currentPlan === 'growth' ? '4' : '4';
+  // Plans with custom agent capability: Show form
+  const stepNumber = '4'; // Step 4 of 6 for all plans that show this form
   const stepTotal = '6';
 
   return (

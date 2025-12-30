@@ -26,16 +26,21 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOrganization, usePhoneNumbers, useSubscription } from '@/hooks/use-api';
+import { useOrganization, usePhoneNumbers, useSubscription, useCurrentSubscriptionTier } from '@/hooks/use-api';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Feature gating uses DB flags from subscription_tiers table:
+// - phone_lines: Number of dedicated phone lines available for the plan
 
 export default function Settings() {
   const { user } = useAuth();
   const { data: organization, isLoading: orgLoading } = useOrganization();
   const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
+  // Use the new hook to get tier-specific feature flags like phone_lines
+  const { currentTier, features } = useCurrentSubscriptionTier();
 
   const [isAddingPhone, setIsAddingPhone] = useState(false);
   const [addPhoneOpen, setAddPhoneOpen] = useState(false);
@@ -599,34 +604,29 @@ export default function Settings() {
                           </div>
                           <div>
                             <p className="font-semibold text-lg">
-                              {subscription?.plan === 'free' ? 'Shared Phone Line' : 'Dedicated Phone Line'}
+                              {features.phoneLines === 0 ? 'Shared Phone Line' : 'Dedicated Phone Line'}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {subscription?.plan === 'free' 
+                              {features.phoneLines === 0
                                 ? 'Your calls are handled on a shared line with other free users'
-                                : `You have ${
-                                    subscription?.plan === 'starter' ? '1 dedicated phone line' :
-                                    subscription?.plan === 'pro' ? '2 dedicated phone lines' :
-                                    subscription?.plan === 'business' ? '5 dedicated phone lines' :
-                                    'dedicated phone lines'
-                                  } for your business`
+                                : `You have ${features.phoneLines} dedicated phone line${features.phoneLines > 1 ? 's' : ''} for your business`
                               }
                             </p>
                           </div>
                         </div>
-                        <Badge 
-                          variant={subscription?.plan === 'free' ? 'secondary' : 'default'}
+                        <Badge
+                          variant={features.phoneLines === 0 ? 'secondary' : 'default'}
                           className="text-sm px-3 py-1"
                         >
-                          {subscription?.plan === 'free' ? 'Shared' : 'Dedicated'}
+                          {features.phoneLines === 0 ? 'Shared' : 'Dedicated'}
                         </Badge>
                       </div>
-                      
-                      {subscription?.plan === 'free' && (
+
+                      {features.phoneLines === 0 && (
                         <div className="p-4 rounded-lg border border-primary/20 bg-primary/5">
                           <p className="text-sm text-muted-foreground">
                             <strong className="text-foreground">Want a dedicated phone line?</strong>{' '}
-                            Upgrade to the Starter plan or higher to get your own dedicated phone number for your business.
+                            Upgrade your plan to get your own dedicated phone number for your business.
                           </p>
                           <Button variant="outline" size="sm" className="mt-3" onClick={() => window.location.href = '/dashboard/subscriptions'}>
                             View Plans

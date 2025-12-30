@@ -167,31 +167,65 @@ serve(async (req) => {
         log.info('Call record updated', { callId: existingCall.id, status: dbStatus, outcome, duration: callDuration });
 
         // Deduct credits based on call duration (1 credit per second)
+        // Priority: Use purchased credits first, then plan credits
         if (callDuration && callDuration > 0 && existingCall.organization_id) {
-          const { data: subscription } = await supabase
-            .from('subscriptions')
-            .select('id, used_credits, total_credits')
+          let remainingToDeduct = callDuration;
+          let purchasedCreditsUsed = 0;
+          let planCreditsUsed = 0;
+
+          // First, try to deduct from purchased credits (FIFO - oldest first)
+          const { data: purchasedCredits } = await supabase
+            .from('purchased_credits')
+            .select('id, credits_remaining')
             .eq('organization_id', existingCall.organization_id)
-            .maybeSingle();
+            .gt('credits_remaining', 0)
+            .order('purchased_at', { ascending: true });
 
-          if (subscription) {
-            const newUsedCredits = Math.min(
-              subscription.used_credits + callDuration,
-              subscription.total_credits
-            );
+          if (purchasedCredits && purchasedCredits.length > 0) {
+            for (const pc of purchasedCredits) {
+              if (remainingToDeduct <= 0) break;
 
-            await supabase
-              .from('subscriptions')
-              .update({ used_credits: newUsedCredits })
-              .eq('id', subscription.id);
+              const deductFromThis = Math.min(remainingToDeduct, pc.credits_remaining);
+              const newRemaining = pc.credits_remaining - deductFromThis;
 
-            log.info('Credits deducted', {
-              organizationId: existingCall.organization_id,
-              deducted: callDuration,
-              newUsed: newUsedCredits,
-              total: subscription.total_credits
-            });
+              await supabase
+                .from('purchased_credits')
+                .update({ credits_remaining: newRemaining })
+                .eq('id', pc.id);
+
+              purchasedCreditsUsed += deductFromThis;
+              remainingToDeduct -= deductFromThis;
+            }
           }
+
+          // If there's still credits to deduct, use plan credits
+          if (remainingToDeduct > 0) {
+            const { data: subscription } = await supabase
+              .from('subscriptions')
+              .select('id, used_credits, total_credits')
+              .eq('organization_id', existingCall.organization_id)
+              .maybeSingle();
+
+            if (subscription) {
+              const availablePlanCredits = subscription.total_credits - subscription.used_credits;
+              planCreditsUsed = Math.min(remainingToDeduct, availablePlanCredits);
+
+              const newUsedCredits = subscription.used_credits + planCreditsUsed;
+
+              await supabase
+                .from('subscriptions')
+                .update({ used_credits: newUsedCredits })
+                .eq('id', subscription.id);
+            }
+          }
+
+          log.info('Credits deducted', {
+            organizationId: existingCall.organization_id,
+            callDuration,
+            purchasedCreditsUsed,
+            planCreditsUsed,
+            totalDeducted: purchasedCreditsUsed + planCreditsUsed
+          });
         }
       }
 

@@ -2,21 +2,31 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2, ArrowRight, Sparkles } from "lucide-react";
+import { Check, Loader2, ArrowRight, Sparkles, Terminal, Copy, CheckCheck } from "lucide-react";
 import { useSubscriptionTiers } from "@/hooks/use-api";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { shouldSkipStripe } from "@/lib/environment";
+import { shouldSkipStripe, isLocalEnvironment } from "@/lib/environment";
 import { LINKS, COMPANY } from "@/lib/constants";
 
 export default function SelectPlan() {
   const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { session } = useAuth();
+  const isLocal = isLocalEnvironment();
+
+  const stripeListenCommand = "stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook";
+
+  const copyCommand = async () => {
+    await navigator.clipboard.writeText(stripeListenCommand);
+    setCopiedCommand(true);
+    setTimeout(() => setCopiedCommand(false), 2000);
+  };
 
   const formatPrice = (priceCents: number) => {
     if (priceCents < 0) return "Custom";
@@ -151,6 +161,41 @@ export default function SelectPlan() {
             🎉 Your first month is only $1 on any plan
           </div>
         </motion.div>
+
+        {/* Local Dev Stripe Webhook Reminder */}
+        {isLocal && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400"
+          >
+            <div className="flex items-start gap-3">
+              <Terminal className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <p className="font-semibold text-sm">Local Development: Stripe Webhook Required</p>
+                <p className="text-xs opacity-80">
+                  Run this command in a separate terminal before checkout:
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-black/10 dark:bg-white/10 px-3 py-2 rounded font-mono overflow-x-auto">
+                    {stripeListenCommand}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20"
+                    onClick={copyCommand}
+                  >
+                    {copiedCommand ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs opacity-80">
+                  Then update <code className="bg-black/10 dark:bg-white/10 px-1 rounded">supabase/functions/.env</code> with the webhook secret and restart Supabase.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Loading State */}
         {isLoadingTiers && (

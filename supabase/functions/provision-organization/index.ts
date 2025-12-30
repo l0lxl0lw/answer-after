@@ -78,11 +78,35 @@ serve(async (req) => {
         .eq('id', existingProfile.organization_id)
         .single();
 
-      const { data: subscription } = await supabaseAdmin
-        .from('subscriptions')
-        .select('*')
-        .eq('organization_id', existingProfile.organization_id)
+      // Get tier credits for the selected plan
+      const { data: tierData } = await supabaseAdmin
+        .from('subscription_tiers')
+        .select('credits')
+        .eq('plan_id', planId)
         .single();
+
+      const totalCredits = tierData?.credits || 250;
+
+      // Update subscription to the selected plan (in case user is re-selecting during onboarding)
+      const { data: subscription, error: subUpdateError } = await supabaseAdmin
+        .from('subscriptions')
+        .upsert({
+          organization_id: existingProfile.organization_id,
+          plan: planId,
+          status: 'trial',
+          total_credits: totalCredits,
+          used_credits: 0,
+        }, {
+          onConflict: 'organization_id'
+        })
+        .select()
+        .single();
+
+      if (subUpdateError) {
+        log.warn('Failed to update subscription', { error: subUpdateError.message });
+      } else {
+        log.info('Subscription updated to selected plan', { plan: planId, credits: totalCredits });
+      }
 
       return successResponse({
         success: true,

@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles, Zap, Check, Loader2 } from "lucide-react";
 import { COMPANY } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import { createLogger } from "@/lib/logger";
-import { useQuery } from "@tanstack/react-query";
-import { useSubscriptionTiers } from "@/hooks/use-api";
+import { useCurrentSubscriptionTier, useSubscriptionTiers } from "@/hooks/use-api";
 import { useEffect } from "react";
+
+// Feature gating uses DB flags from subscription_tiers table:
+// - has_custom_ai_training: Pro/Business plans have this, skip upgrade prompt for them
 
 const log = createLogger('UpgradePrompt');
 
@@ -20,42 +21,21 @@ export default function UpgradePrompt() {
   const { user } = useAuth();
   const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
 
-  // Fetch user's current subscription plan
-  const { data: subscriptionData, isLoading: isLoadingSubscription } = useQuery({
-    queryKey: ['user-subscription-plan', user?.organization_id],
-    queryFn: async () => {
-      if (!user?.organization_id) return null;
-
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('plan, status')
-        .eq('organization_id', user.organization_id)
-        .maybeSingle();
-
-      if (error) {
-        log.error('Error fetching subscription:', error);
-        return null;
-      }
-
-      if (!data) {
-        log.debug('No subscription found in database');
-        return null;
-      }
-
-      log.debug('Subscription fetched:', data);
-      return data;
-    },
-    enabled: !!user?.organization_id,
-  });
+  // Use the new hook that provides subscription + tier data with feature flags
+  const {
+    subscription: subscriptionData,
+    currentPlanId,
+    currentTier,
+    features,
+    isLoading: isLoadingSubscription
+  } = useCurrentSubscriptionTier();
 
   const isLoading = isLoadingTiers || isLoadingSubscription;
-  // Use database as source of truth for plan
-  const currentPlanId = subscriptionData?.plan || 'core';
 
-  log.debug('Current plan from database:', currentPlanId);
+  log.debug('Current plan from database:', currentPlanId, 'Tier:', currentTier?.name);
 
-  // Get current plan details from tiers
-  const currentPlan = tiers?.find(t => t.plan_id === currentPlanId);
+  // Get current plan details from tiers (use currentTier from hook)
+  const currentPlan = currentTier;
 
   // Determine upgrade target (next tier up)
   const currentPlanIndex = PLAN_HIERARCHY.indexOf(currentPlanId);
@@ -66,7 +46,7 @@ export default function UpgradePrompt() {
 
   log.debug('Plan state:', { currentPlanId, currentPlanIndex, upgradePlanId, hasTiers: !!tiers?.length });
 
-  // Redirect based on subscription status
+  // Redirect based on subscription status and feature flags
   useEffect(() => {
     if (!isLoading) {
       // If no subscription at all, redirect to plan selection
@@ -76,13 +56,14 @@ export default function UpgradePrompt() {
         return;
       }
 
-      // If Pro or Business, skip upgrade prompt (they don't need it)
-      if (currentPlanId === 'pro' || currentPlanId === 'business') {
-        log.debug('Pro/Business plan detected, skipping upgrade prompt');
+      // Skip upgrade prompt for plans with custom AI training (Pro/Business)
+      // Using DB feature flag instead of hardcoded plan name check
+      if (features.hasCustomAiTraining) {
+        log.debug('Plan with custom AI training detected, skipping upgrade prompt');
         navigate("/onboarding/setup-services", { replace: true });
       }
     }
-  }, [isLoading, subscriptionData, currentPlanId, navigate]);
+  }, [isLoading, subscriptionData, features.hasCustomAiTraining, navigate]);
 
   const handleSkip = () => {
     navigate("/onboarding/setup-services");

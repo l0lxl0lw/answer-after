@@ -95,8 +95,8 @@ serve(async (req) => {
         },
       ],
       mode: "payment",
-      success_url: `${origin}/dashboard?topup=success&credits=${creditsAmount}`,
-      cancel_url: `${origin}/subscriptions?topup=cancelled`,
+      success_url: `${origin}/dashboard/subscriptions?topup=success&credits=${creditsAmount}`,
+      cancel_url: `${origin}/dashboard/subscriptions?topup=cancelled`,
       metadata: {
         supabase_user_id: user.id,
         credits_amount: creditsAmount.toString(),

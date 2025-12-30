@@ -12,10 +12,29 @@ import {
 // Mock navigate function
 const mockNavigate = vi.fn();
 
-// Mock useQuery for subscription
-const mockSubscriptionData = { plan: 'core', status: 'trial' };
-let mockSubscriptionQuery = {
-  data: mockSubscriptionData,
+// Mock for useCurrentSubscriptionTier hook
+let mockCurrentTierData = {
+  subscription: { plan: 'core', status: 'trial' },
+  currentPlanId: 'core',
+  currentTier: mockSubscriptionTiers[0],
+  isLoading: false,
+  features: {
+    hasCustomAgent: false,
+    hasOutboundReminders: false,
+    hasCallRecordings: true,
+    hasApiAccess: false,
+    hasPrioritySupport: false,
+    hasCustomAiTraining: false,
+    hasSlaGuarantee: false,
+    hasHipaaCompliance: false,
+    phoneLines: 1,
+    credits: 250,
+  },
+};
+
+// Mock for useSubscriptionTiers
+let mockTiersData = {
+  data: mockSubscriptionTiers,
   isLoading: false,
   error: null,
 };
@@ -40,20 +59,11 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock useSubscriptionTiers
-const mockUseSubscriptionTiers = vi.fn();
+// Mock use-api hooks - now uses DB feature flags
 vi.mock('@/hooks/use-api', () => ({
-  useSubscriptionTiers: () => mockUseSubscriptionTiers(),
+  useSubscriptionTiers: () => mockTiersData,
+  useCurrentSubscriptionTier: () => mockCurrentTierData,
 }));
-
-// Mock useQuery
-vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual('@tanstack/react-query');
-  return {
-    ...actual,
-    useQuery: () => mockSubscriptionQuery,
-  };
-});
 
 // Mock AuthContext
 const mockSession = createMockSession();
@@ -109,17 +119,30 @@ describe('UpgradePrompt UI', () => {
     mockNavigate.mockClear();
 
     // Default: return subscription tiers
-    mockUseSubscriptionTiers.mockReturnValue({
+    mockTiersData = {
       data: mockSubscriptionTiers,
       isLoading: false,
       error: null,
-    });
+    };
 
-    // Default: core subscription
-    mockSubscriptionQuery = {
-      data: { plan: 'core', status: 'trial' },
+    // Default: core subscription (hasCustomAiTraining=false, so shows upgrade prompt)
+    mockCurrentTierData = {
+      subscription: { plan: 'core', status: 'trial' },
+      currentPlanId: 'core',
+      currentTier: mockSubscriptionTiers[0],
       isLoading: false,
-      error: null,
+      features: {
+        hasCustomAgent: false,
+        hasOutboundReminders: false,
+        hasCallRecordings: true,
+        hasApiAccess: false,
+        hasPrioritySupport: false,
+        hasCustomAiTraining: false,
+        hasSlaGuarantee: false,
+        hasHipaaCompliance: false,
+        phoneLines: 1,
+        credits: 250,
+      },
     };
   });
 
@@ -129,15 +152,15 @@ describe('UpgradePrompt UI', () => {
 
   describe('Loading State', () => {
     it('renders loading spinner when data is loading', () => {
-      mockUseSubscriptionTiers.mockReturnValue({
+      mockTiersData = {
         data: undefined,
         isLoading: true,
         error: null,
-      });
-      mockSubscriptionQuery = {
-        data: undefined,
+      };
+      mockCurrentTierData = {
+        ...mockCurrentTierData,
         isLoading: true,
-        error: null,
+        currentTier: null,
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });
@@ -169,7 +192,8 @@ describe('UpgradePrompt UI', () => {
       render(<UpgradePrompt />, { wrapper: createWrapper() });
 
       await waitFor(() => {
-        expect(screen.getByText(/\$50 more than Core/)).toBeInTheDocument();
+        // Growth ($99) - Core ($29) = $70 more
+        expect(screen.getByText(/\$70 more than Core/)).toBeInTheDocument();
       });
     });
   });
@@ -192,10 +216,24 @@ describe('UpgradePrompt UI', () => {
     });
 
     it('displays "Upgrade to Pro" button for Growth plan', async () => {
-      mockSubscriptionQuery = {
-        data: { plan: 'growth', status: 'active' },
+      // Growth plan: has custom agent but not custom AI training
+      mockCurrentTierData = {
+        subscription: { plan: 'growth', status: 'active' },
+        currentPlanId: 'growth',
+        currentTier: mockSubscriptionTiers[1],
         isLoading: false,
-        error: null,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: false, // Still shows upgrade prompt
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 600,
+        },
       };
 
       render(<UpgradePrompt />, { wrapper: createWrapper() });

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { createMockSession, createMockAuthUser } from '../../mocks/mock-data';
+import { createMockSession, createMockAuthUser, mockSubscriptionTiers } from '../../mocks/mock-data';
 
 // Mock navigate function
 const mockNavigate = vi.fn();
@@ -12,7 +12,26 @@ const mockNavigate = vi.fn();
 // Mock Supabase functions
 const mockFunctionsInvoke = vi.fn();
 const mockFromQuery = vi.fn();
-let mockSubscriptionQuery = { data: { plan: 'growth' }, isLoading: false, error: null };
+
+// Mock for useCurrentSubscriptionTier hook - tests DB-driven feature gating
+let mockCurrentTierData = {
+  subscription: { plan: 'growth', status: 'active' },
+  currentPlanId: 'growth',
+  currentTier: mockSubscriptionTiers[1],
+  isLoading: false,
+  features: {
+    hasCustomAgent: true,        // DB flag: has_custom_agent
+    hasOutboundReminders: false,
+    hasCallRecordings: true,
+    hasApiAccess: false,
+    hasPrioritySupport: true,
+    hasCustomAiTraining: false,  // DB flag: has_custom_ai_training
+    hasSlaGuarantee: false,
+    hasHipaaCompliance: false,
+    phoneLines: 1,
+    credits: 600,
+  },
+};
 
 // Mock Supabase
 vi.mock('@/lib/supabase', () => ({
@@ -33,14 +52,10 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock useQuery
-vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual('@tanstack/react-query');
-  return {
-    ...actual,
-    useQuery: () => mockSubscriptionQuery,
-  };
-});
+// Mock use-api hooks - now using DB feature flags
+vi.mock('@/hooks/use-api', () => ({
+  useCurrentSubscriptionTier: () => mockCurrentTierData,
+}));
 
 // Mock AuthContext
 const mockSession = createMockSession();
@@ -113,8 +128,26 @@ describe('SetupServices Functionality', () => {
     mockFunctionsInvoke.mockClear();
     mockToast.mockClear();
 
-    // Reset defaults
-    mockSubscriptionQuery = { data: { plan: 'growth' }, isLoading: false, error: null };
+    // Reset defaults - Growth plan
+    mockCurrentTierData = {
+      subscription: { plan: 'growth', status: 'active' },
+      currentPlanId: 'growth',
+      currentTier: mockSubscriptionTiers[1],
+      isLoading: false,
+      features: {
+        hasCustomAgent: true,
+        hasOutboundReminders: false,
+        hasCallRecordings: true,
+        hasApiAccess: false,
+        hasPrioritySupport: true,
+        hasCustomAiTraining: false,
+        hasSlaGuarantee: false,
+        hasHipaaCompliance: false,
+        phoneLines: 1,
+        credits: 600,
+      },
+    };
+
     mockAuthValue = {
       user: mockUser,
       session: mockSession,
@@ -135,12 +168,30 @@ describe('SetupServices Functionality', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Core Plan Feature Gating', () => {
+  describe('Core Plan Feature Gating (hasCustomAgent=false)', () => {
     beforeEach(() => {
-      mockSubscriptionQuery = { data: { plan: 'core' }, isLoading: false, error: null };
+      // Core plan: no custom agent capability per DB flag
+      mockCurrentTierData = {
+        subscription: { plan: 'core', status: 'trial' },
+        currentPlanId: 'core',
+        currentTier: mockSubscriptionTiers[0],
+        isLoading: false,
+        features: {
+          hasCustomAgent: false,  // DB flag controls this
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: false,
+          hasCustomAiTraining: false,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 250,
+        },
+      };
     });
 
-    it('triggers automatic agent creation for Core plan', async () => {
+    it('triggers automatic agent creation for Core plan (hasCustomAgent=false)', async () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
@@ -155,7 +206,7 @@ describe('SetupServices Functionality', () => {
       });
     });
 
-    it('Core users cannot see greeting customization', async () => {
+    it('Core users cannot see greeting customization (hasCustomAgent=false)', async () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
@@ -163,7 +214,7 @@ describe('SetupServices Functionality', () => {
       });
     });
 
-    it('Core users cannot see services form', async () => {
+    it('Core users cannot see services form (hasCustomAgent=false)', async () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
@@ -172,12 +223,30 @@ describe('SetupServices Functionality', () => {
     });
   });
 
-  describe('Growth Plan Feature Gating', () => {
+  describe('Growth Plan Feature Gating (hasCustomAgent=true, hasCustomAiTraining=false)', () => {
     beforeEach(() => {
-      mockSubscriptionQuery = { data: { plan: 'growth' }, isLoading: false, error: null };
+      // Growth plan: has custom agent, no custom AI training per DB flags
+      mockCurrentTierData = {
+        subscription: { plan: 'growth', status: 'active' },
+        currentPlanId: 'growth',
+        currentTier: mockSubscriptionTiers[1],
+        isLoading: false,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: false,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 600,
+        },
+      };
     });
 
-    it('Growth plan shows greeting input', async () => {
+    it('Growth plan shows greeting input (hasCustomAgent=true)', async () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
@@ -185,7 +254,7 @@ describe('SetupServices Functionality', () => {
       });
     });
 
-    it('Growth plan shows services section', async () => {
+    it('Growth plan shows services section (hasCustomAgent=true)', async () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
@@ -193,7 +262,7 @@ describe('SetupServices Functionality', () => {
       });
     });
 
-    it('Growth plan hides custom instructions (Pro+ only)', async () => {
+    it('Growth plan hides custom instructions (hasCustomAiTraining=false)', async () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
@@ -202,9 +271,27 @@ describe('SetupServices Functionality', () => {
     });
   });
 
-  describe('Pro/Business Plan Feature Gating', () => {
+  describe('Pro/Business Plan Feature Gating (hasCustomAgent=true, hasCustomAiTraining=true)', () => {
     it('Pro plan shows all customization options', async () => {
-      mockSubscriptionQuery = { data: { plan: 'pro' }, isLoading: false, error: null };
+      // Pro plan: has both flags enabled per DB
+      mockCurrentTierData = {
+        subscription: { plan: 'pro', status: 'active' },
+        currentPlanId: 'pro',
+        currentTier: mockSubscriptionTiers[2],
+        isLoading: false,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: true,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: true,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 1400,
+        },
+      };
 
       render(<SetupServices />, { wrapper: createWrapper() });
 
@@ -216,7 +303,25 @@ describe('SetupServices Functionality', () => {
     });
 
     it('Business plan shows all customization options', async () => {
-      mockSubscriptionQuery = { data: { plan: 'business' }, isLoading: false, error: null };
+      // Business plan: has all flags enabled per DB
+      mockCurrentTierData = {
+        subscription: { plan: 'business', status: 'active' },
+        currentPlanId: 'business',
+        currentTier: mockSubscriptionTiers[3],
+        isLoading: false,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: true,
+          hasCallRecordings: true,
+          hasApiAccess: true,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: true,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 2,
+          credits: 3000,
+        },
+      };
 
       render(<SetupServices />, { wrapper: createWrapper() });
 
@@ -230,7 +335,25 @@ describe('SetupServices Functionality', () => {
 
   describe('Services CRUD', () => {
     beforeEach(() => {
-      mockSubscriptionQuery = { data: { plan: 'growth' }, isLoading: false, error: null };
+      // Growth plan for services testing
+      mockCurrentTierData = {
+        subscription: { plan: 'growth', status: 'active' },
+        currentPlanId: 'growth',
+        currentTier: mockSubscriptionTiers[1],
+        isLoading: false,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: false,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 600,
+        },
+      };
     });
 
     it('Add Another Service creates new row', async () => {
@@ -288,7 +411,25 @@ describe('SetupServices Functionality', () => {
 
   describe('Save Flow', () => {
     beforeEach(() => {
-      mockSubscriptionQuery = { data: { plan: 'growth' }, isLoading: false, error: null };
+      // Growth plan for save flow testing
+      mockCurrentTierData = {
+        subscription: { plan: 'growth', status: 'active' },
+        currentPlanId: 'growth',
+        currentTier: mockSubscriptionTiers[1],
+        isLoading: false,
+        features: {
+          hasCustomAgent: true,
+          hasOutboundReminders: false,
+          hasCallRecordings: true,
+          hasApiAccess: false,
+          hasPrioritySupport: true,
+          hasCustomAiTraining: false,
+          hasSlaGuarantee: false,
+          hasHipaaCompliance: false,
+          phoneLines: 1,
+          credits: 600,
+        },
+      };
     });
 
     it('calls elevenlabs-agent function on save', async () => {

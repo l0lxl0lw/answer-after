@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight, Plus } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -8,6 +10,7 @@ import { useCreateCreditTopup, useTotalAvailableCredits } from "@/hooks/use-cred
 import { cn } from "@/lib/utils";
 import { shouldSkipStripe } from "@/lib/environment";
 import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { LINKS } from "@/lib/constants";
 
 export default function Subscriptions() {
@@ -15,15 +18,46 @@ export default function Subscriptions() {
   const { data: tiers, isLoading: tiersLoading } = useSubscriptionTiers();
   const { purchasedCredits } = useTotalAvailableCredits();
   const createTopup = useCreateCreditTopup();
-  const { toast } = useToast();
+  const { toast: shadcnToast } = useToast();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPlan = subscription?.plan?.toLowerCase() || "core";
   const isLoading = subscriptionLoading || tiersLoading;
 
+  // Handle topup success - invalidate cache and show toast
+  useEffect(() => {
+    const topupStatus = searchParams.get('topup');
+    const creditsAdded = searchParams.get('credits');
+
+    if (topupStatus === 'success') {
+      // Invalidate purchased credits cache to fetch fresh data
+      queryClient.invalidateQueries({ queryKey: ['purchased-credits'] });
+
+      // Show success toast
+      toast.success('Credits added!', {
+        description: `${creditsAdded || '300'} credits have been added to your account.`,
+      });
+
+      // Clean up URL params
+      searchParams.delete('topup');
+      searchParams.delete('credits');
+      setSearchParams(searchParams, { replace: true });
+    } else if (topupStatus === 'cancelled') {
+      toast.info('Top-up cancelled', {
+        description: 'Your credit purchase was cancelled.',
+      });
+
+      // Clean up URL params
+      searchParams.delete('topup');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, queryClient]);
+
   const handleTopup = async () => {
     // Skip Stripe in local/development environment
     if (shouldSkipStripe()) {
-      toast({
+      shadcnToast({
         title: "Development Mode",
         description: "Stripe credit top-ups are disabled in local environment.",
       });
@@ -78,52 +112,26 @@ export default function Subscriptions() {
         )}
 
         {/* Current Usage */}
-        {!isLoading && subscription && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-8 p-5 rounded-xl bg-card border border-border max-w-md mx-auto"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-muted-foreground">Current Usage</span>
-              <span className="text-sm font-medium capitalize">{subscription.plan} Plan</span>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Plan Credits</span>
-                <span className="font-semibold">
-                  {((subscription.total_credits || 0) - (subscription.used_credits || 0)).toLocaleString()} remaining
-                </span>
-              </div>
-              {purchasedCredits > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span>Purchased Credits</span>
-                  <span className="font-semibold text-success">+{purchasedCredits.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div 
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    ((subscription.used_credits || 0) / (subscription.total_credits || 1)) > 0.8 
-                      ? "bg-destructive" 
-                      : ((subscription.used_credits || 0) / (subscription.total_credits || 1)) > 0.5 
-                        ? "bg-warning" 
-                        : "bg-success"
-                  )}
-                  style={{ 
-                    width: `${Math.min(((subscription.used_credits || 0) / (subscription.total_credits || 1)) * 100, 100)}%` 
-                  }}
-                />
-              </div>
-              <div className="flex justify-between items-center pt-1">
-                <p className="text-xs text-muted-foreground">
-                  {((subscription.total_credits || 0) - (subscription.used_credits || 0) + purchasedCredits).toLocaleString()} total available
-                </p>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+        {!isLoading && subscription && (() => {
+          const planTotal = subscription.total_credits || 0;
+          const planUsed = subscription.used_credits || 0;
+          const planRemaining = planTotal - planUsed;
+          const totalAvailable = planRemaining + purchasedCredits;
+          const totalPool = planTotal + purchasedCredits;
+          const percentageUsed = totalPool > 0 ? (planUsed / totalPool) * 100 : 0;
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="mb-8 p-5 rounded-xl bg-card border border-border max-w-md mx-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-muted-foreground capitalize">{subscription.plan} Plan</span>
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="h-7 text-xs"
                   onClick={handleTopup}
                   disabled={createTopup.isPending}
@@ -138,9 +146,46 @@ export default function Subscriptions() {
                   )}
                 </Button>
               </div>
-            </div>
-          </motion.div>
-        )}
+
+              {/* Main credit display */}
+              <div className="text-center mb-4">
+                <div className="text-4xl font-bold text-foreground">
+                  {totalAvailable.toLocaleString()}
+                </div>
+                <div className="text-sm text-muted-foreground">credits available</div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    percentageUsed > 80 ? "bg-destructive" :
+                    percentageUsed > 50 ? "bg-warning" : "bg-success"
+                  )}
+                  style={{ width: `${100 - Math.min(percentageUsed, 100)}%` }}
+                />
+              </div>
+
+              {/* Breakdown */}
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Monthly plan</span>
+                  <span>
+                    <span className="font-medium">{planRemaining.toLocaleString()}</span>
+                    <span className="text-muted-foreground"> / {planTotal.toLocaleString()}</span>
+                  </span>
+                </div>
+                {purchasedCredits > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Bonus credits</span>
+                    <span className="font-medium text-success">+{purchasedCredits.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* Pricing Cards */}
         {!isLoading && tiers && (
