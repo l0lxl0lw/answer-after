@@ -49,7 +49,7 @@ export default function SetupServices() {
           servicesData.map((s) => ({
             id: s.id,
             name: s.name,
-            price: s.price_cents ? String(s.price_cents / 100) : "",
+            price: s.base_price_cents ? String(s.base_price_cents / 100) : "",
             duration: s.duration_minutes ? String(s.duration_minutes) : "",
           }))
         );
