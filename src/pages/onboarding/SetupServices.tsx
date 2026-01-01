@@ -400,7 +400,7 @@ export default function SetupServices() {
 
             <Textarea
               id="greeting"
-              placeholder="e.g., Hi! Thanks for calling ABC Plumbing. This is Sarah, how can I help you today?"
+              placeholder="e.g., Hi! Thanks for calling Smile Dental Care. This is Sarah, how can I help you today?"
               value={greeting}
               onChange={(e) => setGreeting(e.target.value)}
               className="min-h-[80px]"
@@ -449,7 +449,7 @@ export default function SetupServices() {
                       <Label htmlFor={`service-name-${service.id}`}>Service Name</Label>
                       <Input
                         id={`service-name-${service.id}`}
-                        placeholder="e.g., Plumbing Repair"
+                        placeholder="e.g., Dental Checkup"
                         value={service.name}
                         onChange={(e) =>
                           updateService(service.id, "name", e.target.value)
@@ -528,7 +528,7 @@ export default function SetupServices() {
 
             <Textarea
               id="context"
-              placeholder="e.g., We're a family-owned plumbing business serving the greater Portland area. We offer 24/7 emergency service with a 1-hour response time. Always mention our senior citizen discount."
+              placeholder="e.g., We're a family-owned dental practice serving the greater Portland area. We offer same-day emergency appointments. Always mention our new patient special and flexible financing options."
               value={context}
               onChange={(e) => setContext(e.target.value)}
               className="min-h-[120px]"

@@ -39,10 +39,12 @@ export function usePurchasedCredits() {
   });
 }
 
+export type TopupPackage = 'basic' | 'value' | 'bulk';
+
 // Create credit top-up checkout session
 export function useCreateCreditTopup() {
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (packageId: TopupPackage = 'basic') => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
@@ -50,6 +52,7 @@ export function useCreateCreditTopup() {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
+        body: { package: packageId },
       });
 
       if (response.error) throw new Error(response.error.message);

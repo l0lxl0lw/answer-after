@@ -383,7 +383,7 @@ describe('SetupServices Functionality', () => {
         expect(screen.getByText('Your Services')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText(/e.g., Plumbing Repair/i);
+      const nameInput = screen.getByPlaceholderText(/e.g., Dental Checkup/i);
       await user.type(nameInput, 'Electrical Work');
 
       expect(nameInput).toHaveValue('Electrical Work');

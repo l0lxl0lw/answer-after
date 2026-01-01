@@ -290,11 +290,11 @@ export const mockApi = {
         calls_by_hour: mockCallsByHour,
         calls_by_outcome: mockCallsByOutcome,
         top_issues: [
-          { issue: 'Heating failure', count: 8 },
-          { issue: 'AC not cooling', count: 6 },
-          { issue: 'Strange noises', count: 4 },
-          { issue: 'Thermostat issues', count: 3 },
-          { issue: 'Gas smell', count: 2 },
+          { issue: 'Tooth pain', count: 8 },
+          { issue: 'Dental checkup', count: 6 },
+          { issue: 'Teeth cleaning', count: 4 },
+          { issue: 'Chipped tooth', count: 3 },
+          { issue: 'Dental emergency', count: 2 },
         ],
         notable_calls: mockCalls.filter(c => c.outcome === 'booked'),
       };

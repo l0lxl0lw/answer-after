@@ -5,24 +5,65 @@ import { createLogger } from "../_shared/logger.ts";
 
 const logger = createLogger('twilio-webhook');
 
+// Detect interest level from conversation text
+async function detectInterestLevel(conversationText: string): Promise<'hot' | 'warm' | 'cold'> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+
+  const prompt = `Analyze this customer service call and determine the caller's interest level.
+Return ONLY one word: "hot", "warm", or "cold"
+
+- HOT: Caller asked about pricing, scheduling, availability, expressed urgency, mentioned specific services, or showed clear intent to book
+- WARM: Caller showed general interest, asked questions, but no immediate booking intent
+- COLD: Brief call, minimal engagement, just seeking basic information, or call ended quickly
+
+Conversation:
+${conversationText}`;
+
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 10,
+        temperature: 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      return 'warm'; // Default on error
+    }
+
+    const data = await response.json();
+    const level = (data.choices[0]?.message?.content || 'warm').toLowerCase().trim();
+    return ['hot', 'warm', 'cold'].includes(level) ? level as 'hot' | 'warm' | 'cold' : 'warm';
+  } catch {
+    return 'warm'; // Default on error
+  }
+}
+
 // AI conversation using Lovable AI Gateway
 async function getAIResponse(conversationHistory: Array<{role: string, content: string}>, organizationContext: any) {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-  const systemPrompt = `You are a friendly AI receptionist for AnswerAfter, a professional HVAC and plumbing service company.
+  const systemPrompt = `You are a friendly AI receptionist for AnswerAfter, a professional dental office.
 
 Your responsibilities:
 1. Greet callers warmly
 2. Ask how you can help them today
-3. Gather information about their issue (what's wrong, urgency level)
-4. Collect their contact information (name, phone, address)
+3. Gather information about their dental concern (symptoms, urgency level)
+4. Collect their contact information (name, phone)
 5. Help schedule appointments if needed
 6. Handle emergencies by noting them as urgent
 
 Keep your responses SHORT and conversational - this is a phone call. 2-3 sentences max.
 Be warm, professional, and helpful.
 
-If the caller describes an emergency (gas leak, flooding, no heat in freezing weather, no cooling in extreme heat), acknowledge the urgency and assure them help is on the way.
+If the caller describes an emergency (severe tooth pain, dental abscess, broken tooth, knocked-out tooth, uncontrolled bleeding), acknowledge the urgency and assure them we will get them seen as soon as possible.
 
 Current organization: ${organizationContext?.name || 'AnswerAfter'}
 Business hours: ${organizationContext?.business_hours_start || '8:00 AM'} to ${organizationContext?.business_hours_end || '5:00 PM'}
@@ -99,10 +140,10 @@ serve(async (req) => {
     if (callStatus === 'completed' || callStatus === 'busy' || callStatus === 'no-answer' || callStatus === 'failed' || callStatus === 'canceled') {
       log.info('Call ended', { callSid, status: callStatus });
 
-      // Find the call record
+      // Find the call record with contact
       const { data: existingCall } = await supabase
         .from('calls')
-        .select('id, is_emergency, organization_id')
+        .select('id, is_emergency, organization_id, contact_id, caller_phone')
         .eq('twilio_call_sid', callSid)
         .maybeSingle();
 
@@ -152,6 +193,16 @@ serve(async (req) => {
         if (callStatus === 'failed') dbStatus = 'failed';
         if (callStatus === 'no-answer' || callStatus === 'busy') dbStatus = 'failed';
 
+        // Detect interest level for non-booked calls (leads)
+        let interestLevel: 'hot' | 'warm' | 'cold' | null = null;
+        if (outcome !== 'booked' && events && events.length > 0) {
+          const conversationText = events.map(e =>
+            `Customer: ${e.ai_prompt || ''}\nAI: ${e.ai_response || ''}`
+          ).join('\n');
+          interestLevel = await detectInterestLevel(conversationText);
+          log.info('Interest level detected', { callId: existingCall.id, interestLevel });
+        }
+
         // Update call record
         await supabase
           .from('calls')
@@ -161,10 +212,49 @@ serve(async (req) => {
             duration_seconds: callDuration,
             outcome: outcome,
             summary: summary,
+            ...(interestLevel && { interest_level: interestLevel }),
           })
           .eq('id', existingCall.id);
 
-        log.info('Call record updated', { callId: existingCall.id, status: dbStatus, outcome, duration: callDuration });
+        log.info('Call record updated', { callId: existingCall.id, status: dbStatus, outcome, interestLevel, duration: callDuration });
+
+        // Update contact based on outcome
+        if (existingCall.contact_id) {
+          const contactUpdate: Record<string, unknown> = {
+            updated_at: new Date().toISOString(),
+          };
+
+          // If booked, upgrade contact to customer
+          if (outcome === 'booked') {
+            contactUpdate.status = 'customer';
+            log.info('Contact upgraded to customer', { contactId: existingCall.contact_id });
+          } else if (interestLevel) {
+            // Update interest level for leads
+            contactUpdate.interest_level = interestLevel;
+          }
+
+          await supabase
+            .from('contacts')
+            .update(contactUpdate)
+            .eq('id', existingCall.contact_id);
+        } else if (existingCall.organization_id && existingCall.caller_phone) {
+          // If no contact_id on call, try to find/update contact by phone
+          const contactUpdate: Record<string, unknown> = {
+            updated_at: new Date().toISOString(),
+          };
+
+          if (outcome === 'booked') {
+            contactUpdate.status = 'customer';
+          } else if (interestLevel) {
+            contactUpdate.interest_level = interestLevel;
+          }
+
+          await supabase
+            .from('contacts')
+            .update(contactUpdate)
+            .eq('organization_id', existingCall.organization_id)
+            .eq('phone', existingCall.caller_phone);
+        }
 
         // Deduct credits based on call duration (1 credit per second)
         // Priority: Use purchased credits first, then plan credits
@@ -264,11 +354,30 @@ serve(async (req) => {
         .maybeSingle();
 
       if (!existingCall) {
+        // Upsert contact by phone (create as lead if new)
+        const { data: contact } = await supabase
+          .from('contacts')
+          .upsert({
+            organization_id: phoneData.organization_id,
+            phone: callerPhone,
+            status: 'lead',
+            source: 'inbound_call',
+          }, {
+            onConflict: 'organization_id,phone',
+            ignoreDuplicates: false,
+          })
+          .select('id')
+          .single();
+
+        log.info('Contact upserted', { contactId: contact?.id, phone: callerPhone });
+
+        // Create call record linked to contact
         await supabase
           .from('calls')
           .insert({
             organization_id: phoneData.organization_id,
             phone_number_id: phoneData.id,
+            contact_id: contact?.id || null,
             twilio_call_sid: callSid,
             caller_phone: callerPhone,
             status: 'active',

@@ -750,7 +750,7 @@ const Auth = () => {
                     <Input
                       id="signup-org"
                       type="text"
-                      placeholder="Acme Plumbing Co."
+                      placeholder="Smile Dental Care"
                       className="pl-10 h-12"
                       {...signupForm.register("organizationName")}
                     />

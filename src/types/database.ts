@@ -13,13 +13,25 @@ export type CallStatus =
   | 'voicemail';
 
 // Database call_outcome enum
-export type CallOutcome = 
+export type CallOutcome =
   | 'booked'
   | 'callback_requested'
   | 'information_provided'
   | 'escalated'
   | 'no_action'
   | 'voicemail';
+
+// Database interest_level enum (for leads)
+export type InterestLevel = 'hot' | 'warm' | 'cold';
+
+// Database lead_status enum
+export type LeadStatus = 'new' | 'contacted' | 'converted' | 'lost';
+
+// Database contact_status enum
+export type ContactStatus = 'lead' | 'customer';
+
+// Database contact_source enum
+export type ContactSource = 'inbound_call' | 'manual' | 'import';
 
 // Database appointment_status enum
 export type AppointmentStatus = 
@@ -97,6 +109,7 @@ export interface Call {
   id: string;
   organization_id: string;
   phone_number_id: string | null;
+  contact_id: string | null;
   twilio_call_sid: string | null;
   caller_phone: string;
   caller_name: string | null;
@@ -109,6 +122,43 @@ export interface Call {
   ended_at: string | null;
   created_at: string;
   updated_at: string;
+  // Legacy lead tracking fields (now on contacts table)
+  interest_level: InterestLevel | null;
+  lead_status: LeadStatus;
+  lead_notes: string | null;
+  lead_updated_at: string | null;
+}
+
+// ============= Contacts (Unified Leads & Customers) =============
+
+export interface Contact {
+  id: string;
+  organization_id: string;
+  phone: string;
+  name: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  status: ContactStatus;
+  source: ContactSource;
+  // Lead-specific fields
+  interest_level: InterestLevel | null;
+  lead_status: LeadStatus;
+  lead_notes: string | null;
+  lead_updated_at: string | null;
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+}
+
+// Lead type (contact with status='lead')
+export interface Lead extends Contact {
+  status: 'lead';
+}
+
+// Customer type (contact with status='customer')
+export interface Customer extends Contact {
+  status: 'customer';
 }
 
 export interface CallEvent {

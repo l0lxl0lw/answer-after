@@ -7,6 +7,15 @@ import { config } from "../_shared/config.ts";
 
 const logger = createLogger('create-credit-topup');
 
+// Package definitions with fallback defaults
+const TOPUP_PACKAGES = {
+  basic: { credits: 300, priceCents: 500, label: '5 minutes' },
+  value: { credits: 1000, priceCents: 1500, label: '17 minutes' },
+  bulk: { credits: 3000, priceCents: 4000, label: '50 minutes' },
+} as const;
+
+type PackageId = keyof typeof TOPUP_PACKAGES;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return corsPreflightResponse();
@@ -15,6 +24,17 @@ serve(async (req) => {
   try {
     const log = logger.withContext({ requestId: crypto.randomUUID() });
     log.step("Function started");
+
+    // Parse request body for package selection
+    let packageId: PackageId = 'basic';
+    try {
+      const body = await req.json();
+      if (body.package && body.package in TOPUP_PACKAGES) {
+        packageId = body.package as PackageId;
+      }
+    } catch {
+      // No body or invalid JSON - use default package
+    }
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
@@ -44,19 +64,27 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     log.info("User authenticated", { userId: user.id, email: user.email });
 
-    // Get credit config
-    const { data: creditConfig, error: configError } = await supabaseAdmin
+    // Get credit config from database (with fallbacks to hardcoded defaults)
+    const configKeys = [
+      `topup_${packageId}_credits`,
+      `topup_${packageId}_price_cents`,
+    ];
+
+    const { data: creditConfig } = await supabaseAdmin
       .from('credit_config')
       .select('config_key, config_value')
-      .in('config_key', ['topup_credits_amount', 'topup_price_cents']);
+      .in('config_key', configKeys);
 
-    if (configError) throw new Error(`Failed to get config: ${configError.message}`);
+    const configMap = Object.fromEntries(
+      (creditConfig || []).map(c => [c.config_key, Number(c.config_value)])
+    );
 
-    const configMap = Object.fromEntries(creditConfig.map(c => [c.config_key, Number(c.config_value)]));
-    const creditsAmount = configMap['topup_credits_amount'] || 300;
-    const priceCents = configMap['topup_price_cents'] || 1000;
+    // Use database config or fallback to hardcoded defaults
+    const pkg = TOPUP_PACKAGES[packageId];
+    const creditsAmount = configMap[`topup_${packageId}_credits`] || pkg.credits;
+    const priceCents = configMap[`topup_${packageId}_price_cents`] || pkg.priceCents;
 
-    log.info("Credit config loaded", { creditsAmount, priceCents });
+    log.info("Credit config loaded", { packageId, creditsAmount, priceCents });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
@@ -79,6 +107,7 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://ppfynksalwrdqhyrxqzs.lovableproject.com";
 
     // Create one-time payment checkout session
+    const packageLabel = pkg.label;
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [
@@ -86,8 +115,8 @@ serve(async (req) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'AnswerAfter Credit Top-Up',
-              description: `${creditsAmount} additional credits - never expire`,
+              name: `AnswerAfter Credits - ${packageLabel}`,
+              description: `${creditsAmount.toLocaleString()} credits (~${packageLabel}) - never expire`,
             },
             unit_amount: priceCents,
           },
@@ -100,6 +129,7 @@ serve(async (req) => {
       metadata: {
         supabase_user_id: user.id,
         credits_amount: creditsAmount.toString(),
+        package_id: packageId,
         type: 'credit_topup',
       },
     });

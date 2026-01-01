@@ -25,6 +25,7 @@ import {
   Check,
   Users,
   MessageSquare,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -56,13 +57,14 @@ const sidebarSections = [
       { name: "Call Log", href: "/dashboard/calls", icon: PhoneCall },
       { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
       { name: "Bookings", href: "/dashboard/bookings", icon: Calendar },
+      { name: "Leads", href: "/dashboard/leads", icon: UserPlus },
     ],
   },
   {
     label: "Settings",
     links: [
       { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-      { name: "Contacts", href: "/dashboard/contacts", icon: Users },
+      { name: "Customers", href: "/dashboard/customers", icon: Users },
       { name: "Account", href: "/dashboard/account", icon: Settings },
       { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
     ],

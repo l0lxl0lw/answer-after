@@ -236,7 +236,7 @@ describe('SetupServices UI', () => {
       render(<SetupServices />, { wrapper: createWrapper() });
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText(/e.g., Plumbing Repair/i)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/e.g., Dental Checkup/i)).toBeInTheDocument();
         expect(screen.getByPlaceholderText('99')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('60')).toBeInTheDocument();
       });

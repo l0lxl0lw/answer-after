@@ -190,7 +190,7 @@ export interface MockService {
 export const createMockService = (overrides: Partial<MockService> = {}): MockService => ({
   id: 'service-123',
   organization_id: 'org-123',
-  name: 'Plumbing Repair',
+  name: 'Dental Checkup',
   price_cents: 9900,
   duration_minutes: 60,
   is_active: true,

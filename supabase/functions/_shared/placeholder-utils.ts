@@ -66,7 +66,7 @@ export const PLACEHOLDER_DEFINITIONS: PlaceholderDefinition[] = [
     key: 'orgName',
     placeholder: '{{orgName}}',
     description: 'Organization name',
-    example: 'ABC Plumbing',
+    example: 'Smile Dental Care',
     category: 'basic',
   },
   {
@@ -101,14 +101,14 @@ export const PLACEHOLDER_DEFINITIONS: PlaceholderDefinition[] = [
     key: 'services',
     placeholder: '{{services}}',
     description: 'Formatted list of services with prices and durations',
-    example: '- Drain Cleaning: $150 (60 min)\n- Water Heater Repair: $200 (90 min)',
+    example: '- Teeth Cleaning: $150 (60 min)\n- Dental Filling: $200 (45 min)',
     category: 'services',
   },
   {
     key: 'customInstructions',
     placeholder: '{{customInstructions}}',
     description: 'Custom business instructions from agent setup',
-    example: 'We specialize in emergency plumbing services and offer 24/7 support.',
+    example: 'We specialize in family dentistry and offer same-day emergency appointments.',
     category: 'custom',
   },
 ];
@@ -193,8 +193,8 @@ function formatDayRanges(enabledDays: string[]): string {
 /**
  * Format services list with prices and durations
  * Example output:
- * - Drain Cleaning: $150 (60 min)
- * - Water Heater Repair: $200 (90 min)
+ * - Teeth Cleaning: $150 (60 min)
+ * - Dental Filling: $200 (45 min)
  */
 export function formatServicesList(services: ServiceData[] | null | undefined): string {
   if (!services || services.length === 0) {

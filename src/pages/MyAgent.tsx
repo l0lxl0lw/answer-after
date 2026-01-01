@@ -403,7 +403,7 @@ export default function MyAgent() {
             <CardContent className="space-y-4">
               <Textarea
                 className="min-h-[100px] resize-y"
-                placeholder="Example: Hello! Thank you for calling ABC Plumbing. How can I help you today?"
+                placeholder="Example: Hello! Thank you for calling Smile Dental Care. How can I help you today?"
                 value={customGreeting}
                 onChange={(e) => setCustomGreeting(e.target.value)}
               />
@@ -522,17 +522,17 @@ export default function MyAgent() {
                 <Textarea
                   className="min-h-[300px] resize-y"
                   placeholder="Example:
-About the business:
-We are ABC Plumbing, serving the Dallas area since 1985.
+About the practice:
+We are Smile Dental Care, serving the Dallas area since 1985.
 
 How to handle calls:
 - Always be friendly and professional
 - Ask for caller's name and phone number
-- For emergencies, collect address immediately
+- For emergencies, offer same-day appointments
 
 Additional notes:
-- We offer 10% senior discount
-- Weekend appointments available"
+- We offer a new patient special
+- Saturday appointments available"
                   value={agentContent}
                   onChange={(e) => setAgentContent(e.target.value)}
                 />

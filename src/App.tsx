@@ -15,8 +15,9 @@ import CallDetail from "./pages/CallDetail";
 import Schedules from "./pages/Schedules";
 import CalendarCallback from "./pages/CalendarCallback";
 import CalendarSetupGuide from "./pages/CalendarSetupGuide";
-import Contacts from "./pages/Contacts";
+import Customers from "./pages/Customers";
 import Appointments from "./pages/Appointments";
+import Leads from "./pages/Leads";
 import Settings from "./pages/Settings";
 import Integrations from "./pages/Integrations";
 import MyServices from "./pages/MyServices";
@@ -66,8 +67,9 @@ const App = () => (
             <Route path="/dashboard/calendar" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
             <Route path="/dashboard/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
             <Route path="/dashboard/calendar-setup" element={<ProtectedRoute><CalendarSetupGuide /></ProtectedRoute>} />
-            <Route path="/dashboard/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
+            <Route path="/dashboard/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/dashboard/bookings" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
+            <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
             <Route path="/dashboard/services" element={<ProtectedRoute><MyServices /></ProtectedRoute>} />
             <Route path="/dashboard/voice-behavior" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
             <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />

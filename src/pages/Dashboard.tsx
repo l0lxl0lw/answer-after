@@ -20,21 +20,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardStats, useRecentCalls, useOrganization, type DashboardPeriod } from "@/hooks/use-api";
+import { useDashboardStats, useRecentCalls, useOrganization, useContactsByPhone, type DashboardPeriod } from "@/hooks/use-api";
 import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
-
-// Raw Google Contact structure from API
-interface RawGoogleContact {
-  resourceName: string;
-  names?: Array<{ displayName?: string; givenName?: string }>;
-  phoneNumbers?: Array<{ value?: string; canonicalForm?: string }>;
-  biographies?: Array<{ value?: string }>;
-}
 
 // Normalize phone number for comparison - extract last 10 digits
 function normalizePhone(phone: string): string {
@@ -43,23 +33,6 @@ function normalizePhone(phone: string): string {
   return digits.slice(-10);
 }
 
-// Extract phone numbers from contact for matching
-function getContactPhones(contact: RawGoogleContact): string[] {
-  const phones: string[] = [];
-  if (contact.phoneNumbers) {
-    contact.phoneNumbers.forEach(pn => {
-      // Use canonicalForm first (E.164 format like +12067780089), then fallback to value
-      if (pn.canonicalForm) phones.push(normalizePhone(pn.canonicalForm));
-      if (pn.value) phones.push(normalizePhone(pn.value));
-    });
-  }
-  return [...new Set(phones)]; // Remove duplicates
-}
-
-// Get display name from contact
-function getContactDisplayName(contact: RawGoogleContact): string {
-  return contact.names?.[0]?.displayName || contact.names?.[0]?.givenName || 'Unknown';
-}
 import {
   LineChart,
   Line,
@@ -198,51 +171,14 @@ const Dashboard = () => {
 
   const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
-  // Fetch Google Contacts for name mapping (only if Google is connected)
-  const { data: googleContacts } = useQuery({
-    queryKey: ['google-contacts-dashboard', organization?.id],
-    queryFn: async () => {
-      if (!organization?.id) return [];
-      try {
-        const { data, error } = await supabase.functions.invoke('google-contacts', {
-          body: { action: 'list', organizationId: organization.id }
-        });
-        // If no Google connection, return empty array (not an error)
-        if (error || data?.error) {
-          console.log('Google contacts not available:', data?.error || error);
-          return [];
-        }
-        return data?.contacts as RawGoogleContact[] || [];
-      } catch (e) {
-        // Catch any thrown errors (e.g., 400 responses)
-        console.log('Google contacts fetch failed:', e);
-        return [];
-      }
-    },
-    enabled: !!organization?.id && !!calendarConnection, // Only fetch if Google is connected
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    retry: false, // Don't retry if Google isn't connected
-  });
-
-  // Build phone-to-name map with multiple phone formats per contact
-  const phoneToContactName = useMemo(() => {
-    const map = new Map<string, string>();
-    if (googleContacts) {
-      googleContacts.forEach((contact) => {
-        const name = getContactDisplayName(contact);
-        const phones = getContactPhones(contact);
-        phones.forEach(phone => {
-          map.set(phone, name);
-        });
-      });
-    }
-    return map;
-  }, [googleContacts]);
+  // Fetch local contacts for name mapping
+  const { data: contactsByPhone } = useContactsByPhone(organization?.id);
 
   // Get contact name for a call
   const getContactName = (call: Call): string | undefined => {
     const normalizedPhone = normalizePhone(call.caller_phone);
-    return phoneToContactName.get(normalizedPhone);
+    const contact = contactsByPhone?.get(normalizedPhone);
+    return contact?.name || undefined;
   };
 
   const organizationName = "Your Business";

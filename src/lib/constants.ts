@@ -23,15 +23,26 @@ export const LINKS = {
 
 export const APP_CONFIG = {
   trialDurationDays: 30,
+  // Top-up packages
+  topupPackages: {
+    basic: { credits: 300, priceCents: 500, minutes: 5 },
+    value: { credits: 1000, priceCents: 1500, minutes: 17 },
+    bulk: { credits: 3000, priceCents: 4000, minutes: 50 },
+  },
+  // Overage rate
+  overagePriceCentsPerMinute: 150, // $1.50/min
+  // Legacy (for backwards compatibility)
   creditTopupAmount: 300,
-  creditTopupPrice: 10,
+  creditTopupPrice: 5,
 } as const;
+
+export type TopupPackageId = keyof typeof APP_CONFIG.topupPackages;
 
 /**
  * Subscription plan identifiers
  */
 export const SUBSCRIPTION_PLANS = {
-  CORE: 'core',
+  STARTER: 'starter',
   GROWTH: 'growth',
   PRO: 'pro',
   BUSINESS: 'business',

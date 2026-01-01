@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight, Plus } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
-import { useCreateCreditTopup, useTotalAvailableCredits } from "@/hooks/use-credits";
+import { useCreateCreditTopup, useTotalAvailableCredits, type TopupPackage } from "@/hooks/use-credits";
 import { cn } from "@/lib/utils";
 import { shouldSkipStripe } from "@/lib/environment";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +22,7 @@ export default function Subscriptions() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const currentPlan = subscription?.plan?.toLowerCase() || "core";
+  const currentPlan = subscription?.plan?.toLowerCase() || "starter";
   const isLoading = subscriptionLoading || tiersLoading;
 
   // Handle topup success - invalidate cache and show toast
@@ -54,7 +54,7 @@ export default function Subscriptions() {
     }
   }, [searchParams, setSearchParams, queryClient]);
 
-  const handleTopup = async () => {
+  const handleTopup = async (packageId: TopupPackage = 'basic') => {
     // Skip Stripe in local/development environment
     if (shouldSkipStripe()) {
       shadcnToast({
@@ -64,7 +64,7 @@ export default function Subscriptions() {
       return;
     }
 
-    const result = await createTopup.mutateAsync();
+    const result = await createTopup.mutateAsync(packageId);
     if (result?.url) {
       window.location.href = result.url;
     }
@@ -78,6 +78,12 @@ export default function Subscriptions() {
   const formatCredits = (credits: number) => {
     if (credits <= 0) return "Custom";
     return credits.toLocaleString();
+  };
+
+  const formatMinutes = (credits: number) => {
+    if (credits <= 0) return "";
+    const minutes = Math.round(credits / 60);
+    return `(${minutes} min)`;
   };
 
   const getPlanIndex = (planId: string) => tiers?.findIndex(t => t.plan_id === planId) ?? -1;
@@ -133,7 +139,7 @@ export default function Subscriptions() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs"
-                  onClick={handleTopup}
+                  onClick={() => handleTopup('basic')}
                   disabled={createTopup.isPending}
                 >
                   {createTopup.isPending ? (
@@ -348,27 +354,63 @@ export default function Subscriptions() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-10 text-center max-w-xl mx-auto"
+          className="mt-10 text-center max-w-2xl mx-auto"
         >
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className="bg-card border border-border rounded-xl p-6">
             <h4 className="font-semibold text-foreground mb-2">Need more capacity?</h4>
-            <p className="text-muted-foreground text-sm mb-4">
-              Top up anytime with 300 credits for just $10. Credits never expire and are used first.
+            <p className="text-muted-foreground text-sm mb-5">
+              Top up anytime with credit packages. Credits never expire and are used first.
             </p>
-            <Button 
-              onClick={handleTopup}
-              disabled={createTopup.isPending}
-              className="gap-2"
-            >
-              {createTopup.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Buy 300 Credits for $10
-                </>
-              )}
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Basic Package */}
+              <div className="p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
+                <div className="text-lg font-bold text-foreground">$5</div>
+                <div className="text-sm text-muted-foreground">300 credits</div>
+                <div className="text-xs text-muted-foreground mb-3">~5 minutes</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTopup('basic')}
+                  disabled={createTopup.isPending}
+                  className="w-full"
+                >
+                  {createTopup.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Buy"}
+                </Button>
+              </div>
+              {/* Value Package */}
+              <div className="p-4 rounded-lg border-2 border-primary bg-primary/5">
+                <div className="text-xs font-medium text-primary mb-1">Best Value</div>
+                <div className="text-lg font-bold text-foreground">$15</div>
+                <div className="text-sm text-muted-foreground">1,000 credits</div>
+                <div className="text-xs text-muted-foreground mb-3">~17 minutes</div>
+                <Button
+                  size="sm"
+                  onClick={() => handleTopup('value')}
+                  disabled={createTopup.isPending}
+                  className="w-full"
+                >
+                  {createTopup.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Buy"}
+                </Button>
+              </div>
+              {/* Bulk Package */}
+              <div className="p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
+                <div className="text-lg font-bold text-foreground">$40</div>
+                <div className="text-sm text-muted-foreground">3,000 credits</div>
+                <div className="text-xs text-muted-foreground mb-3">~50 minutes</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTopup('bulk')}
+                  disabled={createTopup.isPending}
+                  className="w-full"
+                >
+                  {createTopup.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Buy"}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-4">
+              Overage auto-charges at $1.50/min if you run out of credits.
+            </p>
           </div>
         </motion.div>
 
@@ -421,14 +463,17 @@ export default function Subscriptions() {
                     <tr className="border-b border-border">
                       <td className="p-3 font-medium">Monthly Credits</td>
                       {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
+                        <td
+                          key={tier.plan_id}
                           className={cn(
                             "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {formatCredits(tier.credits)}
+                          <div>{formatCredits(tier.credits)}</div>
+                          {tier.credits > 0 && (
+                            <div className="text-xs text-muted-foreground">{formatMinutes(tier.credits)}</div>
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -476,16 +521,28 @@ export default function Subscriptions() {
                       getValue={(t) => t.has_api_access} 
                       currentPlan={currentPlan}
                     />
-                    <ComparisonRow 
-                      label="SLA Guarantee" 
-                      tiers={tiers} 
-                      getValue={(t) => t.has_sla_guarantee} 
+                    <ComparisonRow
+                      label="Voice Selection"
+                      tiers={tiers}
+                      getValue={(t) => t.has_voice_selection}
                       currentPlan={currentPlan}
                     />
-                    <ComparisonRow 
-                      label="HIPAA Compliance" 
-                      tiers={tiers} 
-                      getValue={(t) => t.has_hipaa_compliance} 
+                    <ComparisonRow
+                      label="Multilingual"
+                      tiers={tiers}
+                      getValue={(t) => t.has_multi_language}
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow
+                      label="SLA Guarantee"
+                      tiers={tiers}
+                      getValue={(t) => t.has_sla_guarantee}
+                      currentPlan={currentPlan}
+                    />
+                    <ComparisonRow
+                      label="HIPAA Compliance"
+                      tiers={tiers}
+                      getValue={(t) => t.has_hipaa_compliance}
                       currentPlan={currentPlan}
                     />
                   </tbody>

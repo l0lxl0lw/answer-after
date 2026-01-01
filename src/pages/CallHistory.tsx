@@ -20,18 +20,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useConversations, useCalls, type Conversation } from "@/hooks/use-api";
+import { useConversations, useCalls, useContactsByPhone, type Conversation } from "@/hooks/use-api";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
-import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
-
-interface GoogleContact {
-  resourceName: string;
-  names?: Array<{ givenName?: string; familyName?: string; displayName?: string }>;
-  phoneNumbers?: Array<{ value: string; type?: string }>;
-}
 
 // Format duration from seconds to MM:SS
 function formatDuration(seconds: number | null): string {
@@ -62,43 +53,6 @@ function getStatusBadge(status: string, callSuccessful: string | null) {
   }
 }
 
-// Hook to fetch Google Contacts for phone number matching
-function useGoogleContacts() {
-  const { user } = useAuth();
-  const { checkGoogleError } = useGoogleConnectionGuard();
-  const { data: connection } = useGoogleCalendarConnection();
-  
-  return useQuery({
-    queryKey: ["google-contacts-for-calls", user?.organization_id],
-    queryFn: async () => {
-      if (!user?.organization_id) return [];
-      
-      try {
-        const { data, error } = await supabase.functions.invoke("google-contacts", {
-          body: { action: "list", organizationId: user.organization_id },
-        });
-
-        // Check for Google connection error and redirect
-        if (checkGoogleError(error, data)) {
-          return [];
-        }
-
-        if (error) {
-          console.error("Failed to fetch contacts:", error);
-          return [];
-        }
-        
-        return (data?.contacts || []) as GoogleContact[];
-      } catch (e) {
-        console.error("Failed to fetch contacts:", e);
-        return [];
-      }
-    },
-    enabled: !!user?.organization_id && !!connection,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    retry: false,
-  });
-}
 
 // Conversation Row Component with contact name lookup
 function ConversationRow({ 
@@ -182,37 +136,17 @@ function ConversationRow({
 }
 
 export default function CallHistory() {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
 
   const { data: conversationsData, isLoading: conversationsLoading } = useConversations({
     search: search || undefined,
   });
-  
-  const { data: callsData, isLoading: callsLoading } = useCalls();
-  const { data: contacts } = useGoogleContacts();
-  
-  const isLoading = conversationsLoading || callsLoading;
 
-  // Build a map of phone numbers to contact names
-  const phoneToContactName = useMemo(() => {
-    const map = new Map<string, string>();
-    
-    if (contacts) {
-      for (const contact of contacts) {
-        const name = contact.names?.[0]?.displayName || contact.names?.[0]?.givenName;
-        if (name && contact.phoneNumbers) {
-          for (const phone of contact.phoneNumbers) {
-            const normalized = normalizePhone(phone.value);
-            if (normalized.length >= 10) {
-              map.set(normalized, name);
-            }
-          }
-        }
-      }
-    }
-    
-    return map;
-  }, [contacts]);
+  const { data: callsData, isLoading: callsLoading } = useCalls();
+  const { data: contactsByPhone } = useContactsByPhone(user?.organization_id);
+
+  const isLoading = conversationsLoading || callsLoading;
 
   // Build a map of conversation times to Twilio call phone numbers
   // This matches ElevenLabs conversations to Twilio calls by timestamp
@@ -242,7 +176,8 @@ export default function CallHistory() {
   const getContactName = (phone: string | undefined): string | undefined => {
     if (!phone) return undefined;
     const normalized = normalizePhone(phone);
-    return phoneToContactName.get(normalized);
+    const contact = contactsByPhone?.get(normalized);
+    return contact?.name || undefined;
   };
 
   return (

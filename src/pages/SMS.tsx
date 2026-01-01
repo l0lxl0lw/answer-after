@@ -21,8 +21,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useOrganization } from "@/hooks/use-api";
-import { useGoogleConnectionGuard } from "@/hooks/useGoogleConnectionGuard";
+import { useOrganization, useContactsByPhone } from "@/hooks/use-api";
 
 interface SMSMessage {
   id: string;
@@ -37,34 +36,10 @@ interface SMSMessage {
   contact_name?: string;
 }
 
-// Raw Google Contact structure from API
-interface RawGoogleContact {
-  resourceName: string;
-  names?: Array<{ displayName?: string; givenName?: string }>;
-  phoneNumbers?: Array<{ value?: string; canonicalForm?: string }>;
-}
-
 // Normalize phone number for comparison
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   return digits.slice(-10);
-}
-
-// Extract phone numbers from contact for matching
-function getContactPhones(contact: RawGoogleContact): string[] {
-  const phones: string[] = [];
-  if (contact.phoneNumbers) {
-    contact.phoneNumbers.forEach(pn => {
-      if (pn.canonicalForm) phones.push(normalizePhone(pn.canonicalForm));
-      if (pn.value) phones.push(normalizePhone(pn.value));
-    });
-  }
-  return [...new Set(phones)];
-}
-
-// Get display name from contact
-function getContactDisplayName(contact: RawGoogleContact): string {
-  return contact.names?.[0]?.displayName || contact.names?.[0]?.givenName || 'Unknown';
 }
 
 function getStatusBadge(status: string, direction: string) {
@@ -129,7 +104,6 @@ function SMSItem({ message }: { message: SMSMessage }) {
 const SMS = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const { data: organization } = useOrganization();
-  const { checkGoogleError } = useGoogleConnectionGuard();
 
   // Fetch SMS messages from Twilio
   const { data: smsData, isLoading, refetch, isRefetching } = useQuery({
@@ -143,60 +117,18 @@ const SMS = () => {
     staleTime: 30000, // Cache for 30 seconds
   });
 
-  // Fetch Google Contacts for name mapping
-  const { data: googleContacts } = useQuery({
-    queryKey: ['google-contacts-sms', organization?.id],
-    queryFn: async () => {
-      if (!organization?.id) return [];
-      try {
-        const { data, error } = await supabase.functions.invoke('google-contacts', {
-          body: { action: 'list', organizationId: organization.id }
-        });
-        
-        // Check for Google connection error and redirect
-        if (checkGoogleError(error, data)) {
-          return [];
-        }
-        
-        if (error) {
-          console.log('Google contacts not available:', error);
-          return [];
-        }
-        return data?.contacts as RawGoogleContact[] || [];
-      } catch (e) {
-        console.log('Google contacts fetch failed:', e);
-        return [];
-      }
-    },
-    enabled: !!organization?.id,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
-  // Build phone-to-name map
-  const phoneToContactName = useMemo(() => {
-    const map = new Map<string, string>();
-    if (googleContacts) {
-      googleContacts.forEach((contact) => {
-        const name = getContactDisplayName(contact);
-        const phones = getContactPhones(contact);
-        phones.forEach(phone => {
-          map.set(phone, name);
-        });
-      });
-    }
-    return map;
-  }, [googleContacts]);
+  // Fetch local contacts for name mapping
+  const { data: contactsByPhone } = useContactsByPhone(organization?.id);
 
   // Enrich messages with contact names
   const enrichedMessages = useMemo(() => {
     if (!smsData?.messages) return [];
     return smsData.messages.map(msg => {
       const phoneToMatch = msg.direction === 'inbound' ? msg.from : msg.to;
-      const contactName = phoneToContactName.get(normalizePhone(phoneToMatch));
-      return { ...msg, contact_name: contactName };
+      const contact = contactsByPhone?.get(normalizePhone(phoneToMatch));
+      return { ...msg, contact_name: contact?.name || undefined };
     });
-  }, [smsData?.messages, phoneToContactName]);
+  }, [smsData?.messages, contactsByPhone]);
 
   // Filter messages based on search
   const filteredMessages = enrichedMessages.filter(msg => 

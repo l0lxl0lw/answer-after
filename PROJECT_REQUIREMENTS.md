@@ -6,8 +6,8 @@ Answer After is a SaaS platform that provides AI-powered after-hours call handli
 
 ## 🏢 Target Market
 
-- **Primary:** HVAC, plumbing, emergency service companies ($2M-$10M revenue)
-- **Secondary:** Professional services (dental, chiropractic, medical) that close at 5 PM
+- **Primary:** Dental offices, dental practices, oral healthcare providers ($2M-$10M revenue)
+- **Secondary:** Professional services (chiropractic, medical, veterinary) that close at 5 PM
 - **Pain Point:** Missing revenue from after-hours emergency calls and scheduling
 
 ## 🔧 Core Features
@@ -151,19 +151,19 @@ answer-after/
 
 ## 📊 Business Rules Examples
 
-### HVAC Emergency Service
+### Emergency Dental Service
 ```
-Service: Emergency Heating Repair
-Price: $150 base + $100/hour
-Duration: 2-4 hours estimated
+Service: Emergency Dental Care
+Price: $200 base + consultation
+Duration: 30-60 minutes estimated
 Rules:
   - Available: 24/7 for emergencies
-  - Priority: Immediate (within 2 hours)
-  - Escalation: If no technician available, call owner
-  - Keywords: "no heat", "heating broken", "emergency"
+  - Priority: Immediate (same day)
+  - Escalation: If no dentist available, call owner
+  - Keywords: "severe pain", "broken tooth", "dental emergency"
 ```
 
-### Dental Extraction
+### Tooth Extraction
 ```
 Service: Tooth Extraction  
 Price: $300 flat rate
