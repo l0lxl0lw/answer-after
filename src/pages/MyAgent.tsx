@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscription } from '@/hooks/use-api';
+import { useSubscription } from '@/hooks/use-subscriptions';
 import { useNavigate, Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -115,12 +115,12 @@ export default function MyAgent() {
   // Fetch existing agent data
   useEffect(() => {
     const fetchAgentData = async () => {
-      if (!user?.organization_id) return;
+      if (!user?.institution_id) return;
       
       const { data, error } = await supabase
-        .from('organization_agents')
+        .from('institution_agents')
         .select('context')
-        .eq('organization_id', user.organization_id)
+        .eq('institution_id', user.institution_id)
         .maybeSingle();
       
       if (!error && data) {
@@ -144,14 +144,14 @@ export default function MyAgent() {
     };
     
     fetchAgentData();
-  }, [user?.organization_id]);
+  }, [user?.institution_id]);
 
   const getWordCount = (text: string) => {
     return text.trim().split(/\s+/).filter(Boolean).length;
   };
 
   const saveAgentData = async (greeting: string, content: string, voiceId?: VoiceId | null, hidePrices?: boolean) => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
 
     const contextData = JSON.stringify({
       greeting,
@@ -161,21 +161,21 @@ export default function MyAgent() {
     });
 
     const { data: existingAgent } = await supabase
-      .from('organization_agents')
+      .from('institution_agents')
       .select('id, elevenlabs_agent_id')
-      .eq('organization_id', user.organization_id)
+      .eq('institution_id', user.institution_id)
       .maybeSingle();
 
     if (existingAgent) {
       const { error } = await supabase
-        .from('organization_agents')
+        .from('institution_agents')
         .update({ context: contextData })
-        .eq('organization_id', user.organization_id);
+        .eq('institution_id', user.institution_id);
       if (error) throw error;
     } else {
       const { error } = await supabase
-        .from('organization_agents')
-        .insert({ organization_id: user.organization_id, context: contextData });
+        .from('institution_agents')
+        .insert({ institution_id: user.institution_id, context: contextData });
       if (error) throw error;
     }
 
@@ -183,12 +183,12 @@ export default function MyAgent() {
   };
 
   const updateElevenLabsAgent = async (voiceId?: VoiceId | null, hidePrices?: boolean) => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
 
     const { data: existingAgent } = await supabase
-      .from('organization_agents')
+      .from('institution_agents')
       .select('elevenlabs_agent_id')
-      .eq('organization_id', user.organization_id)
+      .eq('institution_id', user.institution_id)
       .maybeSingle();
 
     if (existingAgent?.elevenlabs_agent_id) {
@@ -198,7 +198,7 @@ export default function MyAgent() {
         await supabase.functions.invoke('elevenlabs-agent', {
           body: {
             action: 'update-agent',
-            organizationId: user.organization_id,
+            institutionId: user.institution_id,
             context: JSON.stringify({
               greeting: customGreeting,
               content: agentContent,
@@ -216,7 +216,7 @@ export default function MyAgent() {
   };
 
   const handleSaveGreeting = async () => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
     
     const wordCount = getWordCount(customGreeting);
     if (wordCount > MAX_GREETING_WORDS) {
@@ -239,7 +239,7 @@ export default function MyAgent() {
           const { error } = await supabase.functions.invoke('generate-greeting-tts', {
             body: { 
               greeting: customGreeting,
-              organizationId: user.organization_id
+              institutionId: user.institution_id
             },
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
@@ -273,7 +273,7 @@ export default function MyAgent() {
   };
 
   const handleSaveContent = async () => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
     
     const wordCount = getWordCount(agentContent);
     if (wordCount > MAX_CONTENT_WORDS) {
@@ -298,7 +298,7 @@ export default function MyAgent() {
   };
 
   const handleSaveVoice = async () => {
-    if (!user?.organization_id || !selectedVoiceId) return;
+    if (!user?.institution_id || !selectedVoiceId) return;
     
     setIsSavingVoice(true);
     try {

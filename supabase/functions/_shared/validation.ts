@@ -316,3 +316,52 @@ export async function parseJsonBody<T = Record<string, any>>(
 
   return body;
 }
+
+// ============= Phone Normalization Helpers =============
+
+/**
+ * Normalize phone number to E.164 format
+ * Handles US numbers (10 or 11 digits)
+ */
+export function normalizePhoneNumber(phone: string): string {
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+
+  // If 10 digits, assume US number and add +1
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  // If 11 digits starting with 1, add +
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+
+  // Otherwise return as-is with + prefix if not present
+  return phone.startsWith('+') ? phone : `+${digits}`;
+}
+
+/**
+ * Generate phone number variants for flexible matching
+ * Handles cases where phone might be stored in different formats
+ */
+export function getPhoneNumberVariants(phone: string): string[] {
+  const digits = phone.replace(/\D/g, '');
+  const variants: string[] = [phone]; // Original
+
+  if (digits.length === 10) {
+    // US number without country code
+    variants.push(`+1${digits}`);
+    variants.push(`1${digits}`);
+    variants.push(digits);
+  } else if (digits.length === 11 && digits.startsWith('1')) {
+    // US number with country code
+    variants.push(`+${digits}`);
+    variants.push(digits);
+    variants.push(digits.slice(1)); // Without country code
+    variants.push(`+1${digits.slice(1)}`);
+  }
+
+  // Remove duplicates
+  return [...new Set(variants)];
+}

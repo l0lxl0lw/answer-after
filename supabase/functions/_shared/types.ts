@@ -4,26 +4,26 @@
  */
 
 // ============================================
-// Organization Types
+// Institution Types
 // ============================================
 
-export interface OrganizationProvisionRequest {
-  organizationName: string;
+export interface InstitutionProvisionRequest {
+  institutionName: string;
   notificationPhone: string;
   businessPhone?: string;
   timezone: string;
 }
 
-export interface OrganizationProvisionResponse {
+export interface InstitutionProvisionResponse {
   success: boolean;
   message: string;
-  organizationId: string;
-  organization: Organization;
+  institutionId: string;
+  institution: Institution;
   subscription: Subscription;
   nextStep?: string;
 }
 
-export interface Organization {
+export interface Institution {
   id: string;
   name: string;
   slug: string;
@@ -53,7 +53,7 @@ export type OnboardingStep =
   | 'finalize_subscription';
 
 export interface OnboardingRequest {
-  organizationId: string;
+  institutionId: string;
   subscriptionPlan: string;
   areaCode?: string;
 }
@@ -99,7 +99,7 @@ export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled';
 
 export interface Subscription {
   id: string;
-  organization_id: string;
+  institution_id: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   plan: SubscriptionPlan;
@@ -121,7 +121,7 @@ export type UserRole = 'owner' | 'admin' | 'staff';
 
 export interface Profile {
   id: string;
-  organization_id: string | null;
+  institution_id: string | null;
   email: string;
   full_name: string;
   phone: string | null;
@@ -137,9 +137,9 @@ export interface Profile {
 // Agent Types
 // ============================================
 
-export interface OrganizationAgent {
+export interface InstitutionAgent {
   id: string;
-  organization_id: string;
+  institution_id: string;
   elevenlabs_agent_id: string | null;
   context: string | null; // JSON string
   created_at: string;
@@ -147,7 +147,7 @@ export interface OrganizationAgent {
 }
 
 export interface AgentContext {
-  orgName: string;
+  institutionName: string;
   businessType: string;
   services?: string[];
   llmModel?: string;
@@ -156,20 +156,20 @@ export interface AgentContext {
 
 export interface CreateAgentRequest {
   action: 'create-agent';
-  organizationId: string;
+  institutionId: string;
   context?: string;
 }
 
 export interface UpdateAgentRequest {
   action: 'update-agent';
-  organizationId: string;
+  institutionId: string;
   context: string;
   voiceId?: string;
 }
 
 export interface RenameAgentRequest {
   action: 'rename-agent';
-  organizationId: string;
+  institutionId: string;
   name: string;
 }
 
@@ -188,7 +188,7 @@ export interface AgentActionResponse {
 
 export interface PhoneNumber {
   id: string;
-  organization_id: string;
+  institution_id: string;
   twilio_sid: string | null;
   phone_number: string;
   friendly_name: string | null;

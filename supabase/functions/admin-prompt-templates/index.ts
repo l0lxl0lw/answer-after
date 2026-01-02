@@ -51,21 +51,21 @@ serve(async (req) => {
 
       // POST with action=preview - Preview template with real org data
       if (body.action === 'preview') {
-        const { template, organizationId } = body;
+        const { template, institutionId } = body;
 
         if (!template) {
           return errorResponse('Template content is required', 400);
         }
 
-        if (!organizationId) {
+        if (!institutionId) {
           return errorResponse('Organization ID is required for preview', 400);
         }
 
         // Fetch organization data
         const { data: org, error: orgError } = await supabaseAdmin
-          .from('organizations')
+          .from('institutions')
           .select('id, name, timezone, business_hours_start, business_hours_end, business_hours_schedule')
-          .eq('id', organizationId)
+          .eq('id', institutionId)
           .single();
 
         if (orgError) {
@@ -77,14 +77,14 @@ serve(async (req) => {
         const { data: services } = await supabaseAdmin
           .from('services')
           .select('name, price_cents, duration_minutes')
-          .eq('organization_id', organizationId)
+          .eq('institution_id', institutionId)
           .eq('is_active', true);
 
         // Fetch agent context
         const { data: agent } = await supabaseAdmin
-          .from('organization_agents')
+          .from('institution_agents')
           .select('context')
-          .eq('organization_id', organizationId)
+          .eq('institution_id', institutionId)
           .maybeSingle();
 
         // Build placeholder values and render

@@ -84,16 +84,16 @@ serve(async (req) => {
 
         const { data: profile, error: profileError } = await supabaseClient
           .from("profiles")
-          .select("organization_id")
+          .select("institution_id")
           .eq("email", customer.email)
           .single();
 
-        if (profileError || !profile?.organization_id) {
+        if (profileError || !profile?.institution_id) {
           log.warn("Profile not found for checkout", { email: customer.email, error: profileError });
           break;
         }
 
-        const organizationId = profile.organization_id;
+        const institutionId = profile.institution_id;
 
         // Check if this is a credit top-up purchase
         if (session.metadata?.type === 'credit_topup') {
@@ -102,7 +102,7 @@ serve(async (req) => {
           const { error: insertError } = await supabaseClient
             .from("purchased_credits")
             .insert({
-              organization_id: organizationId,
+              institution_id: institutionId,
               credits_purchased: creditsAmount,
               credits_remaining: creditsAmount,
               price_cents: session.amount_total || 1000,
@@ -112,13 +112,13 @@ serve(async (req) => {
           if (insertError) {
             log.error("Error inserting purchased credits", insertError);
           } else {
-            log.info("Credit top-up recorded", { organizationId, credits: creditsAmount });
+            log.info("Credit top-up recorded", { institutionId, credits: creditsAmount });
           }
           break;
         }
 
         const planFromMetadata = session.metadata?.plan || DEFAULT_PLAN;
-        log.info("Triggering onboarding flow", { organizationId, plan: planFromMetadata });
+        log.info("Triggering onboarding flow", { institutionId, plan: planFromMetadata });
 
         const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
         const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -131,7 +131,7 @@ serve(async (req) => {
               'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
             },
             body: JSON.stringify({
-              organizationId: organizationId,
+              institutionId: institutionId,
               subscriptionPlan: planFromMetadata,
             }),
           });
@@ -160,16 +160,16 @@ serve(async (req) => {
 
         const { data: profileCreate, error: profileErrorCreate } = await supabaseClient
           .from("profiles")
-          .select("organization_id")
+          .select("institution_id")
           .eq("email", customer.email)
           .single();
 
-        if (profileErrorCreate || !profileCreate?.organization_id) {
+        if (profileErrorCreate || !profileCreate?.institution_id) {
           log.warn("Profile not found", { email: customer.email, error: profileErrorCreate });
           break;
         }
 
-        const organizationIdCreate = profileCreate.organization_id;
+        const institutionIdCreate = profileCreate.institution_id;
 
         // Check if this is a $1 first month subscription that needs schedule setup
         const switchToRegular = subscription.metadata?.switch_to_regular === 'true';
@@ -231,7 +231,7 @@ serve(async (req) => {
           const { data: existingSub } = await supabaseClient
             .from("subscriptions")
             .select("plan")
-            .eq("organization_id", organizationIdCreate)
+            .eq("institution_id", institutionIdCreate)
             .maybeSingle();
 
           if (existingSub?.plan && existingSub.plan !== DEFAULT_PLAN) {
@@ -253,7 +253,7 @@ serve(async (req) => {
         const { error: upsertErrorCreate } = await supabaseClient
           .from("subscriptions")
           .upsert({
-            organization_id: organizationIdCreate,
+            institution_id: institutionIdCreate,
             stripe_subscription_id: subscription.id,
             stripe_customer_id: customerId,
             plan: planCreate,
@@ -262,13 +262,13 @@ serve(async (req) => {
             current_period_end: periodEnd,
             cancel_at_period_end: subscription.cancel_at_period_end,
           }, {
-            onConflict: "organization_id",
+            onConflict: "institution_id",
           });
 
         if (upsertErrorCreate) {
           log.error("Error upserting subscription", upsertErrorCreate);
         } else {
-          log.info("Subscription synced", { organizationId: organizationIdCreate, status: statusCreate, plan: planCreate });
+          log.info("Subscription synced", { institutionId: institutionIdCreate, status: statusCreate, plan: planCreate });
         }
         break;
       }
@@ -285,16 +285,16 @@ serve(async (req) => {
 
         const { data: profile, error: profileError } = await supabaseClient
           .from("profiles")
-          .select("organization_id")
+          .select("institution_id")
           .eq("email", customer.email)
           .single();
 
-        if (profileError || !profile?.organization_id) {
+        if (profileError || !profile?.institution_id) {
           log.warn("Profile not found", { email: customer.email, error: profileError });
           break;
         }
 
-        const organizationId = profile.organization_id;
+        const institutionId = profile.institution_id;
 
         let status = subscription.status;
         let plan = subscription.metadata?.plan_id;
@@ -316,7 +316,7 @@ serve(async (req) => {
           const { data: existingSub } = await supabaseClient
             .from("subscriptions")
             .select("plan")
-            .eq("organization_id", organizationId)
+            .eq("institution_id", institutionId)
             .maybeSingle();
 
           if (existingSub?.plan && existingSub.plan !== DEFAULT_PLAN) {
@@ -338,7 +338,7 @@ serve(async (req) => {
         const { error: upsertError } = await supabaseClient
           .from("subscriptions")
           .upsert({
-            organization_id: organizationId,
+            institution_id: institutionId,
             stripe_subscription_id: subscription.id,
             stripe_customer_id: customerId,
             plan: plan,
@@ -347,13 +347,13 @@ serve(async (req) => {
             current_period_end: periodEndUpdate,
             cancel_at_period_end: subscription.cancel_at_period_end,
           }, {
-            onConflict: "organization_id",
+            onConflict: "institution_id",
           });
 
         if (upsertError) {
           log.error("Error upserting subscription", upsertError);
         } else {
-          log.info("Subscription synced", { organizationId, status, plan, subscriptionId: subscription.id });
+          log.info("Subscription synced", { institutionId, status, plan, subscriptionId: subscription.id });
         }
         break;
       }
@@ -370,17 +370,17 @@ serve(async (req) => {
 
         const { data: profile } = await supabaseClient
           .from("profiles")
-          .select("organization_id")
+          .select("institution_id")
           .eq("email", customer.email)
           .single();
 
-        if (profile?.organization_id) {
+        if (profile?.institution_id) {
           await supabaseClient
             .from("subscriptions")
             .update({ status: "cancelled" })
-            .eq("organization_id", profile.organization_id);
+            .eq("institution_id", profile.institution_id);
 
-          log.info("Subscription cancelled", { organizationId: profile.organization_id });
+          log.info("Subscription cancelled", { institutionId: profile.institution_id });
         }
         break;
       }
@@ -402,17 +402,17 @@ serve(async (req) => {
 
         const { data: profile } = await supabaseClient
           .from("profiles")
-          .select("organization_id")
+          .select("institution_id")
           .eq("email", customer.email)
           .single();
 
-        if (profile?.organization_id) {
+        if (profile?.institution_id) {
           await supabaseClient
             .from("subscriptions")
             .update({ status: "past_due" })
-            .eq("organization_id", profile.organization_id);
+            .eq("institution_id", profile.institution_id);
 
-          log.info("Payment failed - marked past_due", { organizationId: profile.organization_id });
+          log.info("Payment failed - marked past_due", { institutionId: profile.institution_id });
         }
         break;
       }

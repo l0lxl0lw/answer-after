@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, ArrowLeft, CheckCircle2, Info } from "lucide-react";
+import { Phone, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, Building2, ArrowLeft, CheckCircle2, Info, Zap, Terminal } from "lucide-react";
+import { isLocalEnvironment } from "@/lib/environment";
 import {
   Tooltip,
   TooltipContent,
@@ -18,71 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-
-// Format phone number as user types: +1 (XXX) XXX-XXXX
-function formatPhoneNumber(value: string): string {
-  // Strip all non-digits except leading +
-  const hasPlus = value.startsWith('+');
-  const digits = value.replace(/\D/g, '');
-  
-  if (digits.length === 0) return hasPlus ? '+' : '';
-  
-  // Handle US format (11 digits starting with 1, or 10 digits)
-  let formatted = '';
-  
-  if (digits.length >= 1) {
-    // Check if starts with country code 1
-    const hasCountryCode = digits.startsWith('1') && digits.length > 10;
-    const countryCode = hasCountryCode ? digits[0] : (digits.length <= 10 ? '' : digits[0]);
-    const remaining = hasCountryCode ? digits.slice(1) : (digits.length <= 10 ? digits : digits.slice(1));
-    
-    if (countryCode) {
-      formatted = `+${countryCode} `;
-    } else if (hasPlus || digits.length > 10) {
-      formatted = '+1 ';
-    }
-    
-    // Format area code
-    if (remaining.length > 0) {
-      const areaCode = remaining.slice(0, 3);
-      if (remaining.length <= 3) {
-        formatted += `(${areaCode}`;
-      } else {
-        formatted += `(${areaCode}) `;
-      }
-    }
-    
-    // Format exchange
-    if (remaining.length > 3) {
-      const exchange = remaining.slice(3, 6);
-      formatted += exchange;
-    }
-    
-    // Format subscriber
-    if (remaining.length > 6) {
-      const subscriber = remaining.slice(6, 10);
-      formatted += `-${subscriber}`;
-    }
-  }
-  
-  return formatted;
-}
-
-// Validate phone number format
-function isValidPhoneNumber(value: string): boolean {
-  const digits = value.replace(/\D/g, '');
-  return digits.length === 10 || digits.length === 11;
-}
-
-// Get just the digits for storage (E.164 format)
-function getPhoneDigits(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  // Ensure it starts with country code
-  if (digits.length === 10) {
-    return '+1' + digits;
-  }
-  return '+' + digits;
-}
+import { formatPhoneNumber, isValidPhoneNumber, getPhoneDigits } from "@/lib/phoneUtils";
 
 // Validation schemas
 const loginSchema = z.object({
@@ -106,7 +43,7 @@ const signupSchema = z
       .trim()
       .min(1, { message: "Name is required" })
       .max(100, { message: "Name must be less than 100 characters" }),
-    organizationName: z
+    institutionName: z
       .string()
       .trim()
       .min(1, { message: "Organization name is required" })
@@ -165,6 +102,7 @@ const Auth = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
+  const [isDevSettingUp, setIsDevSettingUp] = useState(false);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/dashboard";
 
@@ -195,7 +133,7 @@ const Auth = () => {
     resolver: zodResolver(signupSchema),
     defaultValues: {
       name: "",
-      organizationName: "",
+      institutionName: "",
       email: "",
       phone: "",
       password: "",
@@ -361,7 +299,7 @@ const Auth = () => {
     
     setIsLoading(true);
     try {
-      const result = await signup(signupData.email, signupData.password, signupData.name, signupData.organizationName);
+      const result = await signup(signupData.email, signupData.password, signupData.name, signupData.institutionName);
       
       if (result.error) {
         toast({
@@ -383,15 +321,15 @@ const Auth = () => {
       const { data: sessionData } = await supabase.auth.getSession();
 
       if (sessionData.session) {
-        // First, provision the organization with phone number for notifications
+        // First, provision the institution with phone number for notifications
         const { data: provisionData, error: provisionError } = await supabase.functions.invoke(
-          'provision-organization',
+          'provision-institution',
           {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
             body: {
-              organizationName: signupData.organizationName,
+              institutionName: signupData.institutionName,
               notificationPhone: getPhoneDigits(signupData.phone),
               businessPhone: getPhoneDigits(signupData.phone),
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -403,7 +341,7 @@ const Auth = () => {
           console.error('Provisioning error:', provisionError);
           toast({
             title: "Setup issue",
-            description: "There was an issue setting up your organization. Please contact support.",
+            description: "There was an issue setting up your institution. Please contact support.",
             variant: "destructive",
           });
           navigate(from, { replace: true });
@@ -432,6 +370,106 @@ const Auth = () => {
       setSignupStep('form');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Dev Quick Setup - creates test account and sets up everything automatically
+  const handleDevQuickSetup = async () => {
+    if (!isLocalEnvironment()) return;
+
+    setIsDevSettingUp(true);
+    const testEmail = `dev-${Date.now()}@test.local`;
+    const testPassword = 'TestPassword123!';
+    const testName = 'Dev Tester';
+    const testOrg = 'Dev Test Clinic';
+    const testPhone = '+15551234567';
+
+    try {
+      // Step 1: Create test account
+      toast({
+        title: "Setting up dev environment...",
+        description: "Creating test account...",
+      });
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: testEmail,
+        password: testPassword,
+        options: {
+          data: {
+            full_name: testName,
+            institution_name: testOrg,
+          },
+        },
+      });
+
+      if (signUpError) throw signUpError;
+
+      // Step 2: Get session
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error('Failed to get session after signup');
+      }
+
+      // Step 3: Provision institution
+      toast({
+        title: "Setting up dev environment...",
+        description: "Provisioning organization...",
+      });
+
+      const { error: provisionError } = await supabase.functions.invoke(
+        'provision-institution',
+        {
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+          body: {
+            institutionName: testOrg,
+            notificationPhone: testPhone,
+            businessPhone: testPhone,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+        }
+      );
+
+      if (provisionError) throw provisionError;
+
+      // Step 4: Run dev-quick-setup
+      toast({
+        title: "Setting up dev environment...",
+        description: "Creating phone, agent & sample data...",
+      });
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dev-quick-setup`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionData.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Dev setup failed');
+      }
+
+      toast({
+        title: "Dev Setup Complete!",
+        description: `Created: ${result.data.samplesCreated.services} services, ${result.data.samplesCreated.contacts} contacts. Phone: ${result.data.phoneNumber}`,
+      });
+
+      // Navigate to dashboard
+      navigate('/dashboard', { replace: true });
+
+    } catch (error) {
+      console.error('Dev setup failed:', error);
+      toast({
+        title: "Dev Setup Failed",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+    } finally {
+      setIsDevSettingUp(false);
     }
   };
 
@@ -753,12 +791,12 @@ const Auth = () => {
                       type="text"
                       placeholder="Smile Dental Care"
                       className="pl-10 h-12"
-                      {...signupForm.register("organizationName")}
+                      {...signupForm.register("institutionName")}
                     />
                   </div>
-                  {signupForm.formState.errors.organizationName && (
+                  {signupForm.formState.errors.institutionName && (
                     <p className="text-sm text-destructive">
-                      {signupForm.formState.errors.organizationName.message}
+                      {signupForm.formState.errors.institutionName.message}
                     </p>
                   )}
                 </div>
@@ -890,6 +928,41 @@ const Auth = () => {
                     Start with your first month for just $1. Cancel anytime.
                   </p>
                 </div>
+
+                {/* Dev Quick Setup - Local Only */}
+                {isLocalEnvironment() && (
+                  <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Dev Mode</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDevQuickSetup}
+                        disabled={isDevSettingUp}
+                        className="border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20"
+                      >
+                        {isDevSettingUp ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                            Setting up...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3 h-3 mr-1.5" />
+                            Quick Setup
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Skip signup & create test account with phone, agent, and sample data
+                    </p>
+                  </div>
+                )}
 
                 {/* Terms */}
                 <p className="text-sm text-muted-foreground">

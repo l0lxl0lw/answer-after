@@ -35,20 +35,20 @@ export default function PhoneSetup() {
 
   // Check if user already has a phone number
   const { data: existingPhone } = useQuery({
-    queryKey: ["existing-phone", user?.organization_id],
+    queryKey: ["existing-phone", user?.institution_id],
     queryFn: async () => {
-      if (!user?.organization_id) return null;
+      if (!user?.institution_id) return null;
 
       const { data } = await supabase
         .from("phone_numbers")
         .select("phone_number")
-        .eq("organization_id", user.organization_id)
+        .eq("institution_id", user.institution_id)
         .eq("is_active", true)
         .maybeSingle();
 
       return data;
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 
   const handleBusinessPhoneChange = (value: string) => {
@@ -78,10 +78,10 @@ export default function PhoneSetup() {
       return;
     }
 
-    if (!user?.organization_id) {
+    if (!user?.institution_id) {
       toast({
         title: "Setup incomplete",
-        description: "Organization not found. Please try logging in again.",
+        description: "Institution not found. Please try logging in again.",
         variant: "destructive",
       });
       navigate("/auth");

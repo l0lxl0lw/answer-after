@@ -13,17 +13,13 @@ import CallHistory from "./pages/CallHistory";
 import SMS from "./pages/SMS";
 import CallDetail from "./pages/CallDetail";
 import Schedules from "./pages/Schedules";
-import CalendarCallback from "./pages/CalendarCallback";
-import CalendarSetupGuide from "./pages/CalendarSetupGuide";
 import Customers from "./pages/Customers";
-import Appointments from "./pages/Appointments";
 import Leads from "./pages/Leads";
-import Providers from "./pages/Providers";
 import Settings from "./pages/Settings";
 import Integrations from "./pages/Integrations";
-import MyServices from "./pages/MyServices";
 import Subscriptions from "./pages/Subscriptions";
 import MyAgent from "./pages/MyAgent";
+import EscalationContacts from "./pages/EscalationContacts";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import SelectPlan from "./pages/onboarding/SelectPlan";
@@ -66,15 +62,11 @@ const App = () => (
             <Route path="/dashboard/calls/:id" element={<ProtectedRoute><CallDetail /></ProtectedRoute>} />
             <Route path="/dashboard/messages" element={<ProtectedRoute><SMS /></ProtectedRoute>} />
             <Route path="/dashboard/calendar" element={<ProtectedRoute><Schedules /></ProtectedRoute>} />
-            <Route path="/dashboard/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
-            <Route path="/dashboard/calendar-setup" element={<ProtectedRoute><CalendarSetupGuide /></ProtectedRoute>} />
             <Route path="/dashboard/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-            <Route path="/dashboard/bookings" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
             <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
-            <Route path="/dashboard/providers" element={<ProtectedRoute><Providers /></ProtectedRoute>} />
-            <Route path="/dashboard/services" element={<ProtectedRoute><MyServices /></ProtectedRoute>} />
             <Route path="/dashboard/voice-behavior" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
             <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
+            <Route path="/dashboard/escalation" element={<ProtectedRoute><EscalationContacts /></ProtectedRoute>} />
             <Route path="/dashboard/account" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/dashboard/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

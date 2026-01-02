@@ -100,7 +100,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
     let cancelled = false;
     
     async function fetchEvents() {
-      if (!user?.organization_id) return;
+      if (!user?.institution_id) return;
       
       setIsLoading(true);
       setFetchAttempted(true);
@@ -111,7 +111,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
         const { data, error } = await supabase.functions.invoke('google-calendar-events', {
           body: {
             action: 'list',
-            organizationId: user.organization_id,
+            institutionId: user.institution_id,
             timeMin: weekStart.toISOString(),
             timeMax: weekEnd.toISOString(),
           },
@@ -145,7 +145,7 @@ export function WeeklyCalendarView({ businessHours, timezone }: WeeklyCalendarVi
     return () => {
       cancelled = true;
     };
-  }, [user?.organization_id, weekKey, checkGoogleError]);
+  }, [user?.institution_id, weekKey, checkGoogleError]);
 
   const isHourAvailable = (dayIndex: number, hour: number): boolean => {
     if (!businessHours) return true;

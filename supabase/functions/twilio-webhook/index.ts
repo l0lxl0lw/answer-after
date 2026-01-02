@@ -5,6 +5,9 @@ import { createLogger } from "../_shared/logger.ts";
 
 const logger = createLogger('twilio-webhook');
 
+// Feature flag for workflow-based agents (must match elevenlabs-agent)
+const USE_WORKFLOW_AGENTS = Deno.env.get('USE_WORKFLOW_AGENTS') === 'true';
+
 // Detect interest level from conversation text
 async function detectInterestLevel(conversationText: string): Promise<'hot' | 'warm' | 'cold'> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -44,6 +47,44 @@ ${conversationText}`;
   } catch {
     return 'warm'; // Default on error
   }
+}
+
+/**
+ * Get dynamic variables for workflow agents
+ * These are passed to ElevenLabs and used in the workflow
+ */
+async function getDynamicVariablesForWorkflow(
+  supabase: any,
+  institutionId: string,
+  callerPhone: string
+): Promise<Record<string, string>> {
+  // Get institution
+  const { data: org } = await supabase
+    .from('institutions')
+    .select('name, workflow_config, notification_phone')
+    .eq('id', institutionId)
+    .single();
+
+  // Get escalation contact (highest priority, active)
+  const { data: escalation } = await supabase
+    .from('escalation_contacts')
+    .select('phone, name')
+    .eq('institution_id', institutionId)
+    .eq('is_active', true)
+    .order('priority', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const workflowConfig = org?.workflow_config || {};
+
+  return {
+    org_name: org?.name || 'Our company',
+    on_call_phone: escalation?.phone || org?.notification_phone || '',
+    on_call_name: escalation?.name || 'our technician',
+    caller_phone: callerPhone,
+    service_categories: (workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general']).join(', '),
+    callback_timeframe: `within ${workflowConfig.callback_hours_offset || 2} hours`,
+  };
 }
 
 // AI conversation using Lovable AI Gateway
@@ -143,7 +184,7 @@ serve(async (req) => {
       // Find the call record with contact
       const { data: existingCall } = await supabase
         .from('calls')
-        .select('id, is_emergency, organization_id, contact_id, caller_phone')
+        .select('id, is_emergency, institution_id, contact_id, caller_phone')
         .eq('twilio_call_sid', callSid)
         .maybeSingle();
 
@@ -237,7 +278,7 @@ serve(async (req) => {
             .from('contacts')
             .update(contactUpdate)
             .eq('id', existingCall.contact_id);
-        } else if (existingCall.organization_id && existingCall.caller_phone) {
+        } else if (existingCall.institution_id && existingCall.caller_phone) {
           // If no contact_id on call, try to find/update contact by phone
           const contactUpdate: Record<string, unknown> = {
             updated_at: new Date().toISOString(),
@@ -252,13 +293,13 @@ serve(async (req) => {
           await supabase
             .from('contacts')
             .update(contactUpdate)
-            .eq('organization_id', existingCall.organization_id)
+            .eq('institution_id', existingCall.institution_id)
             .eq('phone', existingCall.caller_phone);
         }
 
         // Deduct credits based on call duration (1 credit per second)
         // Priority: Use purchased credits first, then plan credits
-        if (callDuration && callDuration > 0 && existingCall.organization_id) {
+        if (callDuration && callDuration > 0 && existingCall.institution_id) {
           let remainingToDeduct = callDuration;
           let purchasedCreditsUsed = 0;
           let planCreditsUsed = 0;
@@ -267,7 +308,7 @@ serve(async (req) => {
           const { data: purchasedCredits } = await supabase
             .from('purchased_credits')
             .select('id, credits_remaining')
-            .eq('organization_id', existingCall.organization_id)
+            .eq('institution_id', existingCall.institution_id)
             .gt('credits_remaining', 0)
             .order('purchased_at', { ascending: true });
 
@@ -293,7 +334,7 @@ serve(async (req) => {
             const { data: subscription } = await supabase
               .from('subscriptions')
               .select('id, used_credits, total_credits')
-              .eq('organization_id', existingCall.organization_id)
+              .eq('institution_id', existingCall.institution_id)
               .maybeSingle();
 
             if (subscription) {
@@ -310,7 +351,7 @@ serve(async (req) => {
           }
 
           log.info('Credits deducted', {
-            organizationId: existingCall.organization_id,
+            institutionId: existingCall.institution_id,
             callDuration,
             purchasedCreditsUsed,
             planCreditsUsed,
@@ -328,7 +369,7 @@ serve(async (req) => {
     // Find phone number and organization
     const { data: phoneData } = await supabase
       .from('phone_numbers')
-      .select('id, organization_id')
+      .select('id, institution_id')
       .eq('phone_number', calledNumber)
       .eq('is_active', true)
       .maybeSingle();
@@ -338,13 +379,13 @@ serve(async (req) => {
     if (phoneData) {
       // Get ElevenLabs agent ID from organization_agents table
       const { data: agentData } = await supabase
-        .from('organization_agents')
+        .from('institution_agents')
         .select('elevenlabs_agent_id')
-        .eq('organization_id', phoneData.organization_id)
+        .eq('institution_id', phoneData.institution_id)
         .maybeSingle();
 
       agentId = agentData?.elevenlabs_agent_id;
-      log.info('Agent found', { organizationId: phoneData.organization_id, agentId });
+      log.info('Agent found', { institutionId: phoneData.institution_id, agentId });
 
       // Create or find call record
       const { data: existingCall } = await supabase
@@ -358,12 +399,12 @@ serve(async (req) => {
         const { data: contact } = await supabase
           .from('contacts')
           .upsert({
-            organization_id: phoneData.organization_id,
+            institution_id: phoneData.institution_id,
             phone: callerPhone,
             status: 'lead',
             source: 'inbound_call',
           }, {
-            onConflict: 'organization_id,phone',
+            onConflict: 'institution_id,phone',
             ignoreDuplicates: false,
           })
           .select('id')
@@ -375,7 +416,7 @@ serve(async (req) => {
         await supabase
           .from('calls')
           .insert({
-            organization_id: phoneData.organization_id,
+            institution_id: phoneData.institution_id,
             phone_number_id: phoneData.id,
             contact_id: contact?.id || null,
             twilio_call_sid: callSid,
@@ -392,16 +433,16 @@ serve(async (req) => {
     if (phoneData) {
       const { data: greetingFile } = await supabase.storage
         .from('greetings')
-        .getPublicUrl(`${phoneData.organization_id}/greeting.mp3`);
+        .getPublicUrl(`${phoneData.institution_id}/greeting.mp3`);
 
       // Check if file exists by trying to fetch its metadata
       const { data: fileList } = await supabase.storage
         .from('greetings')
-        .list(phoneData.organization_id);
+        .list(phoneData.institution_id);
 
       if (fileList && fileList.some(f => f.name === 'greeting.mp3')) {
         greetingAudioUrl = greetingFile.publicUrl;
-        log.info('Greeting audio found', { organizationId: phoneData.organization_id });
+        log.info('Greeting audio found', { institutionId: phoneData.institution_id });
       }
     }
 
@@ -434,9 +475,23 @@ serve(async (req) => {
     }
 
     // Build WebSocket URL to our edge function that bridges Twilio <-> ElevenLabs
-    const wsUrl = `${supabaseUrl.replace('https://', 'wss://')}/functions/v1/elevenlabs-agent?agentId=${agentId}&callSid=${callSid}`;
+    let wsUrl = `${supabaseUrl.replace('https://', 'wss://')}/functions/v1/elevenlabs-agent?agentId=${agentId}&callSid=${callSid}`;
 
-    log.info('Returning Streams TwiML', { wsUrl });
+    // For workflow agents, fetch and pass dynamic variables
+    if (USE_WORKFLOW_AGENTS && phoneData) {
+      const dynamicVars = await getDynamicVariablesForWorkflow(supabase, phoneData.institution_id, callerPhone);
+      // Append dynamic variables as query parameters
+      const varsParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(dynamicVars)) {
+        if (value) {
+          varsParams.set(key, value);
+        }
+      }
+      wsUrl = `${wsUrl}&${varsParams.toString()}`;
+      log.info('Workflow dynamic variables', { ...dynamicVars });
+    }
+
+    log.info('Returning Streams TwiML', { wsUrl, useWorkflow: USE_WORKFLOW_AGENTS });
 
     // Play custom greeting audio first, then connect to AI agent
     let twiml: string;

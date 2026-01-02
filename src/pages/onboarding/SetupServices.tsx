@@ -9,7 +9,7 @@ import { ArrowRight, Sparkles, Plus, Trash2, Loader2, Wrench, Zap, Phone, AlertC
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCurrentSubscriptionTier } from "@/hooks/use-api";
+import { useCurrentSubscriptionTier } from "@/hooks/use-subscriptions";
 import { useQuery } from "@tanstack/react-query";
 import { COMPANY } from "@/lib/constants";
 import { extractAreaCode, formatPhoneDisplay } from "@/lib/phoneUtils";
@@ -53,33 +53,33 @@ export default function SetupServices() {
 
   // Check for existing phone number
   const { data: existingPhone, isLoading: isLoadingPhone, refetch: refetchPhone } = useQuery({
-    queryKey: ["existing-phone", user?.organization_id],
+    queryKey: ["existing-phone", user?.institution_id],
     queryFn: async () => {
-      if (!user?.organization_id) return null;
+      if (!user?.institution_id) return null;
       const { data } = await supabase
         .from("phone_numbers")
         .select("phone_number")
-        .eq("organization_id", user.organization_id)
+        .eq("institution_id", user.institution_id)
         .eq("is_active", true)
         .maybeSingle();
       return data;
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 
   // Get business phone from organization for area code
   const { data: orgData, isLoading: isLoadingOrg } = useQuery({
-    queryKey: ["org-business-phone", user?.organization_id],
+    queryKey: ["org-business-phone", user?.institution_id],
     queryFn: async () => {
-      if (!user?.organization_id) return null;
+      if (!user?.institution_id) return null;
       const { data } = await supabase
-        .from("organizations")
+        .from("institutions")
         .select("business_phone_number")
-        .eq("id", user.organization_id)
+        .eq("id", user.institution_id)
         .single();
       return data;
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 
   // Plan capabilities - now using DB feature flags instead of hardcoded plan names
@@ -92,18 +92,18 @@ export default function SetupServices() {
   // Core plan (no custom agent): Auto-create agent with defaults and skip
   // Using feature flag instead of hardcoded plan name check
   useEffect(() => {
-    if (!isLoadingPlan && !features.hasCustomAgent && user?.organization_id && session) {
+    if (!isLoadingPlan && !features.hasCustomAgent && user?.institution_id && session) {
       log.debug('Plan without custom agent detected, auto-creating default agent');
       handleCoreAutoSetup();
     }
-  }, [isLoadingPlan, features.hasCustomAgent, user?.organization_id, session]);
+  }, [isLoadingPlan, features.hasCustomAgent, user?.institution_id, session]);
 
   // Load existing data for plans with custom agent capability
   useEffect(() => {
     if (features.hasCustomAgent) {
       loadExistingData();
     }
-  }, [user?.organization_id, features.hasCustomAgent]);
+  }, [user?.institution_id, features.hasCustomAgent]);
 
   // Auto-purchase phone number if not already done
   useEffect(() => {
@@ -163,14 +163,14 @@ export default function SetupServices() {
   }, [existingPhone, isLoadingPhone, isLoadingOrg, orgData, session]);
 
   const loadExistingData = async () => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
 
     try {
       // Load services
       const { data: servicesData } = await supabase
         .from("services")
         .select("*")
-        .eq("organization_id", user.organization_id);
+        .eq("institution_id", user.institution_id);
 
       if (servicesData && servicesData.length > 0) {
         setServices(
@@ -187,7 +187,7 @@ export default function SetupServices() {
       const { data: agentData } = await supabase
         .from("organization_agents")
         .select("context")
-        .eq("organization_id", user.organization_id)
+        .eq("institution_id", user.institution_id)
         .maybeSingle();
 
       if (agentData?.context) {
@@ -205,7 +205,7 @@ export default function SetupServices() {
   };
 
   const handleCoreAutoSetup = async () => {
-    if (!session || !user?.organization_id) return;
+    if (!session || !user?.institution_id) return;
 
     setIsCreatingAgent(true);
 
@@ -217,7 +217,7 @@ export default function SetupServices() {
         },
         body: {
           action: "create-agent",
-          organizationId: user.organization_id,
+          institutionId: user.institution_id,
         },
       });
 
@@ -275,7 +275,7 @@ export default function SetupServices() {
   };
 
   const handleContinue = async () => {
-    if (!session || !user?.organization_id) {
+    if (!session || !user?.institution_id) {
       toast({
         title: "Error",
         description: "Session expired. Please log in again.",
@@ -297,11 +297,11 @@ export default function SetupServices() {
           await supabase
             .from("services")
             .delete()
-            .eq("organization_id", user.organization_id);
+            .eq("institution_id", user.institution_id);
 
           // Insert new services
           const servicesToInsert = validServices.map((s) => ({
-            organization_id: user.organization_id,
+            institution_id: user.institution_id,
             name: s.name.trim(),
             price_cents: s.price ? Math.round(parseFloat(s.price) * 100) : 0,
             duration_minutes: s.duration ? parseInt(s.duration) : 60,
@@ -344,7 +344,7 @@ export default function SetupServices() {
       const { data: existingAgent } = await supabase
         .from("organization_agents")
         .select("id, elevenlabs_agent_id")
-        .eq("organization_id", user.organization_id)
+        .eq("institution_id", user.institution_id)
         .maybeSingle();
 
       if (existingAgent) {
@@ -355,7 +355,7 @@ export default function SetupServices() {
             context: JSON.stringify(agentContext),
             updated_at: new Date().toISOString(),
           })
-          .eq("organization_id", user.organization_id);
+          .eq("institution_id", user.institution_id);
       }
 
       // Create or update ElevenLabs agent
@@ -369,7 +369,7 @@ export default function SetupServices() {
         },
         body: {
           action,
-          organizationId: user.organization_id,
+          institutionId: user.institution_id,
           context: JSON.stringify(agentContext),
           greeting: agentContext.greeting,
         },

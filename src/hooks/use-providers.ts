@@ -10,7 +10,7 @@ import type { ProviderRole } from "./use-roles";
 
 export interface Provider {
   id: string;
-  organization_id: string;
+  institution_id: string;
   user_id: string | null;
   name: string;
   email: string | null;
@@ -94,7 +94,7 @@ export function useProviders() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["providers", user?.organization_id],
+    queryKey: ["providers", user?.institution_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("providers")
@@ -107,7 +107,7 @@ export function useProviders() {
       if (error) throw error;
       return data as Provider[];
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 }
 
@@ -118,7 +118,7 @@ export function useActiveProviders() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["providers", "active", user?.organization_id],
+    queryKey: ["providers", "active", user?.institution_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("providers")
@@ -132,7 +132,7 @@ export function useActiveProviders() {
       if (error) throw error;
       return data as Provider[];
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 }
 
@@ -170,12 +170,12 @@ export function useCreateProvider() {
 
   return useMutation({
     mutationFn: async (data: CreateProviderRequest) => {
-      if (!user?.organization_id) throw new Error("No organization");
+      if (!user?.institution_id) throw new Error("No organization");
 
       const { data: provider, error } = await supabase
         .from("providers")
         .insert({
-          organization_id: user.organization_id,
+          institution_id: user.institution_id,
           ...data,
         })
         .select()
@@ -484,3 +484,53 @@ export const PROVIDER_COLORS = [
   "#06b6d4", // Cyan
   "#f97316", // Orange
 ] as const;
+
+// ============================================
+// NEXHEALTH SYNC
+// ============================================
+
+interface SyncProvidersResponse {
+  success: boolean;
+  count: number;
+  total: number;
+  message: string;
+  errors?: string[];
+}
+
+/**
+ * Sync providers from NexHealth PMS
+ * Fetches providers from the connected dental practice management system
+ * and upserts them into the local providers table.
+ */
+export function useSyncProvidersFromNexHealth() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (): Promise<SyncProvidersResponse> => {
+      const { data, error } = await supabase.functions.invoke<SyncProvidersResponse>(
+        'sync-nexhealth-providers'
+      );
+
+      if (error) throw error;
+      if (!data) throw new Error('No response from sync function');
+
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
+
+      if (data.count === 0) {
+        toast.info("No providers found in NexHealth");
+      } else if (data.errors && data.errors.length > 0) {
+        toast.warning(`Synced ${data.count} of ${data.total} providers`, {
+          description: `${data.errors.length} providers failed to sync`,
+        });
+      } else {
+        toast.success(`Synced ${data.count} providers from NexHealth`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to sync providers", { description: error.message });
+    },
+  });
+}

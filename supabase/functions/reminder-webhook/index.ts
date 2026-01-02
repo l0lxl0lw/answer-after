@@ -69,7 +69,7 @@ serve(async (req) => {
       }
 
       // Notify organization
-      await notifyOrganization(supabase, reminder, outcome, log);
+      await notifyInstitution(supabase, reminder, outcome, log);
 
       // If reschedule requested, create a follow-up task
       if (outcome === 'reschedule_requested') {
@@ -172,11 +172,11 @@ Determine the customer's response. Return ONLY one of these exact words:
   return 'confirmed';
 }
 
-async function notifyOrganization(supabase: any, reminder: any, outcome: string, log: any) {
+async function notifyInstitution(supabase: any, reminder: any, outcome: string, log: any) {
   const { data: orgData } = await supabase
-    .from('organizations')
+    .from('institutions')
     .select('notification_email, notification_phone, name')
-    .eq('id', reminder.organization_id)
+    .eq('id', reminder.institution_id)
     .single();
 
   if (!orgData) return;
@@ -232,7 +232,7 @@ async function notifyOrganization(supabase: any, reminder: any, outcome: string,
     }
   }
 
-  log.info('Organization notified', { orgName: orgData.name, message });
+  log.info('Institution notified', { orgName: orgData.name, message });
 }
 
 async function createRescheduleTask(supabase: any, reminder: any, log: any) {

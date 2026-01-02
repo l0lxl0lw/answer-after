@@ -21,7 +21,8 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useOrganization, useContactsByPhone } from "@/hooks/use-api";
+import { useInstitution } from "@/hooks/use-institution";
+import { useContactsByPhone } from "@/hooks/use-contacts";
 
 interface SMSMessage {
   id: string;
@@ -103,22 +104,22 @@ function SMSItem({ message }: { message: SMSMessage }) {
 
 const SMS = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const { data: organization } = useOrganization();
+  const { data: institution } = useInstitution();
 
   // Fetch SMS messages from Twilio
   const { data: smsData, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['sms-messages', organization?.id],
+    queryKey: ['sms-messages', institution?.id],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('get-twilio-sms');
       if (error) throw error;
       return data as { messages: SMSMessage[]; meta: { total: number } };
     },
-    enabled: !!organization?.id,
+    enabled: !!institution?.id,
     staleTime: 30000, // Cache for 30 seconds
   });
 
   // Fetch local contacts for name mapping
-  const { data: contactsByPhone } = useContactsByPhone(organization?.id);
+  const { data: contactsByPhone } = useContactsByPhone(institution?.id);
 
   // Enrich messages with contact names
   const enrichedMessages = useMemo(() => {

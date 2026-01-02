@@ -2,7 +2,7 @@
 // Request/Response schemas for Express API
 
 import type {
-  Organization,
+  Institution,
   User,
   UserRole,
   PhoneNumber,
@@ -60,7 +60,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   user: User;
   role: UserRole;
-  organization: Organization;
+  institution: Institution;
   access_token: string;
   refresh_token: string;
   expires_at: string;
@@ -70,7 +70,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   full_name: string;
-  organization_name: string;
+  institution_name: string;
   phone?: string;
 }
 
@@ -92,9 +92,9 @@ export interface ResetPasswordRequest {
   password: string;
 }
 
-// ============= Organization Endpoints =============
+// ============= Institution Endpoints =============
 
-export interface UpdateOrganizationRequest {
+export interface UpdateInstitutionRequest {
   name?: string;
   timezone?: string;
   business_hours_start?: string;
@@ -278,9 +278,9 @@ export interface ApiEndpoints {
   'POST /auth/reset-password': { request: ResetPasswordRequest; response: void };
   'POST /auth/logout': { request: void; response: void };
   
-  // Organization
-  'GET /organizations/:id': { request: void; response: Organization };
-  'PATCH /organizations/:id': { request: UpdateOrganizationRequest; response: Organization };
+  // Institution
+  'GET /institutions/:id': { request: void; response: Institution };
+  'PATCH /institutions/:id': { request: UpdateInstitutionRequest; response: Institution };
   
   // Users
   'GET /users': { request: PaginationParams; response: { users: User[]; meta: PaginationMeta } };

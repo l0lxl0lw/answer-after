@@ -9,13 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Phone, Plus, Trash2, Clock, CheckCircle, XCircle, AlertCircle, Crown } from 'lucide-react';
 import { format } from 'date-fns';
-import { useSubscription } from '@/hooks/use-api';
+import { useSubscription } from '@/hooks/use-subscriptions';
 import { useNavigate } from 'react-router-dom';
 
 interface AppointmentRemindersProps {
   appointmentId: string;
   appointmentStart: string;
-  organizationId: string;
+  institutionId: string;
 }
 
 interface Reminder {
@@ -28,7 +28,7 @@ interface Reminder {
   notes: string | null;
 }
 
-export function AppointmentReminders({ appointmentId, appointmentStart, organizationId }: AppointmentRemindersProps) {
+export function AppointmentReminders({ appointmentId, appointmentStart, institutionId }: AppointmentRemindersProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -77,7 +77,7 @@ export function AppointmentReminders({ appointmentId, appointmentStart, organiza
         .from('appointment_reminders')
         .insert({
           appointment_id: appointmentId,
-          organization_id: organizationId,
+          institution_id: institutionId,
           reminder_number: reminderNumber,
           scheduled_time: scheduledTime,
           reminder_type: 'call',

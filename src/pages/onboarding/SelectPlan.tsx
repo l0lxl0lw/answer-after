@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight, Sparkles, Terminal, Copy, CheckCheck } from "lucide-react";
-import { useSubscriptionTiers } from "@/hooks/use-api";
+import { useSubscriptionTiers } from "@/hooks/use-subscriptions";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";

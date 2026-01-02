@@ -37,7 +37,7 @@ import {
   useUpdateContact,
   useDeleteContact,
   useContactCalls,
-} from "@/hooks/use-api";
+} from "@/hooks/use-contacts";
 import type { Contact } from "@/types/database";
 import {
   Search,
@@ -57,17 +57,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-
-function formatPhone(phone: string): string {
-  const cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 11 && cleaned.startsWith("1")) {
-    return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-  }
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-  }
-  return phone;
-}
+import { formatPhoneDisplay } from "@/lib/phoneUtils";
 
 interface CustomerFormData {
   phone: string;
@@ -426,7 +416,7 @@ export default function Customers() {
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Phone className="w-3 h-3" />
-                                  {formatPhone(customer.phone)}
+                                  {formatPhoneDisplay(customer.phone)}
                                 </a>
                               </TableCell>
                               <TableCell>

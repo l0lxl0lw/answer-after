@@ -51,21 +51,21 @@ serve(async (req) => {
 
     // Get organization details
     const { data: orgData, error: orgError } = await supabase
-      .from('organizations')
+      .from('institutions')
       .select('*')
-      .eq('id', reminder.organization_id)
+      .eq('id', reminder.institution_id)
       .single();
 
     if (orgError || !orgData) {
-      log.error('Organization not found', orgError || new Error('No data'));
-      return errorResponse('Organization not found', 404);
+      log.error('Institution not found', orgError || new Error('No data'));
+      return errorResponse('Institution not found', 404);
     }
 
     // Get organization's phone number
     const { data: phoneData } = await supabase
       .from('phone_numbers')
       .select('phone_number')
-      .eq('organization_id', reminder.organization_id)
+      .eq('institution_id', reminder.institution_id)
       .eq('is_active', true)
       .limit(1)
       .single();
@@ -77,9 +77,9 @@ serve(async (req) => {
 
     // Get ElevenLabs agent for this organization
     const { data: agentData } = await supabase
-      .from('organization_agents')
+      .from('institution_agents')
       .select('elevenlabs_agent_id')
-      .eq('organization_id', reminder.organization_id)
+      .eq('institution_id', reminder.institution_id)
       .single();
 
     if (!agentData?.elevenlabs_agent_id) {

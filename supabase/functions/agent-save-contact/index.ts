@@ -2,7 +2,7 @@
  * Agent Save Contact Endpoint
  *
  * Called by ElevenLabs agent during live calls to save customer contact information.
- * Organization ID is baked into the webhook config for security isolation.
+ * Institution ID is baked into the webhook config for security isolation.
  */
 
 import { createServiceClient } from "../_shared/db.ts";
@@ -20,14 +20,14 @@ Deno.serve(async (req) => {
     const log = logger.withContext({ requestId: crypto.randomUUID() });
 
     const body = await req.json();
-    const { organization_id, phone, name, address, email, notes } = body;
+    const { institution_id, phone, name, address, email, notes } = body;
 
-    log.info("Save contact request", { organization_id, phone, hasName: !!name });
+    log.info("Save contact request", { institution_id, phone, hasName: !!name });
 
-    // SECURITY: organization_id comes from webhook config, not agent input
-    if (!organization_id) {
-      log.warn("Missing organization_id in request");
-      return errorResponse("Missing organization_id", 400);
+    // SECURITY: institution_id comes from webhook config, not agent input
+    if (!institution_id) {
+      log.warn("Missing institution_id in request");
+      return errorResponse("Missing institution_id", 400);
     }
 
     if (!phone) {
@@ -39,24 +39,24 @@ Deno.serve(async (req) => {
 
     // Validate organization exists
     const { data: org, error: orgError } = await supabase
-      .from('organizations')
+      .from('institutions')
       .select('id, name')
-      .eq('id', organization_id)
+      .eq('id', institution_id)
       .single();
 
     if (orgError || !org) {
-      log.warn("Invalid organization", { organization_id });
+      log.warn("Invalid organization", { institution_id });
       return errorResponse("Invalid organization", 403);
     }
 
     // Normalize phone number (remove non-digits, ensure +1 prefix)
     const normalizedPhone = normalizePhone(phone);
 
-    // Upsert contact - ALWAYS filtered by organization_id
+    // Upsert contact - ALWAYS filtered by institution_id
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .upsert({
-        organization_id,
+        institution_id,
         phone: normalizedPhone,
         name: name || null,
         address: address || null,
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
         source: 'inbound_call',
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'organization_id,phone',
+        onConflict: 'institution_id,phone',
         ignoreDuplicates: false
       })
       .select('id, name, phone')

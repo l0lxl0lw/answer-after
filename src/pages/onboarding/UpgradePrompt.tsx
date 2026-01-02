@@ -6,7 +6,7 @@ import { ArrowRight, Sparkles, Zap, Check, Loader2 } from "lucide-react";
 import { COMPANY } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { createLogger } from "@/lib/logger";
-import { useSubscriptionTiers } from "@/hooks/use-api";
+import { useSubscriptionTiers } from "@/hooks/use-subscriptions";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 

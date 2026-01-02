@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight } from "lucide-react";
-import { useSubscriptionTiers } from "@/hooks/use-api";
+import { useSubscriptionTiers } from "@/hooks/use-subscriptions";
 import { LINKS } from "@/lib/constants";
 
 export function Pricing() {

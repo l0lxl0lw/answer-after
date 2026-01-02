@@ -19,7 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useConversations, type Conversation } from "@/hooks/use-api";
+import { useConversations, type Conversation } from "@/hooks/use-calls";
 import { cn } from "@/lib/utils";
 
 // Format duration from seconds to MM:SS

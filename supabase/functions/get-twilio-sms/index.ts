@@ -59,11 +59,11 @@ Deno.serve(async (req) => {
     // Get user's organization using service role client
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('organization_id')
+      .select('institution_id')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile?.organization_id) {
+    if (profileError || !profile?.institution_id) {
       log.error('Profile error', profileError || new Error('No organization'));
       return errorResponse('User organization not found', 404);
     }
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     const { data: phoneNumbers, error: phoneError } = await supabase
       .from('phone_numbers')
       .select('phone_number')
-      .eq('organization_id', profile.organization_id)
+      .eq('institution_id', profile.institution_id)
       .eq('is_active', true);
 
     if (phoneError) {

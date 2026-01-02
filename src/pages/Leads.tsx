@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { useLeads, useUpdateContact, type ContactFilters } from "@/hooks/use-api";
+import { useLeads, useUpdateContact, type ContactFilters } from "@/hooks/use-contacts";
 import { InterestLevelBadge } from "@/components/leads/InterestLevelBadge";
 import { LeadStatusBadge } from "@/components/leads/LeadStatusBadge";
 import { LeadNotesDialog } from "@/components/leads/LeadNotesDialog";
@@ -55,17 +55,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-
-function formatPhone(phone: string): string {
-  const cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 11 && cleaned.startsWith("1")) {
-    return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-  }
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-  }
-  return phone;
-}
+import { formatPhoneDisplay } from "@/lib/phoneUtils";
 
 export default function Leads() {
   const { toast } = useToast();
@@ -333,7 +323,7 @@ export default function Leads() {
                               )}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              {formatPhone(lead.phone)}
+                              {formatPhoneDisplay(lead.phone)}
                             </TableCell>
                             <TableCell>
                               <div className="text-sm">

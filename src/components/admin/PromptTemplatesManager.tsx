@@ -180,7 +180,7 @@ const PromptTemplatesManager = () => {
         body: {
           action: 'preview',
           template: templateContent,
-          organizationId: selectedOrgId,
+          institutionId: selectedOrgId,
         },
       });
 

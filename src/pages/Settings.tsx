@@ -26,7 +26,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOrganization, usePhoneNumbers, useSubscription, useCurrentSubscriptionTier } from '@/hooks/use-api';
+import { useInstitution } from '@/hooks/use-institution';
+import { usePhoneNumbers } from '@/hooks/use-phone-numbers';
+import { useSubscription, useCurrentSubscriptionTier } from '@/hooks/use-subscriptions';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,7 +38,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function Settings() {
   const { user } = useAuth();
-  const { data: organization, isLoading: orgLoading } = useOrganization();
+  const { data: institution, isLoading: instLoading } = useInstitution();
   const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   // Use the new hook to get tier-specific feature flags like phone_lines
@@ -76,6 +78,10 @@ export default function Settings() {
     notification_phone: '',
     business_phone: '',
     emergency_keywords: [] as string[],
+    // Workflow config
+    service_categories: ['hvac', 'plumbing', 'electrical', 'general'] as string[],
+    transfer_enabled: true,
+    callback_hours_offset: 2,
   });
 
   const [isSavingOrg, setIsSavingOrg] = useState(false);
@@ -91,6 +97,7 @@ export default function Settings() {
   });
 
   const [newKeyword, setNewKeyword] = useState('');
+  const [newCategory, setNewCategory] = useState('');
 
   // US Timezones list
   const usTimezones = [
@@ -103,43 +110,55 @@ export default function Settings() {
     { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST - no DST)' },
   ];
 
-  // Load organization data
+  // Load institution data
   useEffect(() => {
-    if (organization) {
-      // Parse business_hours_schedule from organization or use default
-      const scheduleFromOrg = (organization as any).business_hours_schedule as WeekSchedule | null;
+    if (institution) {
+      // Parse business_hours_schedule from institution or use default
+      const scheduleFromInst = (institution as any).business_hours_schedule as WeekSchedule | null;
+      const workflowConfig = (institution as any).workflow_config || {};
 
       setOrgForm({
-        name: organization.name,
-        timezone: organization.timezone,
-        business_hours_schedule: scheduleFromOrg || defaultSchedule,
-        notification_email: organization.notification_email || '',
-        notification_phone: organization.notification_phone || '',
-        business_phone: (organization as any).business_phone_number || '',
-        emergency_keywords: organization.emergency_keywords || [],
+        name: institution.name,
+        timezone: institution.timezone,
+        business_hours_schedule: scheduleFromInst || defaultSchedule,
+        notification_email: institution.notification_email || '',
+        notification_phone: institution.notification_phone || '',
+        business_phone: (institution as any).business_phone_number || '',
+        emergency_keywords: workflowConfig.emergency_keywords || institution.emergency_keywords || [],
+        service_categories: workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general'],
+        transfer_enabled: workflowConfig.transfer_enabled !== false,
+        callback_hours_offset: workflowConfig.callback_hours_offset || 2,
       });
     }
-  }, [organization]);
+  }, [institution]);
 
-  const handleSaveOrganization = async () => {
-    if (!user?.organization_id) return;
-    
+  const handleSaveInstitution = async () => {
+    if (!user?.institution_id) return;
+
     setIsSavingOrg(true);
     try {
       // Check if name has changed
-      const nameChanged = organization && orgForm.name !== organization.name;
-      
+      const nameChanged = institution && orgForm.name !== institution.name;
+
+      // Build workflow_config object
+      const workflowConfig = {
+        emergency_keywords: orgForm.emergency_keywords,
+        service_categories: orgForm.service_categories,
+        transfer_enabled: orgForm.transfer_enabled,
+        callback_hours_offset: orgForm.callback_hours_offset,
+      };
+
       const { error } = await supabase
-        .from('organizations')
+        .from('institutions')
         .update({
           name: orgForm.name,
           timezone: orgForm.timezone,
           business_hours_schedule: orgForm.business_hours_schedule as any,
           notification_email: orgForm.notification_email || null,
           notification_phone: orgForm.notification_phone || null,
-          emergency_keywords: orgForm.emergency_keywords,
+          workflow_config: workflowConfig,
         })
-        .eq('id', user.organization_id);
+        .eq('id', user.institution_id);
 
       if (error) throw error;
 
@@ -149,11 +168,11 @@ export default function Settings() {
           const { error: agentError } = await supabase.functions.invoke('elevenlabs-agent', {
             body: {
               action: 'rename-agent',
-              organizationId: user.organization_id,
+              institutionId: user.institution_id,
               name: orgForm.name,
             },
           });
-          
+
           if (agentError) {
             console.error('Error renaming agent:', agentError);
             // Don't fail the whole operation, just log it
@@ -165,7 +184,7 @@ export default function Settings() {
 
       toast({
         title: 'Settings saved',
-        description: 'Your organization settings have been updated.',
+        description: 'Your institution settings have been updated.',
       });
     } catch (error: any) {
       console.error('Error saving organization:', error);
@@ -196,11 +215,28 @@ export default function Settings() {
     });
   };
 
+  const handleAddCategory = () => {
+    if (newCategory && !orgForm.service_categories.includes(newCategory.toLowerCase())) {
+      setOrgForm({
+        ...orgForm,
+        service_categories: [...orgForm.service_categories, newCategory.toLowerCase()],
+      });
+      setNewCategory('');
+    }
+  };
+
+  const handleRemoveCategory = (category: string) => {
+    setOrgForm({
+      ...orgForm,
+      service_categories: orgForm.service_categories.filter(c => c !== category),
+    });
+  };
+
   const handleAddPhoneNumber = async () => {
-    if (!user?.organization_id) {
+    if (!user?.institution_id) {
       toast({
-        title: 'No organization',
-        description: 'You need to be part of an organization to add phone numbers.',
+        title: 'No institution',
+        description: 'You need to be part of an institution to add phone numbers.',
         variant: 'destructive',
       });
       return;
@@ -220,7 +256,7 @@ export default function Settings() {
       const { error } = await supabase
         .from('phone_numbers')
         .insert({
-          organization_id: user.organization_id,
+          institution_id: user.institution_id,
           phone_number: newPhone.phone_number,
           friendly_name: newPhone.friendly_name || newPhone.phone_number,
           is_active: true,
@@ -414,16 +450,16 @@ export default function Settings() {
         >
           <h1 className="text-2xl font-bold text-foreground">Account</h1>
           <p className="text-muted-foreground mt-1">
-            Manage your organization, phone numbers, and preferences
+            Manage your institution, phone numbers, and preferences
           </p>
         </motion.div>
 
         {/* Tabs */}
-        <Tabs defaultValue="organization" className="space-y-6">
+        <Tabs defaultValue="institution" className="space-y-6">
           <TabsList className="grid w-full grid-cols-4 bg-muted/50">
-            <TabsTrigger value="organization" className="flex items-center gap-2">
+            <TabsTrigger value="institution" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Organization</span>
+              <span className="hidden sm:inline">Institution</span>
             </TabsTrigger>
             <TabsTrigger value="phones" className="flex items-center gap-2">
               <Phone className="h-4 w-4" />
@@ -439,8 +475,8 @@ export default function Settings() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Organization Tab */}
-          <TabsContent value="organization">
+          {/* Institution Tab */}
+          <TabsContent value="institution">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -449,7 +485,7 @@ export default function Settings() {
               {/* Basic Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Organization Details</CardTitle>
+                  <CardTitle>Institution Details</CardTitle>
                   <CardDescription>
                     Basic information about your business
                   </CardDescription>
@@ -550,12 +586,12 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
-              {/* Call Forwarding Keywords */}
+              {/* Emergency Keywords */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Call Forwarding Keywords</CardTitle>
+                  <CardTitle>Emergency Keywords</CardTitle>
                   <CardDescription>
-                    When callers say these words, the AI Agent will transfer the call to your notification phone number
+                    When callers mention these words, the AI will detect an emergency and transfer to on-call contacts
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -563,7 +599,7 @@ export default function Settings() {
                     <Input
                       value={newKeyword}
                       onChange={(e) => setNewKeyword(e.target.value)}
-                      placeholder="e.g., emergency, urgent, speak to someone..."
+                      placeholder="e.g., no heat, gas smell, flooding..."
                       onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
                     />
                     <Button onClick={handleAddKeyword} size="icon">
@@ -585,8 +621,91 @@ export default function Settings() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Service Categories */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Service Categories</CardTitle>
+                  <CardDescription>
+                    Categories of services you offer. The AI will classify incoming requests into these categories.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder="e.g., hvac, plumbing, electrical..."
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                    />
+                    <Button onClick={handleAddCategory} size="icon">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {orgForm.service_categories.map((category) => (
+                      <Badge key={category} variant="outline" className="flex items-center gap-1 px-3 py-1 capitalize">
+                        {category}
+                        <button
+                          onClick={() => handleRemoveCategory(category)}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Callback Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Callback Settings</CardTitle>
+                  <CardDescription>
+                    Configure how callback requests are handled for non-emergency calls
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Emergency Transfer</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Transfer emergency calls to escalation contacts
+                      </p>
+                    </div>
+                    <Switch
+                      checked={orgForm.transfer_enabled}
+                      onCheckedChange={(checked) => setOrgForm({ ...orgForm, transfer_enabled: checked })}
+                    />
+                  </div>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label>Callback Timeframe</Label>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      How soon callers can expect a callback for non-emergency requests
+                    </p>
+                    <Select
+                      value={String(orgForm.callback_hours_offset)}
+                      onValueChange={(value) => setOrgForm({ ...orgForm, callback_hours_offset: parseInt(value) })}
+                    >
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Within 1 hour</SelectItem>
+                        <SelectItem value="2">Within 2 hours</SelectItem>
+                        <SelectItem value="4">Within 4 hours</SelectItem>
+                        <SelectItem value="8">Within 8 hours</SelectItem>
+                        <SelectItem value="24">Within 24 hours</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
               <div className="flex justify-end">
-                <Button onClick={handleSaveOrganization} disabled={isSavingOrg}>
+                <Button onClick={handleSaveInstitution} disabled={isSavingOrg}>
                   {isSavingOrg ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (

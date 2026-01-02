@@ -19,10 +19,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardStats, useRecentCalls, useOrganization, useContactsByPhone, type DashboardPeriod } from "@/hooks/use-api";
+import { useDashboardStats, type DashboardPeriod } from "@/hooks/use-dashboard";
+import { useRecentCalls } from "@/hooks/use-calls";
+import { useInstitution } from "@/hooks/use-institution";
+import { useContactsByPhone } from "@/hooks/use-contacts";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Normalize phone number for comparison - extract last 10 digits
 function normalizePhone(phone: string): string {
@@ -164,12 +168,12 @@ const Dashboard = () => {
   const [period, setPeriod] = useState<DashboardPeriod>('7d');
   const { data: stats, isLoading: statsLoading } = useDashboardStats(period);
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
-  const { data: organization, isLoading: orgLoading } = useOrganization();
+  const { data: institution, isLoading: instLoading } = useInstitution();
 
   const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
   // Fetch local contacts for name mapping
-  const { data: contactsByPhone } = useContactsByPhone(organization?.id);
+  const { data: contactsByPhone } = useContactsByPhone(institution?.id);
 
   // Get contact name for a call
   const getContactName = (call: Call): string | undefined => {
@@ -178,10 +182,10 @@ const Dashboard = () => {
     return contact?.name || undefined;
   };
 
-  const organizationName = "Your Business";
+  const organizationName = institution?.name || "Your Business";
 
-  // Show loading while checking organization
-  if (orgLoading) {
+  // Show loading while checking institution
+  if (instLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">

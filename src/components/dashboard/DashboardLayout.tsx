@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useOrganization } from "@/hooks/use-api";
+import { useInstitution } from "@/hooks/use-institution";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import {
   Calendar,
   PhoneCall,
   Settings,
-  Wrench,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -26,6 +25,7 @@ import {
   Users,
   MessageSquare,
   UserPlus,
+  PhoneForwarded,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -49,18 +49,11 @@ const sidebarSections = [
       { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
     ],
   },
-  {
-    label: "Management",
-    links: [
-      { name: "Team", href: "/dashboard/providers", icon: Users },
-      { name: "Services", href: "/dashboard/services", icon: Wrench },
-      { name: "Bookings", href: "/dashboard/bookings", icon: Calendar },
-    ],
-  },
-  {
+    {
     label: "Configuration",
     links: [
       { name: "AI Agent", href: "/dashboard/voice-behavior", icon: Bot },
+      { name: "Escalation", href: "/dashboard/escalation", icon: PhoneForwarded },
       { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
       { name: "Account", href: "/dashboard/account", icon: Settings },
     ],
@@ -166,7 +159,7 @@ interface SidebarContentProps {
 }
 
 function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps) {
-  const { data: organization } = useOrganization();
+  const { data: organization } = useInstitution();
   const { user } = useAuth();
   const [selectedMode, setSelectedMode] = useState<'inbound' | 'outbound'>('inbound');
   

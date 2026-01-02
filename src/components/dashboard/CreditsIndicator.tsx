@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSubscription } from "@/hooks/use-api";
+import { useSubscription } from "@/hooks/use-subscriptions";
 import { useTotalAvailableCredits, useCreateCreditTopup } from "@/hooks/use-credits";
 import { toast } from "sonner";
 import {

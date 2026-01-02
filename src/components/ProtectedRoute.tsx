@@ -20,19 +20,19 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Check if user has incomplete signup (logged in but no organization)
   // Skip auto-provisioning in development mode - users should set up manually via SQL
-  const hasIncompleteSignup = !isDevelopment && isAuthenticated && user && !user.organization_id;
+  const hasIncompleteSignup = !isDevelopment && isAuthenticated && user && !user.institution_id;
 
   // Fetch organization, subscription, and phone number status
   const { data: onboardingData, isLoading: isLoadingOnboarding } = useQuery({
-    queryKey: ['onboarding-status', user?.organization_id],
+    queryKey: ['onboarding-status', user?.institution_id],
     queryFn: async () => {
-      if (!user?.organization_id) return null;
+      if (!user?.institution_id) return null;
 
       // Fetch organization onboarding status
       const { data: org, error: orgError } = await supabase
-        .from('organizations')
+        .from('institutions')
         .select('is_onboarding_complete')
-        .eq('id', user.organization_id)
+        .eq('id', user.institution_id)
         .single();
 
       if (orgError) {
@@ -44,7 +44,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       const { data: subscription, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('organization_id', user.organization_id)
+        .eq('institution_id', user.institution_id)
         .maybeSingle();
 
       if (subError) {
@@ -55,7 +55,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       const { data: phoneNumbers, error: phoneError } = await supabase
         .from('phone_numbers')
         .select('id')
-        .eq('organization_id', user.organization_id)
+        .eq('institution_id', user.institution_id)
         .limit(1);
 
       if (phoneError) {
@@ -69,7 +69,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         subscription,
       };
     },
-    enabled: !!user?.organization_id && !hasIncompleteSignup,
+    enabled: !!user?.institution_id && !hasIncompleteSignup,
   });
 
   // Check onboarding paths
@@ -80,7 +80,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Skip when already on onboarding path to avoid redirect loops
   let onboardingRedirect: string | null = null;
 
-  if (isAuthenticated && user?.organization_id && !isLoadingOnboarding && onboardingData && !isOnboardingPath) {
+  if (isAuthenticated && user?.institution_id && !isLoadingOnboarding && onboardingData && !isOnboardingPath) {
     // If onboarding is not complete, determine which step they need
     if (!onboardingData.isOnboardingComplete) {
       // In production, check subscription first (Step 1)

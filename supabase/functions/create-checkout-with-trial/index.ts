@@ -78,18 +78,18 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     log.info("User authenticated", { userId: user.id, email: user.email });
 
-    // Get user's organization_id
+    // Get user's institution_id
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("organization_id")
+      .select("institution_id")
       .eq("id", user.id)
       .single();
 
-    if (!profile?.organization_id) {
+    if (!profile?.institution_id) {
       throw new Error("User has no organization. Please complete signup first.");
     }
-    const organizationId = profile.organization_id;
-    log.info("Organization found", { organizationId });
+    const institutionId = profile.institution_id;
+    log.info("Organization found", { institutionId });
 
     // Parse request body for plan selection
     let planId = 'growth'; // default plan
@@ -226,19 +226,19 @@ serve(async (req) => {
     const { error: subError } = await supabaseAdmin
       .from("subscriptions")
       .upsert({
-        organization_id: organizationId,
+        institution_id: institutionId,
         plan: planId,
         status: 'pending',
         stripe_customer_id: customerId,
         total_credits: planConfig.credits,
       }, {
-        onConflict: 'organization_id'
+        onConflict: 'institution_id'
       });
 
     if (subError) {
       log.warn("Failed to create pending subscription", { error: subError.message });
     } else {
-      log.info("Pending subscription created", { organizationId, plan: planId });
+      log.info("Pending subscription created", { institutionId, plan: planId });
     }
 
     return successResponse({ url: session.url });

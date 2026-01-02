@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 export interface ProviderRole {
   id: string;
-  organization_id: string;
+  institution_id: string;
   name: string;
   slug: string;
   is_default: boolean;
@@ -39,7 +39,7 @@ export function useRoles() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["provider-roles", user?.organization_id],
+    queryKey: ["provider-roles", user?.institution_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("provider_roles")
@@ -49,7 +49,7 @@ export function useRoles() {
       if (error) throw error;
       return data as ProviderRole[];
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 }
 
@@ -82,7 +82,7 @@ export function useCreateRole() {
 
   return useMutation({
     mutationFn: async (data: CreateRoleRequest) => {
-      if (!user?.organization_id) throw new Error("No organization");
+      if (!user?.institution_id) throw new Error("No organization");
 
       // Generate slug from name
       const slug = data.name
@@ -102,7 +102,7 @@ export function useCreateRole() {
       const { data: role, error } = await supabase
         .from("provider_roles")
         .insert({
-          organization_id: user.organization_id,
+          institution_id: user.institution_id,
           name: data.name.trim(),
           slug,
           is_default: false,

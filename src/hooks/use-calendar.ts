@@ -10,7 +10,7 @@ import { format, startOfDay, endOfDay, addDays } from "date-fns";
 
 export interface CalendarEvent {
   id: string;
-  organization_id: string;
+  institution_id: string;
   provider_id: string | null;
   appointment_id: string | null;
   title: string;
@@ -90,7 +90,7 @@ export function useCalendarEvents(filters: CalendarFilters) {
   return useQuery({
     queryKey: [
       "calendar-events",
-      user?.organization_id,
+      user?.institution_id,
       filters.startDate.toISOString(),
       filters.endDate.toISOString(),
       filters.providerIds,
@@ -122,7 +122,7 @@ export function useCalendarEvents(filters: CalendarFilters) {
       if (error) throw error;
       return data as CalendarEvent[];
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
   });
 }
 
@@ -157,12 +157,12 @@ export function useCreateCalendarEvent() {
 
   return useMutation({
     mutationFn: async (data: CreateEventRequest) => {
-      if (!user?.organization_id) throw new Error("No organization");
+      if (!user?.institution_id) throw new Error("No organization");
 
       const { data: event, error } = await supabase
         .from("calendar_events")
         .insert({
-          organization_id: user.organization_id,
+          institution_id: user.institution_id,
           source: "native",
           sync_status: "synced",
           ...data,
@@ -356,7 +356,7 @@ export function useAvailableSlots(
 
       return slots;
     },
-    enabled: !!providerId && !!user?.organization_id,
+    enabled: !!providerId && !!user?.institution_id,
   });
 }
 
@@ -371,7 +371,7 @@ export function useSyncStatus() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["sync-status", user?.organization_id],
+    queryKey: ["sync-status", user?.institution_id],
     queryFn: async () => {
       const { data: conflicts, error } = await supabase
         .from("calendar_events")
@@ -391,7 +391,7 @@ export function useSyncStatus() {
         hasConflicts: (conflicts?.length || 0) > 0,
       };
     },
-    enabled: !!user?.organization_id,
+    enabled: !!user?.institution_id,
     refetchInterval: 30000, // Check every 30 seconds
   });
 }

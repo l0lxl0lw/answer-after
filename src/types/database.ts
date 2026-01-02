@@ -46,7 +46,7 @@ export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing'
 
 export type SubscriptionPlan = 'core' | 'growth' | 'pro' | 'business' | 'enterprise';
 
-export type AuditAction = 
+export type AuditAction =
   | 'call.created'
   | 'call.completed'
   | 'call.failed'
@@ -57,9 +57,33 @@ export type AuditAction =
   | 'settings.updated'
   | 'subscription.updated';
 
+// Lead recovery enums
+export type IntakeUrgency = 'low' | 'normal' | 'high' | 'emergency';
+
+export type IntakeCategory =
+  | 'hvac'
+  | 'plumbing'
+  | 'electrical'
+  | 'roofing'
+  | 'appliance'
+  | 'locksmith'
+  | 'pest_control'
+  | 'general';
+
+export type EscalationRole = 'owner' | 'manager' | 'technician' | 'on_call';
+
+export type CallTriggerType = 'coverage' | 'overflow' | 'direct';
+
 // ============= Core Entities =============
 
-export interface Organization {
+export interface WorkflowConfig {
+  emergency_keywords?: string[];
+  service_categories?: string[];
+  transfer_enabled?: boolean;
+  callback_hours_offset?: number;
+}
+
+export interface Institution {
   id: string;
   name: string;
   slug: string;
@@ -68,13 +92,14 @@ export interface Organization {
   business_hours_end: string | null;   // HH:MM format
   notification_email: string | null;
   notification_phone: string | null;
+  workflow_config: WorkflowConfig | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface User {
   id: string;
-  organization_id: string | null;
+  institution_id: string | null;
   email: string;
   full_name: string;
   phone: string | null;
@@ -93,7 +118,7 @@ export interface UserRole_Record {
 
 export interface PhoneNumber {
   id: string;
-  organization_id: string;
+  institution_id: string;
   twilio_sid: string | null;
   phone_number: string; // E.164 format
   friendly_name: string | null;
@@ -107,10 +132,12 @@ export interface PhoneNumber {
 
 export interface Call {
   id: string;
-  organization_id: string;
+  institution_id: string;
   phone_number_id: string | null;
   contact_id: string | null;
+  intake_id: string | null;
   twilio_call_sid: string | null;
+  elevenlabs_conversation_id: string | null;
   caller_phone: string;
   caller_name: string | null;
   status: CallStatus;
@@ -118,10 +145,16 @@ export interface Call {
   duration_seconds: number | null;
   recording_url: string | null;
   summary: string | null;
+  is_emergency: boolean;
   started_at: string;
   ended_at: string | null;
   created_at: string;
   updated_at: string;
+  // Lead recovery fields
+  was_transferred: boolean;
+  transferred_to_phone: string | null;
+  transferred_to_contact_id: string | null;
+  trigger_type: CallTriggerType | null;
   // Legacy lead tracking fields (now on contacts table)
   interest_level: InterestLevel | null;
   lead_status: LeadStatus;
@@ -133,7 +166,7 @@ export interface Call {
 
 export interface Contact {
   id: string;
-  organization_id: string;
+  institution_id: string;
   phone: string;
   name: string | null;
   email: string | null;
@@ -181,11 +214,60 @@ export interface CallTranscript {
   created_at: string;
 }
 
+// ============= Lead Recovery =============
+
+export interface EscalationContact {
+  id: string;
+  institution_id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  role: EscalationRole;
+  priority: number;
+  is_active: boolean;
+  coverage_schedule: Record<string, { start: string; end: string }> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CallIntake {
+  id: string;
+  institution_id: string;
+  call_id: string | null;
+  contact_id: string | null;
+  caller_name: string | null;
+  caller_phone: string;
+  caller_address: string | null;
+  caller_zip: string | null;
+  service_category: IntakeCategory | null;
+  issue_description: string | null;
+  urgency: IntakeUrgency;
+  is_emergency: boolean;
+  emergency_keywords: string[] | null;
+  was_transferred: boolean;
+  transferred_to_phone: string | null;
+  transferred_to_name: string | null;
+  transfer_accepted: boolean | null;
+  callback_requested: boolean;
+  callback_scheduled_for: string | null;
+  callback_completed_at: string | null;
+  callback_notes: string | null;
+  extraction_confidence: number | null;
+  raw_transcript: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CallIntakeWithContact extends CallIntake {
+  contact: Contact | null;
+  call: Call | null;
+}
+
 // ============= Appointments =============
 
 export interface Appointment {
   id: string;
-  organization_id: string;
+  institution_id: string;
   call_id: string | null;
   customer_name: string;
   customer_phone: string;
@@ -195,6 +277,9 @@ export interface Appointment {
   scheduled_end: string;
   status: AppointmentStatus;
   notes: string | null;
+  // Service tracking for gross production reporting
+  service_id: string | null;
+  service_price_cents: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -203,7 +288,7 @@ export interface Appointment {
 
 export interface Subscription {
   id: string;
-  organization_id: string;
+  institution_id: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   plan: string;
@@ -219,7 +304,7 @@ export interface Subscription {
 
 export interface AuditLog {
   id: string;
-  organization_id: string;
+  institution_id: string;
   user_id: string | null;
   action: AuditAction;
   resource_type: string;
@@ -240,7 +325,7 @@ export interface CallWithDetails extends Call {
   appointment?: Appointment;
 }
 
-export interface OrganizationWithSubscription extends Organization {
+export interface InstitutionWithSubscription extends Institution {
   subscription: Subscription | null;
   phone_numbers: PhoneNumber[];
   user_count: number;

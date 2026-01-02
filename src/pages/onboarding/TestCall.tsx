@@ -37,7 +37,7 @@ export default function TestCall() {
 
   useEffect(() => {
     loadPhoneNumber();
-  }, [user?.organization_id]);
+  }, [user?.institution_id]);
 
   // Auto-scroll transcripts
   useEffect(() => {
@@ -46,9 +46,9 @@ export default function TestCall() {
 
   // Listen for new calls via realtime + polling fallback
   useEffect(() => {
-    if (!isListening || !user?.organization_id) return;
+    if (!isListening || !user?.institution_id) return;
 
-    log.debug('Setting up call listener for org:', user.organization_id);
+    log.debug('Setting up call listener for org:', user.institution_id);
     const startTime = new Date().toISOString();
 
     // Realtime subscription
@@ -60,7 +60,7 @@ export default function TestCall() {
           event: "INSERT",
           schema: "public",
           table: "calls",
-          filter: `organization_id=eq.${user.organization_id}`,
+          filter: `institution_id=eq.${user.institution_id}`,
         },
         (payload) => {
           log.debug("New call detected via realtime!", payload);
@@ -73,7 +73,7 @@ export default function TestCall() {
           event: "UPDATE",
           schema: "public",
           table: "calls",
-          filter: `organization_id=eq.${user.organization_id}`,
+          filter: `institution_id=eq.${user.institution_id}`,
         },
         (payload) => {
           log.debug("Call updated:", payload);
@@ -96,7 +96,7 @@ export default function TestCall() {
         const { data: recentCalls } = await supabase
           .from('calls')
           .select('*')
-          .eq('organization_id', user.organization_id)
+          .eq('institution_id', user.institution_id)
           .gte('created_at', startTime)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -114,7 +114,7 @@ export default function TestCall() {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
-  }, [isListening, user?.organization_id, callId, callDetected]);
+  }, [isListening, user?.institution_id, callId, callDetected]);
 
   // Listen for transcripts when call is active
   useEffect(() => {
@@ -146,13 +146,13 @@ export default function TestCall() {
   }, [callId]);
 
   const loadPhoneNumber = async () => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
 
     try {
       const { data } = await supabase
         .from("phone_numbers")
         .select("phone_number")
-        .eq("organization_id", user.organization_id)
+        .eq("institution_id", user.institution_id)
         .eq("is_active", true)
         .maybeSingle();
 
@@ -202,18 +202,18 @@ export default function TestCall() {
   };
 
   const completeOnboarding = async () => {
-    if (!user?.organization_id) return;
+    if (!user?.institution_id) return;
 
     setIsCompleting(true);
 
     try {
       const { error } = await supabase
-        .from("organizations")
+        .from("institutions")
         .update({
           is_onboarding_complete: true,
           onboarding_completed_at: new Date().toISOString(),
         })
-        .eq("id", user.organization_id);
+        .eq("id", user.institution_id);
 
       if (error) {
         throw error;

@@ -28,7 +28,7 @@ import {
   generateTimeOptions,
 } from "@/hooks/use-calendar";
 import { useActiveProviders, type Provider } from "@/hooks/use-providers";
-import { useServices } from "@/hooks/use-api";
+import { useServices } from "@/hooks/use-services";
 import {
   AlertDialog,
   AlertDialogAction,

@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database } from "@/types/supabase";
 
 // Browser client with safe fallbacks for environments where build-time VITE_* vars are missing.
 // Publishable values are OK to ship; secrets must stay server-side.

@@ -9,12 +9,12 @@ interface Profile {
   id: string;
   email: string;
   full_name: string;
-  organization_id: string | null;
+  institution_id: string | null;
   phone: string | null;
   avatar_url: string | null;
 }
 
-interface Organization {
+interface Institution {
   id: string;
   name: string;
   slug: string;
@@ -30,8 +30,8 @@ interface AuthUser {
   email: string;
   full_name: string;
   role: UserRole;
-  organization_id: string | null;
-  organization: Organization | null;
+  institution_id: string | null;
+  institution: Institution | null;
 }
 
 interface AuthContextType {
@@ -88,19 +88,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const role: UserRole = (roleData?.role as UserRole) || 'staff';
       log.trace('User role:', role);
 
-      // Fetch organization if exists
-      let organization: Organization | null = null;
-      if (profile.organization_id) {
-        const { data: orgData } = await supabase
-          .from('organizations')
+      // Fetch institution if exists
+      let institution: Institution | null = null;
+      if (profile.institution_id) {
+        const { data: instData } = await supabase
+          .from('institutions')
           .select('*')
-          .eq('id', profile.organization_id)
+          .eq('id', profile.institution_id)
           .maybeSingle();
 
-        organization = orgData;
-        log.trace('Organization:', organization);
+        institution = instData;
+        log.trace('Institution:', institution);
       } else {
-        log.trace('No organization_id in profile');
+        log.trace('No institution_id in profile');
       }
 
       const userData = {
@@ -108,8 +108,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: profile.email,
         full_name: profile.full_name,
         role,
-        organization_id: profile.organization_id,
-        organization,
+        institution_id: profile.institution_id,
+        institution,
       };
 
       log.debug('User data assembled:', userData);
@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signup = useCallback(async (email: string, password: string, name: string, orgName: string) => {
+  const signup = useCallback(async (email: string, password: string, name: string, instName: string) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
 
@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           emailRedirectTo: redirectUrl,
           data: {
             full_name: name,
-            organization_name: orgName,
+            institution_name: instName,
           },
         },
       });

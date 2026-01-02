@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, ArrowRight, Plus } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
-import { useSubscription, useSubscriptionTiers, SubscriptionTier } from "@/hooks/use-api";
+import { useSubscription, useSubscriptionTiers, type SubscriptionTier } from "@/hooks/use-subscriptions";
 import { useCreateCreditTopup, useTotalAvailableCredits, type TopupPackage } from "@/hooks/use-credits";
 import { cn } from "@/lib/utils";
 import { shouldSkipStripe } from "@/lib/environment";

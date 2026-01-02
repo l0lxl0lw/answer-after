@@ -107,12 +107,12 @@ export async function recordExists(
  */
 export async function getOrganization(
   client: SupabaseClient,
-  organizationId: string
+  institutionId: string
 ) {
   const { data, error } = await client
-    .from('organizations')
+    .from('institutions')
     .select('*')
-    .eq('id', organizationId)
+    .eq('id', institutionId)
     .maybeSingle();
 
   if (error) {
@@ -120,7 +120,7 @@ export async function getOrganization(
       `Failed to fetch organization: ${error.message}`,
       'DATABASE_ERROR',
       500,
-      { organizationId, error: error.message }
+      { institutionId, error: error.message }
     );
   }
 
@@ -129,7 +129,7 @@ export async function getOrganization(
       'Organization not found',
       'NOT_FOUND',
       404,
-      { organizationId }
+      { institutionId }
     );
   }
 
@@ -160,4 +160,111 @@ export async function retryOperation<T>(
   }
 
   throw lastError;
+}
+
+// ============= Query Helpers =============
+
+/**
+ * Alias for getOrganization - get institution by ID
+ */
+export const getInstitution = getOrganization;
+
+/**
+ * Get user profile by user ID
+ */
+export async function getProfile(
+  client: SupabaseClient,
+  userId: string
+) {
+  const { data, error } = await client
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new EdgeFunctionError(
+      `Failed to fetch profile: ${error.message}`,
+      'DATABASE_ERROR',
+      500,
+      { userId, error: error.message }
+    );
+  }
+
+  return data;
+}
+
+/**
+ * Get subscription for an institution
+ */
+export async function getSubscription(
+  client: SupabaseClient,
+  institutionId: string
+) {
+  const { data, error } = await client
+    .from('subscriptions')
+    .select('*')
+    .eq('institution_id', institutionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new EdgeFunctionError(
+      `Failed to fetch subscription: ${error.message}`,
+      'DATABASE_ERROR',
+      500,
+      { institutionId, error: error.message }
+    );
+  }
+
+  return data;
+}
+
+/**
+ * Get phone numbers for an institution
+ */
+export async function getPhoneNumbers(
+  client: SupabaseClient,
+  institutionId: string
+) {
+  const { data, error } = await client
+    .from('phone_numbers')
+    .select('*')
+    .eq('institution_id', institutionId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new EdgeFunctionError(
+      `Failed to fetch phone numbers: ${error.message}`,
+      'DATABASE_ERROR',
+      500,
+      { institutionId, error: error.message }
+    );
+  }
+
+  return data || [];
+}
+
+/**
+ * Get institution agent configuration
+ */
+export async function getInstitutionAgent(
+  client: SupabaseClient,
+  institutionId: string
+) {
+  const { data, error } = await client
+    .from('institution_agents')
+    .select('*')
+    .eq('institution_id', institutionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new EdgeFunctionError(
+      `Failed to fetch institution agent: ${error.message}`,
+      'DATABASE_ERROR',
+      500,
+      { institutionId, error: error.message }
+    );
+  }
+
+  return data;
 }

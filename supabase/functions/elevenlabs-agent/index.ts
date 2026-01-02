@@ -6,15 +6,23 @@ import { config } from "../_shared/config.ts";
 import {
   getElevenLabsApiKey,
   getSignedUrl,
+  getSignedUrlWithVariables,
   makeElevenLabsRequest,
   importPhoneNumber,
   assignAgentToPhoneNumber,
+  buildLeadRecoveryWorkflow,
+  buildDynamicVariablesConfig,
+  type WorkflowConfig,
+  type AgentWorkflow,
 } from "../_shared/elevenlabs.ts";
 import {
   buildPlaceholderValues,
   replacePlaceholders,
   type PlaceholderValues,
 } from "../_shared/placeholder-utils.ts";
+
+// Feature flag for workflow-based agents
+const USE_WORKFLOW_AGENTS = Deno.env.get('USE_WORKFLOW_AGENTS') === 'true';
 
 const logger = createLogger('elevenlabs-agent');
 
@@ -42,11 +50,14 @@ function getWebhookBaseUrl(): string {
 }
 
 /**
- * Build inline webhook tools for the agent
+ * Build inline webhook tools for the agent (legacy mode)
  * These are embedded directly in the agent config, not created as separate tools
- * Organization ID is embedded via 'const' in the schema for security isolation
+ * Institution ID is embedded via 'const' in the schema for security isolation
+ *
+ * NOTE: This is legacy code for non-workflow agents. Only includes contact tools.
+ * For lead recovery workflow, use buildWorkflowAgentConfig instead.
  */
-function buildInlineWebhookTools(organizationId: string, hasCalendar: boolean): any[] {
+function buildInlineWebhookTools(institutionId: string): any[] {
   const baseUrl = getWebhookBaseUrl();
   const tools: any[] = [];
 
@@ -62,13 +73,13 @@ function buildInlineWebhookTools(organizationId: string, hasCalendar: boolean): 
       request_body_schema: {
         type: "object",
         properties: {
-          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          institution_id: { type: "string", const: institutionId, description: "Institution ID (auto-filled)" },
           phone: { type: "string", description: "Customer phone number. Required field." },
           name: { type: "string", description: "Customer full name." },
           address: { type: "string", description: "Customer address including street, city, state, and zip code." },
           email: { type: "string", description: "Customer email address." }
         },
-        required: ["organization_id", "phone"]
+        required: ["institution_id", "phone"]
       }
     }
   });
@@ -85,111 +96,10 @@ function buildInlineWebhookTools(organizationId: string, hasCalendar: boolean): 
       request_body_schema: {
         type: "object",
         properties: {
-          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          institution_id: { type: "string", const: institutionId, description: "Institution ID (auto-filled)" },
           phone: { type: "string", description: "Phone number to look up. Can be from caller ID." }
         },
-        required: ["organization_id", "phone"]
-      }
-    }
-  });
-
-  // Calendar availability tool (if Google Calendar connected)
-  if (hasCalendar) {
-    tools.push({
-      type: "webhook",
-      name: "check_calendar_availability",
-      description: "Check the business calendar to find available appointment slots. Use this tool when a customer wants to schedule an appointment or asks about availability. The tool will return available time slots based on the business calendar and existing appointments.",
-      api_schema: {
-        url: `${baseUrl}/functions/v1/calendar-availability`,
-        method: "POST",
-        request_headers: { "Content-Type": "application/json" },
-        request_body_schema: {
-          type: "object",
-          properties: {
-            organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
-            date_preference: {
-              type: "string",
-              description: "When the customer wants the appointment. Use 'today' for same-day, 'tomorrow' for next day, 'this_week' for current week, or 'next_week' for looking further ahead.",
-              enum: ["today", "tomorrow", "this_week", "next_week"]
-            },
-            duration_minutes: {
-              type: "number",
-              description: "How long the appointment should be in minutes. Use 60 for standard appointments, 30 for quick consultations.",
-              default: 60
-            }
-          },
-          required: ["organization_id", "date_preference"]
-        }
-      }
-    });
-  }
-
-  // Book appointment tool
-  tools.push({
-    type: "webhook",
-    name: "book_appointment",
-    description: "Book a new appointment for the customer. Use this AFTER checking availability with check_calendar_availability and confirming the time with the customer. Requires customer name, phone number, and the appointment date/time.",
-    api_schema: {
-      url: `${baseUrl}/functions/v1/agent-book-appointment`,
-      method: "POST",
-      request_headers: { "Content-Type": "application/json" },
-      request_body_schema: {
-        type: "object",
-        properties: {
-          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
-          customer_name: { type: "string", description: "Customer's full name" },
-          customer_phone: { type: "string", description: "Customer's phone number" },
-          appointment_datetime: { type: "string", description: "Appointment date and time in ISO 8601 format (e.g., 2024-01-15T10:00:00)" },
-          duration_minutes: { type: "number", description: "Appointment duration in minutes. Default is 60.", default: 60 },
-          provider_id: { type: "string", description: "Optional: Specific provider/staff member ID if customer has a preference" },
-          service_type: { type: "string", description: "Type of service or reason for appointment" },
-          notes: { type: "string", description: "Any additional notes about the appointment" }
-        },
-        required: ["organization_id", "customer_name", "customer_phone", "appointment_datetime"]
-      }
-    }
-  });
-
-  // Cancel appointment tool
-  tools.push({
-    type: "webhook",
-    name: "cancel_appointment",
-    description: "Cancel an existing appointment for the customer. Looks up the appointment by the customer's phone number. If the customer has multiple upcoming appointments, ask which one they want to cancel.",
-    api_schema: {
-      url: `${baseUrl}/functions/v1/agent-cancel-appointment`,
-      method: "POST",
-      request_headers: { "Content-Type": "application/json" },
-      request_body_schema: {
-        type: "object",
-        properties: {
-          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
-          customer_phone: { type: "string", description: "Customer's phone number to look up their appointment" },
-          appointment_datetime: { type: "string", description: "Optional: Specific appointment date/time to cancel if customer has multiple appointments" }
-        },
-        required: ["organization_id", "customer_phone"]
-      }
-    }
-  });
-
-  // Reschedule appointment tool
-  tools.push({
-    type: "webhook",
-    name: "reschedule_appointment",
-    description: "Reschedule an existing appointment to a new date/time. First check availability for the new time using check_calendar_availability before using this tool. Requires the customer's phone number and the new desired time.",
-    api_schema: {
-      url: `${baseUrl}/functions/v1/agent-reschedule-appointment`,
-      method: "POST",
-      request_headers: { "Content-Type": "application/json" },
-      request_body_schema: {
-        type: "object",
-        properties: {
-          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
-          customer_phone: { type: "string", description: "Customer's phone number to look up their existing appointment" },
-          current_appointment_datetime: { type: "string", description: "Optional: Current appointment date/time if customer has multiple appointments" },
-          new_datetime: { type: "string", description: "New appointment date and time in ISO 8601 format" },
-          new_duration_minutes: { type: "number", description: "Optional: New duration in minutes if changing from original" }
-        },
-        required: ["organization_id", "customer_phone", "new_datetime"]
+        required: ["institution_id", "phone"]
       }
     }
   });
@@ -198,18 +108,126 @@ function buildInlineWebhookTools(organizationId: string, hasCalendar: boolean): 
 }
 
 /**
- * Check if organization has Google Calendar connected
+ * Get workflow configuration from institution
  */
-async function hasGoogleCalendarConnection(supabase: any, organizationId: string): Promise<boolean> {
-  const { data } = await supabase
-    .from('google_calendar_connections')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .maybeSingle();
-
-  return !!data;
+function getWorkflowConfig(orgData: any): WorkflowConfig {
+  const workflowConfig = orgData.workflow_config || {};
+  return {
+    emergencyKeywords: workflowConfig.emergency_keywords || [
+      'no heat', 'gas smell', 'gas leak', 'flood', 'flooding', 'fire', 'smoke',
+      'carbon monoxide', 'no power', 'sparking', 'electrical fire', 'water damage',
+      'burst pipe', 'sewage', 'no ac', 'no air conditioning'
+    ],
+    serviceCategories: workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general'],
+    transferEnabled: workflowConfig.transfer_enabled !== false,
+    callbackHoursOffset: workflowConfig.callback_hours_offset || 2,
+  };
 }
 
+/**
+ * Build workflow-based agent configuration for lead recovery
+ */
+async function buildWorkflowAgentConfig(
+  supabase: any,
+  institutionId: string,
+  orgData: any,
+  agentName: string,
+  llmModel: string = 'gemini-2.5-flash'
+): Promise<any> {
+  const baseUrl = getWebhookBaseUrl();
+  const workflowConfig = getWorkflowConfig(orgData);
+
+  // Get escalation contact for emergency transfers
+  const { data: escalationContact } = await supabase
+    .from('escalation_contacts')
+    .select('phone, name')
+    .eq('institution_id', institutionId)
+    .eq('is_active', true)
+    .order('priority', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const onCallPhone = escalationContact?.phone || orgData.notification_phone || '';
+
+  // Build workflow
+  const workflow = buildLeadRecoveryWorkflow(institutionId, baseUrl, workflowConfig);
+
+  // Build dynamic variables configuration
+  const dynamicVarsConfig = buildDynamicVariablesConfig(
+    orgData.name,
+    onCallPhone,
+    workflowConfig.serviceCategories,
+    `within ${workflowConfig.callbackHoursOffset} hours`
+  );
+
+  const DEFAULT_VOICE_ID = '625jGFaa0zTLtQfxwc6Q';
+
+  // Build the base system prompt for lead recovery
+  const systemPrompt = `You are a friendly AI intake coordinator for ${orgData.name}, a home services company.
+
+Your primary goal is to collect information from callers and either:
+1. Transfer emergencies to an on-call technician
+2. Log non-emergency service requests for callback
+
+Keep responses SHORT (1-3 sentences) - this is a phone call.
+Be warm, helpful, and professional.`;
+
+  const firstMessage = `Hi, thanks for calling ${orgData.name}! How can I help you today?`;
+
+  return {
+    name: agentName,
+    conversation_config: {
+      agent: {
+        first_message: firstMessage,
+        prompt: { prompt: systemPrompt },
+        llm: { model: llmModel },
+        ...dynamicVarsConfig,
+      },
+      tts: { voice_id: DEFAULT_VOICE_ID },
+    },
+    workflow: workflow,
+    platform_settings: {
+      widget: { avatar: { type: 'orb' } },
+    },
+  };
+}
+
+/**
+ * Get dynamic variables for a call (for workflow agents)
+ */
+async function getDynamicVariablesForCall(
+  supabase: any,
+  institutionId: string,
+  callerPhone: string
+): Promise<Record<string, string>> {
+  // Get institution
+  const { data: org } = await supabase
+    .from('institutions')
+    .select('name, workflow_config, notification_phone')
+    .eq('id', institutionId)
+    .single();
+
+  // Get escalation contact
+  const { data: escalation } = await supabase
+    .from('escalation_contacts')
+    .select('phone, name')
+    .eq('institution_id', institutionId)
+    .eq('is_active', true)
+    .order('priority', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const workflowConfig = org?.workflow_config || {};
+
+  return {
+    org_name: org?.name || 'Our company',
+    on_call_phone: escalation?.phone || org?.notification_phone || '',
+    on_call_name: escalation?.name || 'our technician',
+    caller_phone: callerPhone,
+    service_categories: (workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general']).join(', '),
+    callback_timeframe: `within ${workflowConfig.callback_hours_offset || 2} hours`,
+  };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -227,19 +245,19 @@ serve(async (req) => {
       const body = await req.json();
 
       if (body.action === 'create-agent') {
-        return await handleCreateAgent(supabase, body.organizationId, body.context);
+        return await handleCreateAgent(supabase, body.institutionId, body.context);
       }
 
       if (body.action === 'update-agent') {
-        return await handleUpdateAgent(supabase, body.organizationId, body.context, body.voiceId);
+        return await handleUpdateAgent(supabase, body.institutionId, body.context, body.voiceId);
       }
 
       if (body.action === 'rename-agent') {
-        return await handleRenameAgent(supabase, body.organizationId, body.name);
+        return await handleRenameAgent(supabase, body.institutionId, body.name);
       }
 
       if (body.action === 'import-phone') {
-        return await handleImportPhone(supabase, body.organizationId, body.agentId, body.phoneNumber);
+        return await handleImportPhone(supabase, body.institutionId, body.agentId, body.phoneNumber);
       }
     }
 
@@ -445,8 +463,8 @@ async function handleWebSocketConnection(req: Request, url: URL, supabase: any) 
   return response;
 }
 
-async function handleCreateAgent(supabase: any, organizationId: string, context?: string) {
-  const log = logger.withContext({ organizationId, action: 'create-agent' });
+async function handleCreateAgent(supabase: any, institutionId: string, context?: string) {
+  const log = logger.withContext({ institutionId, action: 'create-agent' });
 
   let apiKey: string;
   try {
@@ -455,34 +473,34 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!organizationId) {
-    return errorResponse('Organization ID is required', 400);
+  if (!institutionId) {
+    return errorResponse('Institution ID is required', 400);
   }
 
   log.step('Creating ElevenLabs agent');
 
   const { data: orgData, error: orgError } = await supabase
-    .from('organizations')
+    .from('institutions')
     .select('*')
-    .eq('id', organizationId)
+    .eq('id', institutionId)
     .single();
 
   if (orgError) {
-    log.error('Error fetching organization', orgError);
+    log.error('Error fetching institution', orgError);
     return errorResponse('Organization not found', 404);
   }
 
-  // Get or create organization_agents record
+  // Get or create institution_agents record
   let { data: agentRecord } = await supabase
-    .from('organization_agents')
+    .from('institution_agents')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('institution_id', institutionId)
     .maybeSingle();
 
   if (!agentRecord) {
     const { data: newRecord } = await supabase
-      .from('organization_agents')
-      .insert({ organization_id: organizationId, context: context || null })
+      .from('institution_agents')
+      .insert({ institution_id: institutionId, context: context || null })
       .select()
       .single();
     agentRecord = newRecord;
@@ -490,16 +508,12 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
 
   const agentContext = context || agentRecord?.context || '';
 
-  // Check if Google Calendar is connected
-  const hasCalendar = await hasGoogleCalendarConnection(supabase, organizationId);
-  log.info('Calendar connection status', { hasCalendar });
-
-  // Build inline webhook tools (contact tools + calendar if available)
-  const inlineTools = buildInlineWebhookTools(organizationId, hasCalendar);
+  // Build inline webhook tools (contact tools only for legacy mode)
+  const inlineTools = buildInlineWebhookTools(institutionId);
   log.info('Built inline tools', { toolCount: inlineTools.length, toolNames: inlineTools.map((t: any) => t.name) });
 
   // Build prompt with tool instructions
-  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, hasCalendar, true);
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
   const DEFAULT_VOICE_ID = '625jGFaa0zTLtQfxwc6Q';
 
@@ -510,28 +524,36 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
   } catch { }
 
   const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
-  const modePrefix = '[INBOUND]';
-  const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${organizationId}`;
+  const modePrefix = USE_WORKFLOW_AGENTS ? '[WORKFLOW]' : '[INBOUND]';
+  const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${institutionId}`;
 
-  // Build agent config with inline tools
-  const agentConfig: any = {
-    name: agentName,
-    conversation_config: {
-      agent: {
-        first_message: firstMessage,
-        prompt: { prompt: systemPrompt },
-        llm: { model: llmModel },
-        tools: inlineTools  // Inline webhook tools with api_schema
+  // Build agent config - use workflow or inline tools based on feature flag
+  let agentConfig: any;
+
+  if (USE_WORKFLOW_AGENTS) {
+    log.info('Using workflow-based agent configuration');
+    agentConfig = await buildWorkflowAgentConfig(supabase, institutionId, orgData, agentName, llmModel);
+  } else {
+    // Legacy: Build agent config with inline tools
+    agentConfig = {
+      name: agentName,
+      conversation_config: {
+        agent: {
+          first_message: firstMessage,
+          prompt: { prompt: systemPrompt },
+          llm: { model: llmModel },
+          tools: inlineTools  // Inline webhook tools with api_schema
+        },
+        tts: { voice_id: DEFAULT_VOICE_ID }
       },
-      tts: { voice_id: DEFAULT_VOICE_ID }
-    },
-    platform_settings: {
-      widget: { avatar: { type: "orb" } }
-    }
-  };
+      platform_settings: {
+        widget: { avatar: { type: "orb" } }
+      }
+    };
+  }
 
   try {
-    log.info('Creating ElevenLabs agent');
+    log.info('Creating ElevenLabs agent', { useWorkflow: USE_WORKFLOW_AGENTS });
 
     const agentData = await makeElevenLabsRequest<{ agent_id: string }>(
       '/convai/agents/create',
@@ -541,19 +563,19 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
     log.info('ElevenLabs agent created', { agentId: agentData.agent_id });
 
     await supabase
-      .from('organization_agents')
+      .from('institution_agents')
       .update({ elevenlabs_agent_id: agentData.agent_id, context: agentContext || null })
-      .eq('organization_id', organizationId);
+      .eq('institution_id', institutionId);
 
     // Import phone number to ElevenLabs
     try {
-      await importPhoneNumberToElevenLabs(supabase, organizationId, agentData.agent_id, agentName, apiKey);
+      await importPhoneNumberToElevenLabs(supabase, institutionId, agentData.agent_id, agentName, apiKey);
     } catch (importError) {
       const err = importError as Error;
       log.error('Phone import failed', {
         error: err.message,
         stack: err.stack,
-        organizationId,
+        institutionId,
         agentId: agentData.agent_id
       });
       console.error('[ElevenLabs Phone Import] FAILED:', err.message, err.stack);
@@ -573,19 +595,19 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
 
 async function importPhoneNumberToElevenLabs(
   supabase: any,
-  organizationId: string,
+  institutionId: string,
   agentId: string,
   agentLabel: string,
   apiKey: string,
   phoneNumberParam?: string  // Optional: if provided, query by phone number directly
 ): Promise<void> {
-  console.log(`[ElevenLabs Phone Import] Starting for org: ${organizationId}, agent: ${agentId}, phone: ${phoneNumberParam || 'not provided'}`);
+  console.log(`[ElevenLabs Phone Import] Starting for org: ${institutionId}, agent: ${agentId}, phone: ${phoneNumberParam || 'not provided'}`);
 
   // Always use the org's actual subaccount credentials - this is where the phone was purchased
   const { data: orgData, error: orgError } = await supabase
-    .from('organizations')
+    .from('institutions')
     .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
-    .eq('id', organizationId)
+    .eq('id', institutionId)
     .single();
 
   if (orgError) {
@@ -626,12 +648,12 @@ async function importPhoneNumberToElevenLabs(
     phoneData = result.data;
     phoneError = result.error;
   } else {
-    // Fallback: query by organization_id
-    console.log(`[ElevenLabs Phone Import] Querying by organization_id: ${organizationId}`);
+    // Fallback: query by institution_id
+    console.log(`[ElevenLabs Phone Import] Querying by institution_id: ${institutionId}`);
     const result = await supabase
       .from('phone_numbers')
       .select('id, phone_number, elevenlabs_phone_number_id')
-      .eq('organization_id', organizationId)
+      .eq('institution_id', institutionId)
       .eq('is_active', true)
       .maybeSingle();
     phoneData = result.data;
@@ -643,7 +665,7 @@ async function importPhoneNumberToElevenLabs(
   }
 
   if (!phoneData) {
-    throw new Error(`[ElevenLabs Phone Import] No phone number found - phoneNumber: ${phoneNumberParam}, orgId: ${organizationId}`);
+    throw new Error(`[ElevenLabs Phone Import] No phone number found - phoneNumber: ${phoneNumberParam}, orgId: ${institutionId}`);
   }
 
   console.log(`[ElevenLabs Phone Import] Found phone: ${phoneData.phone_number}, elevenlabs_id: ${phoneData.elevenlabs_phone_number_id || 'none'}`);
@@ -700,7 +722,11 @@ async function importPhoneNumberToElevenLabs(
   console.log('[ElevenLabs Phone Import] Successfully imported phone and assigned agent');
 }
 
-async function buildAgentPrompt(supabase: any, orgData: any, context: string, hasCalendarTool: boolean = false, hasContactTools: boolean = false): Promise<{ prompt: string; firstMessage: string }> {
+/**
+ * Build agent prompt (legacy mode)
+ * This is simplified for lead recovery - just contact tools and basic receptionist functionality
+ */
+async function buildAgentPrompt(supabase: any, orgData: any, context: string): Promise<{ prompt: string; firstMessage: string }> {
   let greeting = '';
   let customInstructions = '';
 
@@ -725,17 +751,10 @@ async function buildAgentPrompt(supabase: any, orgData: any, context: string, ha
     }
   }
 
-  // Fetch services for this organization
-  const { data: services } = await supabase
-    .from('services')
-    .select('name, price_cents, duration_minutes')
-    .eq('organization_id', orgData.id)
-    .eq('is_active', true);
-
-  // Build placeholder values using shared utility
+  // Build placeholder values
   const placeholderValues = buildPlaceholderValues(
     orgData,
-    services || [],
+    [],
     { context }
   );
 
@@ -747,60 +766,13 @@ async function buildAgentPrompt(supabase: any, orgData: any, context: string, ha
   const firstMessage = greeting || replacePlaceholders(firstMessageTemplate, placeholderValues);
   let fullPrompt = replacePlaceholders(basePromptTemplate, placeholderValues);
 
-  // Append custom instructions if provided (this is separate from the {{customInstructions}} placeholder)
+  // Append custom instructions if provided
   if (customInstructions && customInstructions.trim()) {
     fullPrompt = `${fullPrompt}\n\n${contextPrefix}\n${customInstructions}`;
   }
 
-  // Add calendar tool instructions if the tool is available
-  if (hasCalendarTool) {
-    const calendarToolInstructions = `
-
-APPOINTMENT MANAGEMENT:
-You have access to appointment management tools to help customers book, cancel, and reschedule appointments.
-
-Tools available:
-- check_calendar_availability: Check for open appointment slots
-- book_appointment: Create a new appointment
-- cancel_appointment: Cancel an existing appointment
-- reschedule_appointment: Change an existing appointment to a new time
-
-BOOKING A NEW APPOINTMENT:
-1. Ask what type of appointment they need and when they'd prefer (today, tomorrow, this week, next week)
-2. Use check_calendar_availability to find open slots
-3. Present 2-3 available options: "I have openings at 10 AM or 2 PM on Tuesday. Which works better?"
-4. Ask if they have a provider preference: "Do you have a preference for which provider you'd like to see?"
-5. Collect customer information (name, phone number if not already known)
-6. Confirm all details before booking: "So that's [name], [phone], for [time] - is that correct?"
-7. Use book_appointment to create the appointment
-8. Confirm the booking: "Great, I've booked your appointment for [time]."
-
-CANCELLING AN APPOINTMENT:
-1. Confirm the customer wants to cancel their appointment
-2. Use cancel_appointment with their phone number
-3. If they have multiple appointments, ask which one to cancel
-4. Confirm the cancellation
-
-RESCHEDULING AN APPOINTMENT:
-1. Confirm they want to reschedule, not cancel
-2. Ask for their new preferred time
-3. Use check_calendar_availability to verify the new time is open
-4. Use reschedule_appointment to update the appointment
-5. Confirm the new appointment time
-
-IMPORTANT:
-- Always use check_calendar_availability BEFORE booking to ensure the slot is available
-- Always confirm appointment details before booking or changing
-- If a time isn't available, offer alternatives
-- Use the customer's phone number to look up existing appointments
-- Be proactive about collecting missing information (name, phone, service type)`;
-
-    fullPrompt = `${fullPrompt}\n${calendarToolInstructions}`;
-  }
-
-  // Add contact tools instructions if available
-  if (hasContactTools) {
-    const contactToolInstructions = `
+  // Add contact tools instructions
+  const contactToolInstructions = `
 
 CONTACT MANAGEMENT:
 You have access to contact tools to manage customer information.
@@ -812,21 +784,9 @@ Tools available:
 When to use these tools:
 1. At the start of a call, if you have the caller's phone number from caller ID, use lookup_contact to check if they're a returning customer
 2. When a customer provides their name, phone, address, or email, use save_contact to store their information
-3. Always confirm information with the customer before saving
+3. Always confirm information with the customer before saving`;
 
-Example flow for new callers:
-- Customer provides info: "My name is John Smith, my number is 555-1234, and I'm at 123 Main St"
-- You confirm: "Let me make sure I have that right - John Smith, 555-1234, 123 Main Street?"
-- After confirmation: Use save_contact tool
-- Then say: "Great, I've saved your information in our system."
-
-Example flow for returning callers:
-- Use lookup_contact with their phone number
-- If found: "Welcome back, [name]! How can I help you today?"
-- If not found: "I don't see your information on file. Could I get your name and contact details?"`;
-
-    fullPrompt = `${fullPrompt}\n${contactToolInstructions}`;
-  }
+  fullPrompt = `${fullPrompt}\n${contactToolInstructions}`;
 
   return { prompt: fullPrompt, firstMessage };
 }
@@ -852,8 +812,8 @@ Business hours: {{businessHoursStart}} to {{businessHoursEnd}}
 When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`;
 }
 
-async function handleUpdateAgent(supabase: any, organizationId: string, context?: string, voiceId?: string) {
-  const log = logger.withContext({ organizationId, action: 'update-agent' });
+async function handleUpdateAgent(supabase: any, institutionId: string, context?: string, voiceId?: string) {
+  const log = logger.withContext({ institutionId, action: 'update-agent' });
 
   let apiKey: string;
   try {
@@ -862,16 +822,16 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!organizationId) {
-    return errorResponse('Organization ID is required', 400);
+  if (!institutionId) {
+    return errorResponse('Institution ID is required', 400);
   }
 
   log.step('Updating ElevenLabs agent');
 
   const { data: orgData } = await supabase
-    .from('organizations')
+    .from('institutions')
     .select('*')
-    .eq('id', organizationId)
+    .eq('id', institutionId)
     .single();
 
   if (!orgData) {
@@ -879,28 +839,24 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
   }
 
   const { data: agentRecord } = await supabase
-    .from('organization_agents')
+    .from('institution_agents')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('institution_id', institutionId)
     .maybeSingle();
 
   if (!agentRecord?.elevenlabs_agent_id) {
     log.info('No existing agent found, creating new one');
-    return handleCreateAgent(supabase, organizationId, context);
+    return handleCreateAgent(supabase, institutionId, context);
   }
 
   const agentContext = context || agentRecord?.context || '';
 
-  // Check if Google Calendar is connected
-  const hasCalendar = await hasGoogleCalendarConnection(supabase, organizationId);
-  log.info('Calendar connection status', { hasCalendar });
-
-  // Build inline webhook tools (contact tools + calendar if available)
-  const inlineTools = buildInlineWebhookTools(organizationId, hasCalendar);
+  // Build inline webhook tools (contact tools only for legacy mode)
+  const inlineTools = buildInlineWebhookTools(institutionId);
   log.info('Built inline tools for update', { toolCount: inlineTools.length, toolNames: inlineTools.map((t: any) => t.name) });
 
   // Build prompt with tool instructions
-  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, hasCalendar, true);
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
 
   let llmModel = 'gemini-2.5-flash';
   try {
@@ -908,18 +864,31 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
     if (parsed.llmModel) llmModel = parsed.llmModel;
   } catch { }
 
-  const updateConfig: any = {
-    conversation_config: {
-      agent: {
-        first_message: firstMessage,
-        prompt: { prompt: systemPrompt },
-        llm: { model: llmModel },
-        tools: inlineTools  // Inline webhook tools with api_schema
+  // Build update config - use workflow or inline tools based on feature flag
+  let updateConfig: any;
+
+  if (USE_WORKFLOW_AGENTS) {
+    log.info('Using workflow-based agent configuration for update');
+    const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
+    const modePrefix = '[WORKFLOW]';
+    const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${institutionId}`;
+    updateConfig = await buildWorkflowAgentConfig(supabase, institutionId, orgData, agentName, llmModel);
+  } else {
+    // Legacy: Build update config with inline tools
+    updateConfig = {
+      conversation_config: {
+        agent: {
+          first_message: firstMessage,
+          prompt: { prompt: systemPrompt },
+          llm: { model: llmModel },
+          tools: inlineTools  // Inline webhook tools with api_schema
+        }
       }
-    }
-  };
+    };
+  }
 
   if (voiceId) {
+    updateConfig.conversation_config = updateConfig.conversation_config || {};
     updateConfig.conversation_config.tts = { voice_id: voiceId };
     log.info('Setting voice ID', { voiceId });
   }
@@ -930,27 +899,27 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
       { apiKey, method: 'PATCH', body: updateConfig }
     );
 
-    log.info('ElevenLabs agent updated');
+    log.info('ElevenLabs agent updated', { useWorkflow: USE_WORKFLOW_AGENTS });
 
     await supabase
-      .from('organization_agents')
+      .from('institution_agents')
       .update({ context: agentContext || null })
-      .eq('organization_id', organizationId);
+      .eq('institution_id', institutionId);
 
     // Import phone number if not already imported (ensures phone is linked to agent)
     const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
     const modePrefix = '[INBOUND]';
-    const agentLabel = `${envPrefix}${modePrefix} ${orgData.name} - ${organizationId}`;
+    const agentLabel = `${envPrefix}${modePrefix} ${orgData.name} - ${institutionId}`;
 
     try {
-      await importPhoneNumberToElevenLabs(supabase, organizationId, agentRecord.elevenlabs_agent_id, agentLabel, apiKey);
+      await importPhoneNumberToElevenLabs(supabase, institutionId, agentRecord.elevenlabs_agent_id, agentLabel, apiKey);
       log.info('Phone import completed during update');
     } catch (importError) {
       const err = importError as Error;
       log.error('Phone import failed during update', {
         error: err.message,
         stack: err.stack,
-        organizationId,
+        institutionId,
         agentId: agentRecord.elevenlabs_agent_id
       });
       // Don't fail the whole update if phone import fails
@@ -968,8 +937,8 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
   }
 }
 
-async function handleRenameAgent(supabase: any, organizationId: string, name: string) {
-  const log = logger.withContext({ organizationId, action: 'rename-agent' });
+async function handleRenameAgent(supabase: any, institutionId: string, name: string) {
+  const log = logger.withContext({ institutionId, action: 'rename-agent' });
 
   let apiKey: string;
   try {
@@ -978,16 +947,16 @@ async function handleRenameAgent(supabase: any, organizationId: string, name: st
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!organizationId || !name) {
-    return errorResponse('Organization ID and name are required', 400);
+  if (!institutionId || !name) {
+    return errorResponse('Institution ID and name are required', 400);
   }
 
   log.step('Renaming ElevenLabs agent', { newName: name });
 
   const { data: agentRecord } = await supabase
-    .from('organization_agents')
+    .from('institution_agents')
     .select('elevenlabs_agent_id')
-    .eq('organization_id', organizationId)
+    .eq('institution_id', institutionId)
     .maybeSingle();
 
   if (!agentRecord?.elevenlabs_agent_id) {
@@ -996,7 +965,7 @@ async function handleRenameAgent(supabase: any, organizationId: string, name: st
 
   const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
   const modePrefix = '[INBOUND]';
-  const agentName = `${envPrefix}${modePrefix} ${name} - ${organizationId}`;
+  const agentName = `${envPrefix}${modePrefix} ${name} - ${institutionId}`;
 
   try {
     await makeElevenLabsRequest(
@@ -1018,8 +987,8 @@ async function handleRenameAgent(supabase: any, organizationId: string, name: st
   }
 }
 
-async function handleImportPhone(supabase: any, organizationId: string, agentId: string, phoneNumber?: string) {
-  const log = logger.withContext({ organizationId, agentId, phoneNumber, action: 'import-phone' });
+async function handleImportPhone(supabase: any, institutionId: string, agentId: string, phoneNumber?: string) {
+  const log = logger.withContext({ institutionId, agentId, phoneNumber, action: 'import-phone' });
 
   let apiKey: string;
   try {
@@ -1028,31 +997,31 @@ async function handleImportPhone(supabase: any, organizationId: string, agentId:
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!organizationId || !agentId) {
-    return errorResponse('Organization ID and Agent ID are required', 400);
+  if (!institutionId || !agentId) {
+    return errorResponse('Institution ID and Agent ID are required', 400);
   }
 
   log.step('Importing phone to ElevenLabs', { phoneNumber });
 
   // Get org name for label
   const { data: orgData } = await supabase
-    .from('organizations')
+    .from('institutions')
     .select('name')
-    .eq('id', organizationId)
+    .eq('id', institutionId)
     .single();
 
   const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
   const modePrefix = '[INBOUND]';
-  const agentLabel = `${envPrefix}${modePrefix} ${orgData?.name || 'Unknown'} - ${organizationId}`;
+  const agentLabel = `${envPrefix}${modePrefix} ${orgData?.name || 'Unknown'} - ${institutionId}`;
 
   try {
-    await importPhoneNumberToElevenLabs(supabase, organizationId, agentId, agentLabel, apiKey, phoneNumber);
+    await importPhoneNumberToElevenLabs(supabase, institutionId, agentId, agentLabel, apiKey, phoneNumber);
 
     // Get the phone number ID that was just imported
     const { data: phoneData } = await supabase
       .from('phone_numbers')
       .select('elevenlabs_phone_number_id')
-      .eq('organization_id', organizationId)
+      .eq('institution_id', institutionId)
       .eq('is_active', true)
       .maybeSingle();
 

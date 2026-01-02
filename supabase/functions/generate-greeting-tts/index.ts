@@ -16,17 +16,17 @@ serve(async (req) => {
 
     const body = await parseJsonBody<{
       greeting: string;
-      organizationId: string;
-    }>(req, ['greeting', 'organizationId']);
+      institutionId: string;
+    }>(req, ['greeting', 'institutionId']);
 
-    const { greeting, organizationId } = body;
+    const { greeting, institutionId } = body;
 
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
     if (!ELEVENLABS_API_KEY) {
       throw new Error('ELEVENLABS_API_KEY not configured');
     }
 
-    log.info('Generating TTS', { organizationId });
+    log.info('Generating TTS', { institutionId });
 
     // Generate TTS using ElevenLabs
     const voiceId = 'cjVigY5qzO86Huf0OWal'; // Eric voice
@@ -62,7 +62,7 @@ serve(async (req) => {
 
     // Upload to Supabase Storage
     const supabase = createServiceClient();
-    const fileName = `${organizationId}/greeting.mp3`;
+    const fileName = `${institutionId}/greeting.mp3`;
 
     // Delete existing file if any
     await supabase.storage.from('greetings').remove([fileName]);

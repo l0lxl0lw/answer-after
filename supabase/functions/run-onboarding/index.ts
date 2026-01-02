@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 interface OnboardingRequest {
-  organizationId: string;
+  institutionId: string;
   subscriptionPlan: string;
   areaCode?: string; // Optional preferred area code for phone number
 }
@@ -59,23 +59,23 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { organizationId, subscriptionPlan, areaCode } = await req.json() as OnboardingRequest;
+    const { institutionId, subscriptionPlan, areaCode } = await req.json() as OnboardingRequest;
 
-    if (!organizationId) {
-      throw new Error('Organization ID is required');
+    if (!institutionId) {
+      throw new Error('Institution ID is required');
     }
 
-    logStep('Starting onboarding', { organizationId, subscriptionPlan, areaCode });
+    logStep('Starting onboarding', { institutionId, subscriptionPlan, areaCode });
 
     // Get organization details
     const { data: org, error: orgError } = await supabase
-      .from('organizations')
+      .from('institutions')
       .select('*')
-      .eq('id', organizationId)
+      .eq('id', institutionId)
       .single();
 
     if (orgError || !org) {
-      throw new Error(`Organization not found: ${orgError?.message}`);
+      throw new Error(`Institution not found: ${orgError?.message}`);
     }
 
     // ============================================
@@ -97,12 +97,12 @@ serve(async (req) => {
 
       // Save local subaccount to org so elevenlabs-agent can use it
       const { error: updateError } = await supabase
-        .from('organizations')
+        .from('institutions')
         .update({
           twilio_subaccount_sid: subaccountSid,
           twilio_subaccount_auth_token: subaccountAuthToken
         })
-        .eq('id', organizationId);
+        .eq('id', institutionId);
 
       if (updateError) {
         logStep('Failed to save local subaccount to org', { error: updateError });
@@ -116,7 +116,7 @@ serve(async (req) => {
       });
     } else if (!subaccountSid) {
       // Production/staging: Create new subaccount
-      const baseName = `AnswerAfter-${org.name.substring(0, 20)}-${organizationId.substring(0, 8)}`;
+      const baseName = `AnswerAfter-${org.name.substring(0, 20)}-${institutionId.substring(0, 8)}`;
       const friendlyName = config.appendEnvironmentSuffix(baseName).replace(/\s+/g, '-');
 
       const subaccountResponse = await fetch(
@@ -148,12 +148,12 @@ serve(async (req) => {
 
       // Save to database
       const { error: updateError } = await supabase
-        .from('organizations')
+        .from('institutions')
         .update({
           twilio_subaccount_sid: subaccountSid,
           twilio_subaccount_auth_token: subaccountAuthToken
         })
-        .eq('id', organizationId);
+        .eq('id', institutionId);
 
       if (updateError) {
         logStep('Failed to save subaccount', { error: updateError });
@@ -185,7 +185,7 @@ serve(async (req) => {
     const { data: existingPhones } = await supabase
       .from('phone_numbers')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('institution_id', institutionId)
       .eq('is_active', true);
 
     let phoneNumber: string | null = null;
@@ -258,7 +258,7 @@ serve(async (req) => {
           const { error: phoneInsertError } = await supabase
             .from('phone_numbers')
             .upsert({
-              organization_id: organizationId,
+              institution_id: institutionId,
               phone_number: phoneNumber,
               friendly_name: existingNumber.friendly_name || 'Local Dev Line',
               is_shared: true, // Mark as shared since it's reused
@@ -275,7 +275,7 @@ serve(async (req) => {
             // Try updating existing record instead
             await supabase
               .from('phone_numbers')
-              .update({ organization_id: organizationId, is_active: true })
+              .update({ institution_id: institutionId, is_active: true })
               .eq('phone_number', phoneNumber);
           }
 
@@ -371,7 +371,7 @@ serve(async (req) => {
             const { error: phoneInsertError } = await supabase
               .from('phone_numbers')
               .insert({
-                organization_id: organizationId,
+                institution_id: institutionId,
                 phone_number: phoneNumber,
                 friendly_name: availableNumber.friendly_name || 'Business Line',
                 is_shared: false,
@@ -404,7 +404,7 @@ serve(async (req) => {
     const { data: agentRecord } = await supabase
       .from('organization_agents')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('institution_id', institutionId)
       .maybeSingle();
 
     let agentId = agentRecord?.elevenlabs_agent_id;
@@ -427,7 +427,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           action: 'create-agent',
-          organizationId: organizationId,
+          institutionId: institutionId,
           context: agentRecord?.context || JSON.stringify({
             orgName: org.name,
             businessType: 'Service Business',
@@ -474,7 +474,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           action: 'import-phone',
-          organizationId: organizationId,
+          institutionId: institutionId,
           agentId: agentId,
           phoneNumber: phoneNumber
         }),
@@ -513,7 +513,7 @@ serve(async (req) => {
         status: 'active',
         plan: subscriptionPlan || DEFAULT_PLAN
       })
-      .eq('organization_id', organizationId);
+      .eq('institution_id', institutionId);
 
     if (subUpdateError) {
       logStep('Failed to update subscription', { error: subUpdateError });
@@ -533,12 +533,12 @@ serve(async (req) => {
 
     // Update organization onboarding status
     const { error: orgOnboardingError } = await supabase
-      .from('organizations')
+      .from('institutions')
       .update({
         is_onboarding_complete: true,
         onboarding_completed_at: new Date().toISOString()
       })
-      .eq('id', organizationId);
+      .eq('id', institutionId);
 
     if (orgOnboardingError) {
       logStep('Failed to update onboarding status', { error: orgOnboardingError });
