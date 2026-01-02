@@ -75,7 +75,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Check onboarding paths
   const isOnboardingPath = location.pathname.startsWith('/onboarding');
   const isSelectPlanPath = location.pathname === '/onboarding/select-plan';
-  const isPhonePath = location.pathname === '/onboarding/phone';
 
   // Determine onboarding redirect based on completion status
   // Skip when already on onboarding path to avoid redirect loops
@@ -88,14 +87,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       if (!isDevelopment && !onboardingData.hasSubscription) {
         onboardingRedirect = '/onboarding/select-plan';
       }
-      // Check if they have a phone number (Step 2)
-      else if (!onboardingData.hasPhoneNumber) {
-        onboardingRedirect = '/onboarding/phone';
-      }
-      // If they have a phone but onboarding isn't complete, send them to setup services (Step 4)
-      // They can always access upgrade-prompt later, but services setup is more important
+      // Phone number is now purchased in SetupServices, so skip directly there
       else {
-        onboardingRedirect = '/onboarding/setup-services';
+        onboardingRedirect = '/onboarding/setup';
       }
     }
   }

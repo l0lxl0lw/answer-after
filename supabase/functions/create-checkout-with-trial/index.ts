@@ -204,7 +204,7 @@ serve(async (req) => {
           credits: planConfig.credits.toString(),
         },
       },
-      success_url: `${origin}/onboarding/phone?checkout=success`,
+      success_url: `${origin}/onboarding/setup?checkout=success`,
       cancel_url: `${origin}/onboarding/select-plan?checkout=cancelled`,
       payment_method_collection: "always",
       metadata: {

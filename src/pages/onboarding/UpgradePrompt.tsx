@@ -1,15 +1,18 @@
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles, Zap, Check, Loader2 } from "lucide-react";
 import { COMPANY } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { createLogger } from "@/lib/logger";
-import { useCurrentSubscriptionTier, useSubscriptionTiers } from "@/hooks/use-api";
-import { useEffect, useMemo } from "react";
+import { useSubscriptionTiers } from "@/hooks/use-api";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
-// Feature gating uses DB flags from subscription_tiers table:
-// - Only Business (top tier) skips this page since there's no upgrade available
+// This page shows BEFORE Stripe checkout to offer upgrade options
+// User arrives here after selecting a plan on SelectPlan page
+// Business plan users skip this page (handled in SelectPlan)
 
 const log = createLogger('UpgradePrompt');
 
@@ -18,81 +21,95 @@ const PLAN_HIERARCHY = ['core', 'growth', 'pro', 'business'];
 
 export default function UpgradePrompt() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { session } = useAuth();
+  const { toast } = useToast();
   const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedCheckoutPlan, setSelectedCheckoutPlan] = useState<string | null>(null);
 
-  // Use the new hook that provides subscription + tier data with feature flags
-  const {
-    subscription: subscriptionData,
-    currentPlanId,
-    currentTier,
-    features,
-    isLoading: isLoadingSubscription
-  } = useCurrentSubscriptionTier();
+  // Get selected plan from URL query param
+  const selectedPlanId = searchParams.get('plan') || 'core';
 
-  const isLoading = isLoadingTiers || isLoadingSubscription;
+  log.debug('Selected plan from URL:', selectedPlanId);
 
-  log.debug('Current plan from database:', currentPlanId, 'Tier:', currentTier?.name);
+  // Get current plan details from tiers
+  const selectedPlan = useMemo(() => {
+    return tiers?.find(t => t.plan_id === selectedPlanId);
+  }, [tiers, selectedPlanId]);
 
-  // Get current plan details from tiers (use currentTier from hook)
-  const currentPlan = currentTier;
-
-  // Determine upgrade targets based on current plan
+  // Determine upgrade targets based on selected plan
   const upgradePlans = useMemo(() => {
     if (!tiers) return [];
 
-    if (currentPlanId === 'core') {
+    if (selectedPlanId === 'core') {
       // Core shows both Growth and Pro as upgrade options
       return tiers.filter(t => t.plan_id === 'growth' || t.plan_id === 'pro')
         .sort((a, b) => (a.price_cents || 0) - (b.price_cents || 0));
     }
 
     // All others show just next tier up
-    const currentPlanIndex = PLAN_HIERARCHY.indexOf(currentPlanId);
+    const currentPlanIndex = PLAN_HIERARCHY.indexOf(selectedPlanId);
     const nextPlanId = currentPlanIndex >= 0 && currentPlanIndex < PLAN_HIERARCHY.length - 1
       ? PLAN_HIERARCHY[currentPlanIndex + 1]
       : null;
     const nextPlan = nextPlanId ? tiers.find(t => t.plan_id === nextPlanId) : null;
     return nextPlan ? [nextPlan] : [];
-  }, [currentPlanId, tiers]);
+  }, [selectedPlanId, tiers]);
 
-  log.debug('Plan state:', { currentPlanId, upgradePlans: upgradePlans.map(p => p.plan_id) });
+  log.debug('Plan state:', { selectedPlanId, upgradePlans: upgradePlans.map(p => p.plan_id) });
 
-  // Redirect based on subscription status - only Business skips (top tier)
-  useEffect(() => {
-    if (!isLoading) {
-      // If no subscription at all, redirect to plan selection
-      if (!subscriptionData) {
-        log.warn('No subscription found, redirecting to plan selection');
-        navigate("/onboarding/select-plan", { replace: true });
-        return;
-      }
-
-      // Only skip upgrade prompt for Business (top tier - no upgrade available)
-      if (currentPlanId === 'business') {
-        log.debug('Business plan detected (top tier), skipping upgrade prompt');
-        navigate("/onboarding/setup-services", { replace: true });
-      }
+  // Handle Stripe checkout
+  const handleCheckout = async (planId: string) => {
+    if (!session) {
+      toast({
+        title: "Session expired",
+        description: "Please log in again.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
     }
-  }, [isLoading, subscriptionData, currentPlanId, navigate]);
 
-  const handleSkip = () => {
-    navigate("/onboarding/setup-services");
-  };
+    setIsProcessing(true);
+    setSelectedCheckoutPlan(planId);
 
-  const handleUpgrade = () => {
-    navigate("/dashboard/subscriptions");
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout-with-trial", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: {
+          planId,
+        },
+      });
+
+      if (error || !data?.url) {
+        throw new Error(error?.message || "Failed to create checkout session");
+      }
+
+      window.location.href = data.url;
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      toast({
+        title: "Checkout failed",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      setSelectedCheckoutPlan(null);
+    }
   };
 
   // Helper to compute features gained by upgrading (only NEW features)
-  const getNewFeatures = (toPlan: typeof currentPlan) => {
-    if (!currentPlan || !toPlan) return [];
-    const fromFeatures = new Set(currentPlan.features as string[]);
+  const getNewFeatures = (toPlan: typeof selectedPlan) => {
+    if (!selectedPlan || !toPlan) return [];
+    const fromFeatures = new Set(selectedPlan.features as string[]);
     return ((toPlan.features as string[]) || []).filter(f => !fromFeatures.has(f));
   };
 
   // Loading state
-  if (isLoading || !currentPlan || upgradePlans.length === 0) {
+  if (isLoadingTiers || !selectedPlan || upgradePlans.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -119,7 +136,7 @@ export default function UpgradePrompt() {
             </div>
             <div>
               <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
-              <p className="text-sm text-muted-foreground">Step 3 of 6 • Upgrade your plan</p>
+              <p className="text-sm text-muted-foreground">Step 2 of 5 • Upgrade your plan</p>
             </div>
           </div>
         </div>
@@ -139,13 +156,13 @@ export default function UpgradePrompt() {
             Get More from Your AI Agent
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Unlock advanced features and handle more calls with an upgraded plan. Upgrade now or continue with your current plan.
+            Unlock advanced features and handle more calls with an upgraded plan. Upgrade now or continue with your selected plan.
           </p>
         </motion.div>
 
         {/* Comparison Cards */}
         <div className={`grid ${gridCols} gap-6 mb-8`}>
-          {/* Current Plan */}
+          {/* Selected Plan */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -153,9 +170,9 @@ export default function UpgradePrompt() {
             className="bg-card border rounded-xl p-6"
           >
             <div className="mb-4">
-              <h3 className="font-display text-xl font-bold mb-1">{currentPlan.name}</h3>
+              <h3 className="font-display text-xl font-bold mb-1">{selectedPlan.name}</h3>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">${formatPrice(currentPlan.price_cents)}</span>
+                <span className="text-3xl font-bold">${formatPrice(selectedPlan.price_cents)}</span>
                 <span className="text-muted-foreground text-sm">/month</span>
               </div>
             </div>
@@ -163,9 +180,9 @@ export default function UpgradePrompt() {
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
                 <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                <span className="text-sm">{currentPlan.credits} credits/month (~{Math.floor(currentPlan.credits / 3)} calls)</span>
+                <span className="text-sm">{selectedPlan.credits} credits/month (~{Math.floor(selectedPlan.credits / 3)} calls)</span>
               </li>
-              {currentPlan.features && (currentPlan.features as string[]).map((feature: string, idx: number) => (
+              {selectedPlan.features && (selectedPlan.features as string[]).map((feature: string, idx: number) => (
                 <li key={idx} className="flex items-start gap-3">
                   <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
                   <span className="text-sm">{feature}</span>
@@ -177,10 +194,20 @@ export default function UpgradePrompt() {
               variant="outline"
               size="lg"
               className="w-full mt-6"
-              onClick={handleSkip}
+              onClick={() => handleCheckout(selectedPlanId)}
+              disabled={isProcessing}
             >
-              Continue with {currentPlan.name}
-              <ArrowRight className="w-4 h-4 ml-2" />
+              {isProcessing && selectedCheckoutPlan === selectedPlanId ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Continue with {selectedPlan.name}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </>
+              )}
             </Button>
           </motion.div>
 
@@ -213,7 +240,7 @@ export default function UpgradePrompt() {
                     <span className="text-muted-foreground text-sm">/month</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    ${formatPrice(upgradePlan.price_cents - currentPlan.price_cents)} more than {currentPlan.name}
+                    ${formatPrice(upgradePlan.price_cents - selectedPlan.price_cents)} more than {selectedPlan.name}
                   </p>
                 </div>
 
@@ -224,7 +251,7 @@ export default function UpgradePrompt() {
                   </li>
                   <li className="flex items-start gap-3">
                     <Sparkles className={`w-5 h-5 ${isRecommended ? 'text-primary' : 'text-success'} flex-shrink-0 mt-0.5`} />
-                    <span className="text-sm font-medium">+{upgradePlan.credits - currentPlan.credits} more credits</span>
+                    <span className="text-sm font-medium">+{upgradePlan.credits - selectedPlan.credits} more credits</span>
                   </li>
                   {/* Show only NEW features gained by upgrading */}
                   {newFeatures.map((feature: string, idx: number) => (
@@ -239,10 +266,20 @@ export default function UpgradePrompt() {
                   size="lg"
                   className={`w-full mt-6 ${isRecommended ? 'bg-primary hover:bg-primary/90' : ''}`}
                   variant={isRecommended ? 'default' : 'outline'}
-                  onClick={handleUpgrade}
+                  onClick={() => handleCheckout(upgradePlan.plan_id)}
+                  disabled={isProcessing}
                 >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Upgrade to {upgradePlan.name}
+                  {isProcessing && selectedCheckoutPlan === upgradePlan.plan_id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 mr-2" />
+                      Upgrade to {upgradePlan.name}
+                    </>
+                  )}
                 </Button>
               </motion.div>
             );

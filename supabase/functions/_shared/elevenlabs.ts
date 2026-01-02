@@ -519,3 +519,119 @@ export async function listTools(
 
   return result.tools || [];
 }
+
+/**
+ * Create a save contact tool for an agent
+ * Allows the agent to save customer contact information during live calls
+ * Organization ID is baked into the webhook for security isolation
+ */
+export async function createSaveContactTool(
+  webhookUrl: string,
+  organizationId: string,
+  apiKey: string
+): Promise<ElevenLabsTool> {
+  const toolConfig = {
+    type: 'webhook',
+    name: 'save_contact',
+    description: 'Save or update customer contact information in the database. Use this tool when the customer provides their name, phone number, address, or email. Always confirm the information with the customer before saving.',
+    webhook: {
+      url: webhookUrl,
+      method: 'POST',
+      request_headers: {
+        'Content-Type': 'application/json',
+      },
+      request_body: {
+        organization_id: organizationId,
+      },
+    },
+    parameters: {
+      type: 'object',
+      properties: {
+        phone: {
+          type: 'string',
+          description: 'Customer phone number. Required field.',
+        },
+        name: {
+          type: 'string',
+          description: 'Customer full name.',
+        },
+        address: {
+          type: 'string',
+          description: 'Customer address including street, city, state, and zip code.',
+        },
+        email: {
+          type: 'string',
+          description: 'Customer email address.',
+        },
+      },
+      required: ['phone'],
+    },
+  };
+
+  const result = await makeElevenLabsRequest<{ tool_id: string; name: string; type: string }>(
+    '/convai/tools',
+    {
+      apiKey,
+      method: 'POST',
+      body: { tool_config: toolConfig },
+    }
+  );
+
+  return {
+    tool_id: result.tool_id,
+    name: result.name || 'save_contact',
+    type: result.type || 'webhook',
+  };
+}
+
+/**
+ * Create a lookup contact tool for an agent
+ * Allows the agent to identify returning customers by phone number
+ * Organization ID is baked into the webhook for security isolation
+ */
+export async function createLookupContactTool(
+  webhookUrl: string,
+  organizationId: string,
+  apiKey: string
+): Promise<ElevenLabsTool> {
+  const toolConfig = {
+    type: 'webhook',
+    name: 'lookup_contact',
+    description: 'Look up a customer by their phone number to check if they are a returning customer. Use this at the start of a call if you have the caller\'s phone number from caller ID. This helps provide personalized service to returning customers.',
+    webhook: {
+      url: webhookUrl,
+      method: 'POST',
+      request_headers: {
+        'Content-Type': 'application/json',
+      },
+      request_body: {
+        organization_id: organizationId,
+      },
+    },
+    parameters: {
+      type: 'object',
+      properties: {
+        phone: {
+          type: 'string',
+          description: 'Phone number to look up. Can be from caller ID.',
+        },
+      },
+      required: ['phone'],
+    },
+  };
+
+  const result = await makeElevenLabsRequest<{ tool_id: string; name: string; type: string }>(
+    '/convai/tools',
+    {
+      apiKey,
+      method: 'POST',
+      body: { tool_config: toolConfig },
+    }
+  );
+
+  return {
+    tool_id: result.tool_id,
+    name: result.name || 'lookup_contact',
+    type: result.type || 'webhook',
+  };
+}

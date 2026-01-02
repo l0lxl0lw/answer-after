@@ -49,6 +49,8 @@ export const SUBSCRIPTION_PLANS = {
   ENTERPRISE: 'enterprise',
 } as const;
 
+export const DEFAULT_PLAN = SUBSCRIPTION_PLANS.STARTER;
+
 export type SubscriptionPlanId = typeof SUBSCRIPTION_PLANS[keyof typeof SUBSCRIPTION_PLANS];
 
 /**

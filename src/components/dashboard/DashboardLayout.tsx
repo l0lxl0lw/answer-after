@@ -36,37 +36,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Organized sidebar sections
+// Organized sidebar sections - optimized for front desk operators
 const sidebarSections = [
   {
-    label: null, // No label for top section
+    label: null, // No label for top section - primary operations
     links: [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    ],
-  },
-  {
-    label: "Agent",
-    links: [
-      { name: "Voice & Behavior", href: "/dashboard/voice-behavior", icon: Bot },
-      { name: "Services", href: "/dashboard/services", icon: Wrench },
-    ],
-  },
-  {
-    label: "Activity",
-    links: [
-      { name: "Call Log", href: "/dashboard/calls", icon: PhoneCall },
-      { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
-      { name: "Bookings", href: "/dashboard/bookings", icon: Calendar },
-      { name: "Leads", href: "/dashboard/leads", icon: UserPlus },
-    ],
-  },
-  {
-    label: "Settings",
-    links: [
       { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+      { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
+      { name: "Leads", href: "/dashboard/leads", icon: UserPlus },
       { name: "Customers", href: "/dashboard/customers", icon: Users },
-      { name: "Account", href: "/dashboard/account", icon: Settings },
+      { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
+    ],
+  },
+  {
+    label: "Management",
+    links: [
+      { name: "Team", href: "/dashboard/providers", icon: Users },
+      { name: "Services", href: "/dashboard/services", icon: Wrench },
+      { name: "Bookings", href: "/dashboard/bookings", icon: Calendar },
+    ],
+  },
+  {
+    label: "Configuration",
+    links: [
+      { name: "AI Agent", href: "/dashboard/voice-behavior", icon: Bot },
       { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
+      { name: "Account", href: "/dashboard/account", icon: Settings },
     ],
   },
 ];

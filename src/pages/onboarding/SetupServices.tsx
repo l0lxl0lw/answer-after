@@ -1,16 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowRight, Sparkles, Plus, Trash2, Loader2, Wrench, Zap } from "lucide-react";
+import { ArrowRight, Sparkles, Plus, Trash2, Loader2, Wrench, Zap, Phone, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentSubscriptionTier } from "@/hooks/use-api";
+import { useQuery } from "@tanstack/react-query";
 import { COMPANY } from "@/lib/constants";
+import { extractAreaCode, formatPhoneDisplay } from "@/lib/phoneUtils";
 
 // Feature gating now uses DB flags from subscription_tiers table:
 // - has_custom_agent: Controls access to greeting/service customization (Growth+)
@@ -35,6 +37,11 @@ export default function SetupServices() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
 
+  // Phone purchase state
+  const [isPurchasingPhone, setIsPurchasingPhone] = useState(false);
+  const [phonePurchaseError, setPhonePurchaseError] = useState<string | null>(null);
+  const phonePurchaseAttempted = useRef(false);
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const { session, user } = useAuth();
@@ -43,6 +50,37 @@ export default function SetupServices() {
   const { currentPlanId, currentTier, features, isLoading: isLoadingPlan } = useCurrentSubscriptionTier();
 
   log.debug('Current plan from database:', currentPlanId, 'Tier:', currentTier?.name);
+
+  // Check for existing phone number
+  const { data: existingPhone, isLoading: isLoadingPhone, refetch: refetchPhone } = useQuery({
+    queryKey: ["existing-phone", user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return null;
+      const { data } = await supabase
+        .from("phone_numbers")
+        .select("phone_number")
+        .eq("organization_id", user.organization_id)
+        .eq("is_active", true)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.organization_id,
+  });
+
+  // Get business phone from organization for area code
+  const { data: orgData, isLoading: isLoadingOrg } = useQuery({
+    queryKey: ["org-business-phone", user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return null;
+      const { data } = await supabase
+        .from("organizations")
+        .select("business_phone_number")
+        .eq("id", user.organization_id)
+        .single();
+      return data;
+    },
+    enabled: !!user?.organization_id,
+  });
 
   // Plan capabilities - now using DB feature flags instead of hardcoded plan names
   // has_custom_agent = true for Growth, Pro, Business (enables greeting & service customization)
@@ -66,6 +104,63 @@ export default function SetupServices() {
       loadExistingData();
     }
   }, [user?.organization_id, features.hasCustomAgent]);
+
+  // Auto-purchase phone number if not already done
+  useEffect(() => {
+    const purchasePhone = async () => {
+      // Skip if already have phone, still loading, or already attempted
+      if (existingPhone || isLoadingPhone || isLoadingOrg || isPurchasingPhone || phonePurchaseAttempted.current) return;
+      // Skip if no organization data or no business phone
+      if (!orgData?.business_phone_number || !session) return;
+
+      phonePurchaseAttempted.current = true;
+      const businessPhone = orgData.business_phone_number;
+      const areaCode = extractAreaCode(businessPhone);
+
+      if (!areaCode) {
+        setPhonePurchaseError("Could not extract area code from your business phone number.");
+        return;
+      }
+
+      setIsPurchasingPhone(true);
+      setPhonePurchaseError(null);
+
+      try {
+        log.debug('Auto-purchasing phone number with area code:', areaCode);
+
+        const { data, error } = await supabase.functions.invoke("purchase-phone-number", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: {
+            businessPhoneNumber: businessPhone,
+            areaCode,
+          },
+        });
+
+        if (error || !data?.success) {
+          throw new Error(data?.error || error?.message || "Failed to purchase phone number");
+        }
+
+        log.debug('Phone number purchased successfully:', data.phoneNumber);
+
+        toast({
+          title: "Phone number activated!",
+          description: `Your new number ${formatPhoneDisplay(data.phoneNumber)} is ready.`,
+        });
+
+        // Refetch to update the existingPhone state
+        refetchPhone();
+      } catch (error: any) {
+        log.error("Phone purchase error:", error);
+        setPhonePurchaseError(error.message || "Failed to set up phone number. Please try again.");
+      } finally {
+        setIsPurchasingPhone(false);
+      }
+    };
+
+    purchasePhone();
+  }, [existingPhone, isLoadingPhone, isLoadingOrg, orgData, session]);
 
   const loadExistingData = async () => {
     if (!user?.organization_id) return;
@@ -304,11 +399,68 @@ export default function SetupServices() {
     }
   };
 
-  // Loading state
-  if (isLoadingPlan) {
+  // Loading state (including org data for phone purchase)
+  if (isLoadingPlan || isLoadingPhone || isLoadingOrg) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Phone purchase in progress
+  if (isPurchasingPhone) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center max-w-md mx-auto px-4"
+        >
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Phone className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="font-display text-2xl font-bold mb-2">Setting Up Your Phone Number</h2>
+          <p className="text-muted-foreground mb-4">
+            We're activating your dedicated business line. This only takes a moment.
+          </p>
+          <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Phone purchase error
+  if (phonePurchaseError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center max-w-md mx-auto px-4"
+        >
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-destructive" />
+          </div>
+          <h2 className="font-display text-2xl font-bold mb-2">Phone Setup Issue</h2>
+          <p className="text-muted-foreground mb-6">{phonePurchaseError}</p>
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={() => {
+                phonePurchaseAttempted.current = false;
+                setPhonePurchaseError(null);
+              }}
+            >
+              Try Again
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setPhonePurchaseError(null)}
+            >
+              Continue Without Phone
+            </Button>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -341,8 +493,8 @@ export default function SetupServices() {
   }
 
   // Plans with custom agent capability: Show form
-  const stepNumber = '4'; // Step 4 of 6 for all plans that show this form
-  const stepTotal = '6';
+  const stepNumber = '3'; // Step 3 of 5 (phone setup is now automatic)
+  const stepTotal = '5';
 
   return (
     <div className="min-h-screen bg-background">

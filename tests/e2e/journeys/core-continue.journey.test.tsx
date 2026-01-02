@@ -1,35 +1,45 @@
 /**
  * Journey: Core Plan - Continue with Current Plan
  *
- * User Flow:
+ * User Flow (NEW):
  * 1. User signs up and selects Core plan ($29/month, 250 credits)
- * 2. User completes phone setup
- * 3. User sees UpgradePrompt page with BOTH Growth AND Pro upgrade options
- * 4. User clicks "Continue with Core" button
- * 5. User proceeds to SetupServices (auto-creates default agent)
+ * 2. User sees UpgradePrompt page with BOTH Growth AND Pro upgrade options
+ * 3. User clicks "Continue with Core" button → Stripe checkout
+ * 4. After Stripe success → Phone setup
+ * 5. User proceeds to Setup (auto-creates default agent)
  * 6. User completes TestCall
  * 7. User reaches Dashboard
  *
  * Key Behaviors:
- * - UpgradePrompt IS shown (Core is lowest tier)
+ * - UpgradePrompt reads plan from URL (?plan=core)
  * - Shows BOTH Growth AND Pro as upgrade options
- * - User can choose to continue without upgrading
- * - SetupServices auto-creates agent (Core has hasCustomAgent=false)
+ * - Continue button triggers Stripe checkout (not navigation)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { EXPECTED_CREDITS, EXPECTED_FEATURES } from '../../helpers/test-data';
 
 // Mock navigate
 const mockNavigate = vi.fn();
 
+// Mock URL search params - Core plan selected
+let mockSearchParams = new URLSearchParams('plan=core');
+
+// Mock Supabase functions invoke
+const mockFunctionsInvoke = vi.fn();
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
-  return { ...actual, useNavigate: () => mockNavigate };
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useSearchParams: () => [mockSearchParams],
+  };
 });
 
 vi.mock('@/lib/logger', () => ({
@@ -43,7 +53,7 @@ vi.mock('@/hooks/use-toast', () => ({
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: vi.fn(() => ({ select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),
-    functions: { invoke: vi.fn().mockResolvedValue({ data: { success: true }, error: null }) },
+    functions: { invoke: (...args: any[]) => mockFunctionsInvoke(...args) },
     auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }) },
   },
 }));
@@ -66,7 +76,6 @@ const GROWTH_CREDITS = EXPECTED_CREDITS.growth;
 const PRO_CREDITS = EXPECTED_CREDITS.pro;
 
 vi.mock('@/hooks/use-api', () => ({
-  useSubscription: () => ({ data: { plan: 'core', status: 'trial', total_credits: CORE_CREDITS, used_credits: 0 }, isLoading: false, error: null }),
   useSubscriptionTiers: () => ({
     data: [
       {
@@ -93,39 +102,21 @@ vi.mock('@/hooks/use-api', () => ({
         features: ['AI call answering', 'Appointment booking', 'SMS notifications', 'Call recordings', 'Custom agent', 'Custom AI training', 'Outbound reminders', 'Priority support'],
         ...EXPECTED_FEATURES.pro
       },
+      {
+        plan_id: 'business',
+        name: 'Business',
+        price_cents: 49900,
+        credits: 3000,
+        features: ['All Pro features', 'API access', 'Multi-language', 'Voice selection'],
+        ...EXPECTED_FEATURES.business
+      },
     ],
     isLoading: false,
     error: null,
   }),
-  useCurrentSubscriptionTier: () => ({
-    subscription: { plan: 'core', status: 'trial' },
-    currentPlanId: 'core',
-    currentTier: {
-      plan_id: 'core',
-      name: 'Core',
-      price_cents: 2900,
-      credits: 250,
-      features: ['AI call answering', 'Appointment booking', 'SMS notifications', 'Call recordings'],
-      ...CORE_FEATURES
-    },
-    isLoading: false,
-    features: {
-      hasCustomAgent: CORE_FEATURES.has_custom_agent,
-      hasCustomAiTraining: CORE_FEATURES.has_custom_ai_training,
-      hasVoiceSelection: CORE_FEATURES.has_voice_selection,
-      hasOutboundReminders: CORE_FEATURES.has_outbound_reminders,
-      hasCallRecordings: CORE_FEATURES.has_call_recordings,
-      hasApiAccess: CORE_FEATURES.has_api_access,
-      hasPrioritySupport: CORE_FEATURES.has_priority_support,
-      hasMultiLanguage: CORE_FEATURES.has_multi_language,
-      credits: CORE_CREDITS,
-    },
-  }),
 }));
 
 import UpgradePrompt from '@/pages/onboarding/UpgradePrompt';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
 
 const createWrapper = (queryClient: QueryClient) => {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -144,13 +135,21 @@ describe('Journey: Core Plan → Continue with Core', () => {
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mockNavigate.mockClear();
+    mockFunctionsInvoke.mockClear();
+    mockSearchParams = new URLSearchParams('plan=core');
+
+    // Default: successful checkout
+    mockFunctionsInvoke.mockResolvedValue({
+      data: { url: 'https://checkout.stripe.com/test' },
+      error: null,
+    });
   });
 
   afterEach(() => {
     queryClient.clear();
   });
 
-  describe('Step 3: UpgradePrompt Page', () => {
+  describe('Step 2: UpgradePrompt Page', () => {
     it('shows UpgradePrompt because Core is lowest tier', async () => {
       render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
 
@@ -159,7 +158,7 @@ describe('Journey: Core Plan → Continue with Core', () => {
       });
     });
 
-    it('displays current plan as Core', async () => {
+    it('displays selected plan as Core', async () => {
       render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
 
       await waitFor(() => {
@@ -191,10 +190,18 @@ describe('Journey: Core Plan → Continue with Core', () => {
         expect(screen.getByText('Pro')).toBeInTheDocument();
       });
     });
+
+    it('shows Step 2 of 6', async () => {
+      render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
+
+      await waitFor(() => {
+        expect(screen.getByText(/Step 2 of 6/i)).toBeInTheDocument();
+      });
+    });
   });
 
   describe('User Action: Click "Continue with Core"', () => {
-    it('navigates to /onboarding/setup-services', async () => {
+    it('calls Stripe checkout with core plan', async () => {
       render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
 
       await waitFor(() => {
@@ -203,24 +210,19 @@ describe('Journey: Core Plan → Continue with Core', () => {
 
       await user.click(screen.getByRole('button', { name: /Continue with Core/i }));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/onboarding/setup-services');
-    });
-
-    it('does NOT navigate to subscriptions page', async () => {
-      render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
-
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /Continue with Core/i })).toBeInTheDocument();
+        expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+          'create-checkout-with-trial',
+          expect.objectContaining({
+            body: { planId: 'core' },
+          })
+        );
       });
-
-      await user.click(screen.getByRole('button', { name: /Continue with Core/i }));
-
-      expect(mockNavigate).not.toHaveBeenCalledWith('/dashboard/subscriptions');
     });
   });
 
   describe('User Action: Click "Upgrade to Growth"', () => {
-    it('navigates to /dashboard/subscriptions', async () => {
+    it('calls Stripe checkout with growth plan', async () => {
       render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
 
       await waitFor(() => {
@@ -229,12 +231,19 @@ describe('Journey: Core Plan → Continue with Core', () => {
 
       await user.click(screen.getByRole('button', { name: /Upgrade to Growth/i }));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/dashboard/subscriptions');
+      await waitFor(() => {
+        expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+          'create-checkout-with-trial',
+          expect.objectContaining({
+            body: { planId: 'growth' },
+          })
+        );
+      });
     });
   });
 
   describe('User Action: Click "Upgrade to Pro"', () => {
-    it('navigates to /dashboard/subscriptions', async () => {
+    it('calls Stripe checkout with pro plan', async () => {
       render(<UpgradePrompt />, { wrapper: createWrapper(queryClient) });
 
       await waitFor(() => {
@@ -243,7 +252,14 @@ describe('Journey: Core Plan → Continue with Core', () => {
 
       await user.click(screen.getByRole('button', { name: /Upgrade to Pro/i }));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/dashboard/subscriptions');
+      await waitFor(() => {
+        expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+          'create-checkout-with-trial',
+          expect.objectContaining({
+            body: { planId: 'pro' },
+          })
+        );
+      });
     });
   });
 

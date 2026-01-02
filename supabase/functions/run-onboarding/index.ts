@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { config } from "../_shared/config.ts";
+import { DEFAULT_PLAN } from "../_shared/types.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -510,7 +511,7 @@ serve(async (req) => {
       .from('subscriptions')
       .update({ 
         status: 'active',
-        plan: subscriptionPlan || 'core'
+        plan: subscriptionPlan || DEFAULT_PLAN
       })
       .eq('organization_id', organizationId);
 

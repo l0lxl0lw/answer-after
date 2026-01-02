@@ -157,7 +157,7 @@ describe('PhoneSetup Functionality', () => {
       });
     });
 
-    it('navigates to /onboarding/upgrade-prompt on success', async () => {
+    it('navigates to /onboarding/setup on success', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
 
       render(<PhoneSetup />, { wrapper: createWrapper() });
@@ -172,7 +172,7 @@ describe('PhoneSetup Functionality', () => {
       vi.advanceTimersByTime(2000);
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/onboarding/upgrade-prompt');
+        expect(mockNavigate).toHaveBeenCalledWith('/onboarding/setup');
       });
 
       vi.useRealTimers();
@@ -241,7 +241,7 @@ describe('PhoneSetup Functionality', () => {
   });
 
   describe('Existing Phone Redirect', () => {
-    it('existing phone redirects to upgrade-prompt on continue', async () => {
+    it('existing phone redirects to setup on continue', async () => {
       mockPhoneQuery = {
         data: { phone_number: '+15551234567' },
         isLoading: false,
@@ -253,7 +253,7 @@ describe('PhoneSetup Functionality', () => {
       const continueButton = screen.getByRole('button', { name: /Continue/i });
       await user.click(continueButton);
 
-      expect(mockNavigate).toHaveBeenCalledWith('/onboarding/upgrade-prompt');
+      expect(mockNavigate).toHaveBeenCalledWith('/onboarding/setup');
     });
   });
 });

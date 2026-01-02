@@ -10,6 +10,7 @@
 export interface OrganizationProvisionRequest {
   organizationName: string;
   notificationPhone: string;
+  businessPhone?: string;
   timezone: string;
 }
 
@@ -31,6 +32,7 @@ export interface Organization {
   business_hours_end: string | null;
   notification_email: string | null;
   notification_phone: string | null;
+  business_phone_number: string | null;
   twilio_subaccount_sid: string | null;
   twilio_subaccount_auth_token: string | null;
   is_onboarding_complete: boolean;
@@ -81,7 +83,17 @@ export interface OnboardingResult {
 // Subscription Types
 // ============================================
 
-export type SubscriptionPlan = 'core' | 'growth' | 'pro' | 'business' | 'enterprise';
+export const PLAN_IDS = {
+  STARTER: 'starter',
+  GROWTH: 'growth',
+  PRO: 'pro',
+  BUSINESS: 'business',
+  ENTERPRISE: 'enterprise',
+} as const;
+
+export const DEFAULT_PLAN = PLAN_IDS.STARTER;
+
+export type SubscriptionPlan = typeof PLAN_IDS[keyof typeof PLAN_IDS];
 
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled';
 

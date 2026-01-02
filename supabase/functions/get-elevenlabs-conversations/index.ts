@@ -1,4 +1,4 @@
-import { createAnonClient } from "../_shared/db.ts";
+import { createServiceClient } from "../_shared/db.ts";
 import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { getElevenLabsApiKey, makeElevenLabsRequest } from "../_shared/elevenlabs.ts";
@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
       return errorResponse("No authorization header", 401);
     }
 
-    const supabase = createAnonClient();
+    const supabase = createServiceClient();
 
     // Get current user
     const token = authHeader.replace("Bearer ", "");

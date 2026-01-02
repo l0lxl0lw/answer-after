@@ -7,7 +7,7 @@ import { useSubscriptionTiers } from "@/hooks/use-api";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { shouldSkipStripe, isLocalEnvironment } from "@/lib/environment";
+import { isLocalEnvironment } from "@/lib/environment";
 import { LINKS, COMPANY } from "@/lib/constants";
 
 export default function SelectPlan() {
@@ -54,39 +54,28 @@ export default function SelectPlan() {
     setSelectedPlan(planId);
     setIsProcessing(true);
 
-    // Skip Stripe in local/development environment
-    if (shouldSkipStripe()) {
+    // Business plan (highest tier) goes directly to Stripe - no upgrade options
+    if (planId === 'business') {
       try {
-        // In dev mode, manually provision the organization with the selected plan
-        const { data: provisionData, error: provisionError } = await supabase.functions.invoke("provision-organization", {
+        const { data, error } = await supabase.functions.invoke("create-checkout-with-trial", {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
           body: {
-            planId: planId,
+            planId,
           },
         });
 
-        if (provisionError) {
-          console.error('Provisioning error:', provisionError);
-          throw new Error(provisionError.message || "Failed to set up organization");
+        if (error || !data?.url) {
+          throw new Error(error?.message || "Failed to create checkout session");
         }
 
-        toast({
-          title: "Development Mode",
-          description: "Organization provisioned. Proceeding to next step.",
-        });
-
-        // Wait a bit for the organization to be created and profile updated
-        setTimeout(() => {
-          // Force a page reload to refresh the AuthContext
-          window.location.href = "/onboarding/phone";
-        }, 1500);
+        window.location.href = data.url;
       } catch (error: any) {
-        console.error("Provisioning error:", error);
+        console.error("Checkout error:", error);
         toast({
-          title: "Setup failed",
-          description: error.message || "Failed to provision organization. Please try again.",
+          title: "Checkout failed",
+          description: error.message || "Please try again.",
           variant: "destructive",
         });
         setSelectedPlan(null);
@@ -95,31 +84,8 @@ export default function SelectPlan() {
       return;
     }
 
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout-with-trial", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: {
-          planId,
-        },
-      });
-
-      if (error || !data?.url) {
-        throw new Error(error?.message || "Failed to create checkout session");
-      }
-
-      window.location.href = data.url;
-    } catch (error: any) {
-      console.error("Checkout error:", error);
-      toast({
-        title: "Checkout failed",
-        description: error.message || "Please try again.",
-        variant: "destructive",
-      });
-      setSelectedPlan(null);
-      setIsProcessing(false);
-    }
+    // Other plans go to upgrade page for upsell opportunity before payment
+    navigate(`/onboarding/upgrade?plan=${planId}`);
   };
 
   // Filter out enterprise for now during onboarding
@@ -136,7 +102,7 @@ export default function SelectPlan() {
             </div>
             <div>
               <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
-              <p className="text-sm text-muted-foreground">Step 1 of 6 • Choose your plan</p>
+              <p className="text-sm text-muted-foreground">Step 1 of 5 • Choose your plan</p>
             </div>
           </div>
         </div>

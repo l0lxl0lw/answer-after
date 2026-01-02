@@ -393,6 +393,7 @@ const Auth = () => {
             body: {
               organizationName: signupData.organizationName,
               notificationPhone: getPhoneDigits(signupData.phone),
+              businessPhone: getPhoneDigits(signupData.phone),
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             },
           }
@@ -785,7 +786,7 @@ const Auth = () => {
                 {/* Phone */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5">
-                    <Label htmlFor="signup-phone">Work Phone Number</Label>
+                    <Label htmlFor="signup-phone">Business Phone Number</Label>
                     <TooltipProvider delayDuration={0}>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -795,8 +796,8 @@ const Auth = () => {
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[280px]">
                           <p className="text-sm">
-                            We'll send appointment confirmations and important notifications to this number.
-                            This is typically your business line or the number you use for work communications.
+                            This is the number you would likely forward to the agent.
+                            We'll use it to find an AI phone number in your area code.
                           </p>
                         </TooltipContent>
                       </Tooltip>

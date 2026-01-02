@@ -14,14 +14,12 @@ import {
   MessageSquare,
   MoreVertical,
   User,
-  AlertCircle,
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardStats, useRecentCalls, useOrganization, useContactsByPhone, type DashboardPeriod } from "@/hooks/use-api";
-import { useGoogleCalendarConnection } from "@/hooks/useGoogleCalendarConnection";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDistanceToNow } from "date-fns";
 import type { Call } from "@/types/database";
@@ -167,7 +165,6 @@ const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useDashboardStats(period);
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
   const { data: organization, isLoading: orgLoading } = useOrganization();
-  const { data: calendarConnection, isLoading: gcLoading } = useGoogleCalendarConnection();
 
   const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
@@ -183,37 +180,13 @@ const Dashboard = () => {
 
   const organizationName = "Your Business";
 
-  // Show loading while checking connection
-  if (gcLoading || orgLoading) {
+  // Show loading while checking organization
+  if (orgLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <Skeleton className="h-8 w-48" />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  // Not connected - show connect page
-  if (!calendarConnection) {
-    return (
-      <DashboardLayout>
-        <Card className="max-w-lg mx-auto mt-12">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-              <AlertCircle className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <CardTitle>Connect Google Account</CardTitle>
-            <CardDescription>
-              To view your dashboard and manage contacts, you need to connect your Google Calendar first. This will allow AnswerAfter to sync contacts from your calls.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Button onClick={() => navigate("/dashboard/integrations")}>
-              Connect Google Account
-            </Button>
-          </CardContent>
-        </Card>
       </DashboardLayout>
     );
   }

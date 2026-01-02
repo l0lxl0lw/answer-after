@@ -154,10 +154,17 @@ export function Pricing() {
                     className={`w-full ${tier.is_popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`}
                     asChild
                   >
-                    <Link to={isEnterprise(tier.plan_id) ? LINKS.salesEmail : "/auth?signup=true"}>
-                      {isEnterprise(tier.plan_id) ? "Contact Sales" : "Get Started"}
-                      <ArrowRight className="w-4 h-4 ml-1" />
-                    </Link>
+                    {isEnterprise(tier.plan_id) ? (
+                      <a href={LINKS.salesEmail}>
+                        Contact Sales
+                        <ArrowRight className="w-4 h-4 ml-1" />
+                      </a>
+                    ) : (
+                      <Link to="/auth?signup=true">
+                        Get Started
+                        <ArrowRight className="w-4 h-4 ml-1" />
+                      </Link>
+                    )}
                   </Button>
                 </div>
               </motion.div>

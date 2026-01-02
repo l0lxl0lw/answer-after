@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createServiceClient } from "../_shared/db.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { config } from "../_shared/config.ts";
+import { DEFAULT_PLAN, PLAN_IDS } from "../_shared/types.ts";
 
 const logger = createLogger('stripe-webhook');
 
@@ -116,7 +117,7 @@ serve(async (req) => {
           break;
         }
 
-        const planFromMetadata = session.metadata?.plan || 'core';
+        const planFromMetadata = session.metadata?.plan || DEFAULT_PLAN;
         log.info("Triggering onboarding flow", { organizationId, plan: planFromMetadata });
 
         const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -233,13 +234,13 @@ serve(async (req) => {
             .eq("organization_id", organizationIdCreate)
             .maybeSingle();
 
-          if (existingSub?.plan && existingSub.plan !== 'core') {
+          if (existingSub?.plan && existingSub.plan !== DEFAULT_PLAN) {
             planCreate = existingSub.plan;
             log.info("Preserving existing plan", { plan: planCreate });
           }
         }
 
-        planCreate = planCreate || "core";
+        planCreate = planCreate || DEFAULT_PLAN;
 
         // Safely convert timestamps to ISO strings
         const periodStart = subscription.current_period_start
@@ -318,13 +319,13 @@ serve(async (req) => {
             .eq("organization_id", organizationId)
             .maybeSingle();
 
-          if (existingSub?.plan && existingSub.plan !== 'core') {
+          if (existingSub?.plan && existingSub.plan !== DEFAULT_PLAN) {
             plan = existingSub.plan;
             log.info("Preserving existing plan", { plan });
           }
         }
 
-        plan = plan || "core";
+        plan = plan || DEFAULT_PLAN;
 
         // Safely convert timestamps to ISO strings
         const periodStartUpdate = subscription.current_period_start

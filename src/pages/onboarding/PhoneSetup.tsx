@@ -146,7 +146,7 @@ export default function PhoneSetup() {
 
       // Wait a moment to show the success message, then navigate to next step
       setTimeout(() => {
-        navigate("/onboarding/upgrade-prompt");
+        navigate("/onboarding/setup");
       }, 1500);
     } catch (error: any) {
       console.error("Purchase error:", error);
@@ -176,7 +176,7 @@ export default function PhoneSetup() {
           <p className="text-muted-foreground mb-4">
             Your number {formatPhoneDisplay(existingPhone.phone_number)} is ready.
           </p>
-          <Button onClick={() => navigate("/onboarding/upgrade-prompt")}>
+          <Button onClick={() => navigate("/onboarding/setup")}>
             Continue
             <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
@@ -196,7 +196,7 @@ export default function PhoneSetup() {
             </div>
             <div>
               <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
-              <p className="text-sm text-muted-foreground">Step 2 of 6 • Enter your business phone</p>
+              <p className="text-sm text-muted-foreground">Step 3 of 6 • Enter your business phone</p>
             </div>
           </div>
         </div>

@@ -10,6 +10,7 @@ import type {
   UpdateAppointmentRequest,
 } from '@/types/api';
 import type { InterestLevel, LeadStatus, CallOutcome, ContactStatus, ContactSource, Contact } from '@/types/database';
+import { DEFAULT_PLAN } from '@/lib/constants';
 
 // ============= Organization Hooks =============
 
@@ -272,6 +273,129 @@ export interface Conversation {
   message_count: number;
   summary: string | null;
   call_successful: string | null;
+}
+
+// Call from database (preferred - no external API calls)
+export interface CallRecord {
+  id: string;
+  organization_id: string;
+  caller_phone: string;
+  caller_name: string | null;
+  status: string;
+  outcome: string | null;
+  duration_seconds: number | null;
+  summary: string | null;
+  started_at: string;
+  ended_at: string | null;
+  elevenlabs_conversation_id: string | null;
+  contact?: {
+    id: string;
+    name: string | null;
+  } | null;
+}
+
+/**
+ * Fetch call history directly from the database
+ * This is the preferred hook - no external API calls, faster loading
+ */
+export function useCallHistory(params?: { search?: string; page?: number; per_page?: number }) {
+  const { user } = useAuth();
+  const page = params?.page || 1;
+  const perPage = params?.per_page || 20;
+
+  return useQuery({
+    queryKey: ['call-history', user?.organization_id, params],
+    queryFn: async () => {
+      if (!user?.organization_id) return { calls: [], total: 0, page, per_page: perPage };
+
+      // Build query
+      let query = supabase
+        .from('calls')
+        .select(`
+          id,
+          organization_id,
+          caller_phone,
+          caller_name,
+          status,
+          outcome,
+          duration_seconds,
+          summary,
+          started_at,
+          ended_at,
+          elevenlabs_conversation_id,
+          contact:contact_id(id, name)
+        `, { count: 'exact' })
+        .eq('organization_id', user.organization_id)
+        .order('started_at', { ascending: false });
+
+      // Apply search filter
+      if (params?.search) {
+        query = query.or(`caller_phone.ilike.%${params.search}%,caller_name.ilike.%${params.search}%,summary.ilike.%${params.search}%`);
+      }
+
+      // Apply pagination
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error('Error fetching call history:', error);
+        throw error;
+      }
+
+      return {
+        calls: (data || []) as CallRecord[],
+        total: count || 0,
+        page,
+        per_page: perPage,
+      };
+    },
+    enabled: !!user?.organization_id,
+  });
+}
+
+/**
+ * Fetch a single call from database, with option to get ElevenLabs details
+ */
+export function useCallDetail(callId: string) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['call-detail', callId],
+    queryFn: async () => {
+      if (!callId) return null;
+
+      // Get call from database
+      const { data: call, error } = await supabase
+        .from('calls')
+        .select(`
+          id,
+          organization_id,
+          caller_phone,
+          caller_name,
+          status,
+          outcome,
+          duration_seconds,
+          summary,
+          started_at,
+          ended_at,
+          elevenlabs_conversation_id,
+          contact:contact_id(id, name)
+        `)
+        .eq('id', callId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching call:', error);
+        throw error;
+      }
+
+      return call as CallRecord;
+    },
+    enabled: !!callId && !!user?.organization_id,
+  });
 }
 
 export function useConversations(params?: { search?: string; page?: number; per_page?: number }) {
@@ -667,7 +791,7 @@ export function useCurrentSubscriptionTier() {
   const { data: subscription, isLoading: isLoadingSubscription } = useSubscription();
   const { data: tiers, isLoading: isLoadingTiers } = useSubscriptionTiers();
 
-  const currentPlanId = subscription?.plan || 'core';
+  const currentPlanId = subscription?.plan || DEFAULT_PLAN;
   const currentTier = tiers?.find(t => t.plan_id === currentPlanId) || null;
 
   return {
@@ -986,4 +1110,39 @@ export function useDeleteContact() {
 // Legacy alias for updating leads (now uses contacts table)
 export function useUpdateLead() {
   return useUpdateContact();
+}
+
+// ============= Service Hooks =============
+
+export interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  duration_minutes: number;
+  category: string;
+  is_active: boolean;
+  organization_id: string;
+  created_at: string;
+}
+
+export function useServices() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['services', user?.organization_id],
+    queryFn: async () => {
+      if (!user?.organization_id) return [];
+
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('organization_id', user.organization_id)
+        .order('name');
+
+      if (error) throw error;
+      return data as Service[];
+    },
+    enabled: !!user?.organization_id,
+  });
 }

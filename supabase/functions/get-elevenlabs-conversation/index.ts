@@ -29,6 +29,7 @@ interface ElevenLabsConversationDetail {
     call_successful?: string;
     data_collection_results?: Record<string, { value: string; json_schema: any }>;
   };
+  recording_url?: string;
 }
 
 async function getValidAccessToken(supabase: any, organizationId: string): Promise<string | null> {
@@ -173,6 +174,8 @@ Deno.serve(async (req) => {
     let callerName: string | null = null;
     let callerPhone: string | null = null;
 
+    let callerAddress: string | null = null;
+
     if (data.analysis?.data_collection_results) {
       const results = data.analysis.data_collection_results;
       if (results.caller_name) callerName = results.caller_name.value;
@@ -180,6 +183,40 @@ Deno.serve(async (req) => {
       if (results.name) callerName = results.name.value;
       if (results.caller_phone) callerPhone = results.caller_phone.value;
       if (results.phone) callerPhone = results.phone.value;
+      if (results.address) callerAddress = results.address.value;
+      if (results.customer_address) callerAddress = results.customer_address.value;
+    }
+
+    // Auto-save contact to database if we have phone and org
+    if (callerPhone && organizationId) {
+      try {
+        const { data: contact } = await supabaseAdmin
+          .from('contacts')
+          .upsert({
+            organization_id: organizationId,
+            phone: callerPhone,
+            name: callerName || null,
+            address: callerAddress || null,
+            status: 'customer',
+            source: 'inbound_call',
+          }, {
+            onConflict: 'organization_id,phone',
+            ignoreDuplicates: false
+          })
+          .select('id')
+          .single();
+
+        // Link call to contact
+        if (contact?.id) {
+          await supabaseAdmin
+            .from('calls')
+            .update({ contact_id: contact.id })
+            .eq('elevenlabs_conversation_id', conversationId);
+          log.info("Contact saved and linked to call", { contactId: contact.id });
+        }
+      } catch (e) {
+        log.warn("Error saving contact to database", { error: (e as Error).message });
+      }
     }
 
     // Auto-create Google Contact if we have name and phone and org is connected
@@ -212,7 +249,7 @@ Deno.serve(async (req) => {
       duration_seconds: data.metadata.call_duration_secs,
       summary: data.analysis?.transcript_summary || null,
       twilio_call_sid: null,
-      recording_url: null,
+      recording_url: data.recording_url || null,
       phone_number: null,
       events: [
         {
@@ -239,6 +276,13 @@ Deno.serve(async (req) => {
         timestamp_ms: Math.round(t.time_in_call_secs * 1000),
         confidence: 1,
       })),
+      // Also include transcript in frontend-expected format
+      transcript: (data.transcript || []).map((t) => ({
+        role: t.role as "user" | "agent",
+        message: t.message,
+        time_in_call_secs: t.time_in_call_secs,
+      })),
+      message_count: data.transcript?.length || 0,
     };
 
     return successResponse(transformedData);

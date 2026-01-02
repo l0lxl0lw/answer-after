@@ -9,8 +9,6 @@ import {
   makeElevenLabsRequest,
   importPhoneNumber,
   assignAgentToPhoneNumber,
-  createCalendarTool,
-  getTool,
 } from "../_shared/elevenlabs.ts";
 import {
   buildPlaceholderValues,
@@ -21,19 +19,182 @@ import {
 const logger = createLogger('elevenlabs-agent');
 
 /**
- * Build the webhook URL for the calendar-availability endpoint
+ * Get the base URL for webhook endpoints
+ * For local dev with ElevenLabs, you need a tunnel (ngrok) since ElevenLabs can't reach localhost
+ * Set LOCAL_TUNNEL_URL env var to your ngrok URL (e.g., https://abc123.ngrok.io)
  */
-function getCalendarAvailabilityWebhookUrl(): string {
-  const supabaseUrl = config.supabase.url;
-
-  // For local development, use the local functions URL
+function getWebhookBaseUrl(): string {
+  // For local development, check for tunnel URL first
   if (config.isLocal) {
-    return 'http://host.docker.internal:54321/functions/v1/calendar-availability';
+    const tunnelUrl = Deno.env.get('LOCAL_TUNNEL_URL');
+    if (tunnelUrl) {
+      console.log(`[Webhook] Using tunnel URL: ${tunnelUrl}`);
+      return tunnelUrl;
+    }
+    // Fallback to docker internal (won't work for external services like ElevenLabs)
+    console.warn('[Webhook] LOCAL_TUNNEL_URL not set - webhooks will not work with ElevenLabs!');
+    console.warn('[Webhook] Run: ngrok http 54321 and set LOCAL_TUNNEL_URL in .env.local');
+    return 'http://host.docker.internal:54321';
   }
 
-  // For hosted Supabase, construct the functions URL
-  // URL format: https://<project-ref>.supabase.co -> https://<project-ref>.supabase.co/functions/v1/<function>
-  return `${supabaseUrl}/functions/v1/calendar-availability`;
+  // For hosted Supabase, use the project URL
+  return config.supabase.url;
+}
+
+/**
+ * Build inline webhook tools for the agent
+ * These are embedded directly in the agent config, not created as separate tools
+ * Organization ID is embedded via 'const' in the schema for security isolation
+ */
+function buildInlineWebhookTools(organizationId: string, hasCalendar: boolean): any[] {
+  const baseUrl = getWebhookBaseUrl();
+  const tools: any[] = [];
+
+  // Save contact tool
+  tools.push({
+    type: "webhook",
+    name: "save_contact",
+    description: "Save or update customer contact information in the database. Use this tool when the customer provides their name, phone number, address, or email. Always confirm the information with the customer before saving.",
+    api_schema: {
+      url: `${baseUrl}/functions/v1/agent-save-contact`,
+      method: "POST",
+      request_headers: { "Content-Type": "application/json" },
+      request_body_schema: {
+        type: "object",
+        properties: {
+          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          phone: { type: "string", description: "Customer phone number. Required field." },
+          name: { type: "string", description: "Customer full name." },
+          address: { type: "string", description: "Customer address including street, city, state, and zip code." },
+          email: { type: "string", description: "Customer email address." }
+        },
+        required: ["organization_id", "phone"]
+      }
+    }
+  });
+
+  // Lookup contact tool
+  tools.push({
+    type: "webhook",
+    name: "lookup_contact",
+    description: "Look up a customer by their phone number to check if they are a returning customer. Use this at the start of a call if you have the caller's phone number from caller ID. This helps provide personalized service to returning customers.",
+    api_schema: {
+      url: `${baseUrl}/functions/v1/agent-lookup-contact`,
+      method: "POST",
+      request_headers: { "Content-Type": "application/json" },
+      request_body_schema: {
+        type: "object",
+        properties: {
+          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          phone: { type: "string", description: "Phone number to look up. Can be from caller ID." }
+        },
+        required: ["organization_id", "phone"]
+      }
+    }
+  });
+
+  // Calendar availability tool (if Google Calendar connected)
+  if (hasCalendar) {
+    tools.push({
+      type: "webhook",
+      name: "check_calendar_availability",
+      description: "Check the business calendar to find available appointment slots. Use this tool when a customer wants to schedule an appointment or asks about availability. The tool will return available time slots based on the business calendar and existing appointments.",
+      api_schema: {
+        url: `${baseUrl}/functions/v1/calendar-availability`,
+        method: "POST",
+        request_headers: { "Content-Type": "application/json" },
+        request_body_schema: {
+          type: "object",
+          properties: {
+            organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+            date_preference: {
+              type: "string",
+              description: "When the customer wants the appointment. Use 'today' for same-day, 'tomorrow' for next day, 'this_week' for current week, or 'next_week' for looking further ahead.",
+              enum: ["today", "tomorrow", "this_week", "next_week"]
+            },
+            duration_minutes: {
+              type: "number",
+              description: "How long the appointment should be in minutes. Use 60 for standard appointments, 30 for quick consultations.",
+              default: 60
+            }
+          },
+          required: ["organization_id", "date_preference"]
+        }
+      }
+    });
+  }
+
+  // Book appointment tool
+  tools.push({
+    type: "webhook",
+    name: "book_appointment",
+    description: "Book a new appointment for the customer. Use this AFTER checking availability with check_calendar_availability and confirming the time with the customer. Requires customer name, phone number, and the appointment date/time.",
+    api_schema: {
+      url: `${baseUrl}/functions/v1/agent-book-appointment`,
+      method: "POST",
+      request_headers: { "Content-Type": "application/json" },
+      request_body_schema: {
+        type: "object",
+        properties: {
+          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          customer_name: { type: "string", description: "Customer's full name" },
+          customer_phone: { type: "string", description: "Customer's phone number" },
+          appointment_datetime: { type: "string", description: "Appointment date and time in ISO 8601 format (e.g., 2024-01-15T10:00:00)" },
+          duration_minutes: { type: "number", description: "Appointment duration in minutes. Default is 60.", default: 60 },
+          provider_id: { type: "string", description: "Optional: Specific provider/staff member ID if customer has a preference" },
+          service_type: { type: "string", description: "Type of service or reason for appointment" },
+          notes: { type: "string", description: "Any additional notes about the appointment" }
+        },
+        required: ["organization_id", "customer_name", "customer_phone", "appointment_datetime"]
+      }
+    }
+  });
+
+  // Cancel appointment tool
+  tools.push({
+    type: "webhook",
+    name: "cancel_appointment",
+    description: "Cancel an existing appointment for the customer. Looks up the appointment by the customer's phone number. If the customer has multiple upcoming appointments, ask which one they want to cancel.",
+    api_schema: {
+      url: `${baseUrl}/functions/v1/agent-cancel-appointment`,
+      method: "POST",
+      request_headers: { "Content-Type": "application/json" },
+      request_body_schema: {
+        type: "object",
+        properties: {
+          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          customer_phone: { type: "string", description: "Customer's phone number to look up their appointment" },
+          appointment_datetime: { type: "string", description: "Optional: Specific appointment date/time to cancel if customer has multiple appointments" }
+        },
+        required: ["organization_id", "customer_phone"]
+      }
+    }
+  });
+
+  // Reschedule appointment tool
+  tools.push({
+    type: "webhook",
+    name: "reschedule_appointment",
+    description: "Reschedule an existing appointment to a new date/time. First check availability for the new time using check_calendar_availability before using this tool. Requires the customer's phone number and the new desired time.",
+    api_schema: {
+      url: `${baseUrl}/functions/v1/agent-reschedule-appointment`,
+      method: "POST",
+      request_headers: { "Content-Type": "application/json" },
+      request_body_schema: {
+        type: "object",
+        properties: {
+          organization_id: { type: "string", const: organizationId, description: "Organization ID (auto-filled)" },
+          customer_phone: { type: "string", description: "Customer's phone number to look up their existing appointment" },
+          current_appointment_datetime: { type: "string", description: "Optional: Current appointment date/time if customer has multiple appointments" },
+          new_datetime: { type: "string", description: "New appointment date and time in ISO 8601 format" },
+          new_duration_minutes: { type: "number", description: "Optional: New duration in minutes if changing from original" }
+        },
+        required: ["organization_id", "customer_phone", "new_datetime"]
+      }
+    }
+  });
+
+  return tools;
 }
 
 /**
@@ -49,55 +210,6 @@ async function hasGoogleCalendarConnection(supabase: any, organizationId: string
   return !!data;
 }
 
-/**
- * Setup calendar tool for an agent
- * Creates the tool if it doesn't exist, returns tool ID if calendar is connected
- */
-async function setupCalendarTool(
-  supabase: any,
-  organizationId: string,
-  existingToolId: string | null,
-  apiKey: string
-): Promise<string | null> {
-  const log = logger.withContext({ organizationId, action: 'setup-calendar-tool' });
-
-  // Check if org has Google Calendar connected
-  const hasCalendar = await hasGoogleCalendarConnection(supabase, organizationId);
-  if (!hasCalendar) {
-    log.info('No Google Calendar connection, skipping tool setup');
-    return null;
-  }
-
-  // If we have an existing tool ID, verify it still exists
-  if (existingToolId) {
-    const existingTool = await getTool(existingToolId, apiKey);
-    if (existingTool) {
-      log.info('Using existing calendar tool', { toolId: existingToolId });
-      return existingToolId;
-    }
-    log.info('Existing tool not found, creating new one');
-  }
-
-  // Create new calendar tool
-  const webhookUrl = getCalendarAvailabilityWebhookUrl();
-  log.info('Creating calendar tool', { webhookUrl });
-
-  try {
-    const tool = await createCalendarTool(webhookUrl, organizationId, apiKey);
-    log.info('Calendar tool created', { toolId: tool.tool_id });
-
-    // Save tool ID to database
-    await supabase
-      .from('organization_agents')
-      .update({ elevenlabs_calendar_tool_id: tool.tool_id })
-      .eq('organization_id', organizationId);
-
-    return tool.tool_id;
-  } catch (error) {
-    log.error('Failed to create calendar tool', error as Error);
-    return null;
-  }
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -170,6 +282,7 @@ async function handleWebSocketConnection(req: Request, url: URL, supabase: any) 
 
   let elevenLabsWs: WebSocket | null = null;
   let streamSid: string | null = null;
+  let conversationId: string | null = null;
 
   async function connectToElevenLabs() {
     try {
@@ -236,6 +349,23 @@ async function handleWebSocketConnection(req: Request, url: URL, supabase: any) 
 
       case 'conversation_initiation_metadata':
         console.log('ElevenLabs conversation started:', message);
+        // Extract and save conversation_id for later lookup of recording/transcript
+        conversationId = message.conversation_initiation_metadata_event?.conversation_id
+          || message.conversation_id;
+        if (conversationId && callSid) {
+          console.log(`Saving conversation_id ${conversationId} for call ${callSid}`);
+          supabase
+            .from('calls')
+            .update({ elevenlabs_conversation_id: conversationId })
+            .eq('twilio_call_sid', callSid)
+            .then(({ error }: { error: any }) => {
+              if (error) {
+                console.error('Error saving conversation_id:', error);
+              } else {
+                console.log('Conversation ID saved to database');
+              }
+            });
+        }
         break;
 
       case 'agent_response':
@@ -360,15 +490,16 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
 
   const agentContext = context || agentRecord?.context || '';
 
-  // Setup calendar tool if Google Calendar is connected
-  const calendarToolId = await setupCalendarTool(
-    supabase,
-    organizationId,
-    agentRecord?.elevenlabs_calendar_tool_id || null,
-    apiKey
-  );
+  // Check if Google Calendar is connected
+  const hasCalendar = await hasGoogleCalendarConnection(supabase, organizationId);
+  log.info('Calendar connection status', { hasCalendar });
 
-  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, !!calendarToolId);
+  // Build inline webhook tools (contact tools + calendar if available)
+  const inlineTools = buildInlineWebhookTools(organizationId, hasCalendar);
+  log.info('Built inline tools', { toolCount: inlineTools.length, toolNames: inlineTools.map((t: any) => t.name) });
+
+  // Build prompt with tool instructions
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, hasCalendar, true);
 
   const DEFAULT_VOICE_ID = '625jGFaa0zTLtQfxwc6Q';
 
@@ -382,14 +513,15 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
   const modePrefix = '[INBOUND]';
   const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${organizationId}`;
 
-  // Build agent config with optional calendar tool
+  // Build agent config with inline tools
   const agentConfig: any = {
     name: agentName,
     conversation_config: {
       agent: {
         first_message: firstMessage,
         prompt: { prompt: systemPrompt },
-        llm: { model: llmModel }
+        llm: { model: llmModel },
+        tools: inlineTools  // Inline webhook tools with api_schema
       },
       tts: { voice_id: DEFAULT_VOICE_ID }
     },
@@ -397,12 +529,6 @@ async function handleCreateAgent(supabase: any, organizationId: string, context?
       widget: { avatar: { type: "orb" } }
     }
   };
-
-  // Attach calendar tool if available
-  if (calendarToolId) {
-    agentConfig.conversation_config.agent.tools = [{ id: calendarToolId }];
-    log.info('Calendar tool attached to agent', { calendarToolId });
-  }
 
   try {
     log.info('Creating ElevenLabs agent');
@@ -574,7 +700,7 @@ async function importPhoneNumberToElevenLabs(
   console.log('[ElevenLabs Phone Import] Successfully imported phone and assigned agent');
 }
 
-async function buildAgentPrompt(supabase: any, orgData: any, context: string, hasCalendarTool: boolean = false): Promise<{ prompt: string; firstMessage: string }> {
+async function buildAgentPrompt(supabase: any, orgData: any, context: string, hasCalendarTool: boolean = false, hasContactTools: boolean = false): Promise<{ prompt: string; firstMessage: string }> {
   let greeting = '';
   let customInstructions = '';
 
@@ -630,22 +756,76 @@ async function buildAgentPrompt(supabase: any, orgData: any, context: string, ha
   if (hasCalendarTool) {
     const calendarToolInstructions = `
 
-APPOINTMENT SCHEDULING:
-You have access to the business calendar through the check_calendar_availability tool.
+APPOINTMENT MANAGEMENT:
+You have access to appointment management tools to help customers book, cancel, and reschedule appointments.
 
-When a customer asks about availability or wants to schedule an appointment:
-1. Ask what day/time range works best for them (today, tomorrow, this week, or next week)
-2. Use the check_calendar_availability tool to find open slots
-3. Present 2-3 available options to the customer
-4. Confirm their selection and collect any needed information (name, phone, address, service needed)
+Tools available:
+- check_calendar_availability: Check for open appointment slots
+- book_appointment: Create a new appointment
+- cancel_appointment: Cancel an existing appointment
+- reschedule_appointment: Change an existing appointment to a new time
 
-Example: "I can check our calendar for you. Are you looking for an appointment today, tomorrow, or later this week?"
+BOOKING A NEW APPOINTMENT:
+1. Ask what type of appointment they need and when they'd prefer (today, tomorrow, this week, next week)
+2. Use check_calendar_availability to find open slots
+3. Present 2-3 available options: "I have openings at 10 AM or 2 PM on Tuesday. Which works better?"
+4. Ask if they have a provider preference: "Do you have a preference for which provider you'd like to see?"
+5. Collect customer information (name, phone number if not already known)
+6. Confirm all details before booking: "So that's [name], [phone], for [time] - is that correct?"
+7. Use book_appointment to create the appointment
+8. Confirm the booking: "Great, I've booked your appointment for [time]."
 
-After using the tool, interpret the results naturally:
-- If slots are available: "I found some openings! How about [time option 1] or [time option 2]?"
-- If no slots found: "I don't see any availability for that time. Would you like me to check [alternative time]?"`;
+CANCELLING AN APPOINTMENT:
+1. Confirm the customer wants to cancel their appointment
+2. Use cancel_appointment with their phone number
+3. If they have multiple appointments, ask which one to cancel
+4. Confirm the cancellation
+
+RESCHEDULING AN APPOINTMENT:
+1. Confirm they want to reschedule, not cancel
+2. Ask for their new preferred time
+3. Use check_calendar_availability to verify the new time is open
+4. Use reschedule_appointment to update the appointment
+5. Confirm the new appointment time
+
+IMPORTANT:
+- Always use check_calendar_availability BEFORE booking to ensure the slot is available
+- Always confirm appointment details before booking or changing
+- If a time isn't available, offer alternatives
+- Use the customer's phone number to look up existing appointments
+- Be proactive about collecting missing information (name, phone, service type)`;
 
     fullPrompt = `${fullPrompt}\n${calendarToolInstructions}`;
+  }
+
+  // Add contact tools instructions if available
+  if (hasContactTools) {
+    const contactToolInstructions = `
+
+CONTACT MANAGEMENT:
+You have access to contact tools to manage customer information.
+
+Tools available:
+- lookup_contact: Look up a customer by phone number to identify returning customers
+- save_contact: Save or update customer contact information (name, phone, address, email)
+
+When to use these tools:
+1. At the start of a call, if you have the caller's phone number from caller ID, use lookup_contact to check if they're a returning customer
+2. When a customer provides their name, phone, address, or email, use save_contact to store their information
+3. Always confirm information with the customer before saving
+
+Example flow for new callers:
+- Customer provides info: "My name is John Smith, my number is 555-1234, and I'm at 123 Main St"
+- You confirm: "Let me make sure I have that right - John Smith, 555-1234, 123 Main Street?"
+- After confirmation: Use save_contact tool
+- Then say: "Great, I've saved your information in our system."
+
+Example flow for returning callers:
+- Use lookup_contact with their phone number
+- If found: "Welcome back, [name]! How can I help you today?"
+- If not found: "I don't see your information on file. Could I get your name and contact details?"`;
+
+    fullPrompt = `${fullPrompt}\n${contactToolInstructions}`;
   }
 
   return { prompt: fullPrompt, firstMessage };
@@ -711,15 +891,16 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
 
   const agentContext = context || agentRecord?.context || '';
 
-  // Setup calendar tool if Google Calendar is connected
-  const calendarToolId = await setupCalendarTool(
-    supabase,
-    organizationId,
-    agentRecord?.elevenlabs_calendar_tool_id || null,
-    apiKey
-  );
+  // Check if Google Calendar is connected
+  const hasCalendar = await hasGoogleCalendarConnection(supabase, organizationId);
+  log.info('Calendar connection status', { hasCalendar });
 
-  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, !!calendarToolId);
+  // Build inline webhook tools (contact tools + calendar if available)
+  const inlineTools = buildInlineWebhookTools(organizationId, hasCalendar);
+  log.info('Built inline tools for update', { toolCount: inlineTools.length, toolNames: inlineTools.map((t: any) => t.name) });
+
+  // Build prompt with tool instructions
+  const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext, hasCalendar, true);
 
   let llmModel = 'gemini-2.5-flash';
   try {
@@ -732,16 +913,11 @@ async function handleUpdateAgent(supabase: any, organizationId: string, context?
       agent: {
         first_message: firstMessage,
         prompt: { prompt: systemPrompt },
-        llm: { model: llmModel }
+        llm: { model: llmModel },
+        tools: inlineTools  // Inline webhook tools with api_schema
       }
     }
   };
-
-  // Attach calendar tool if available
-  if (calendarToolId) {
-    updateConfig.conversation_config.agent.tools = [{ id: calendarToolId }];
-    log.info('Calendar tool attached to agent update', { calendarToolId });
-  }
 
   if (voiceId) {
     updateConfig.conversation_config.tts = { voice_id: voiceId };

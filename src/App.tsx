@@ -18,6 +18,7 @@ import CalendarSetupGuide from "./pages/CalendarSetupGuide";
 import Customers from "./pages/Customers";
 import Appointments from "./pages/Appointments";
 import Leads from "./pages/Leads";
+import Providers from "./pages/Providers";
 import Settings from "./pages/Settings";
 import Integrations from "./pages/Integrations";
 import MyServices from "./pages/MyServices";
@@ -26,8 +27,8 @@ import MyAgent from "./pages/MyAgent";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import SelectPlan from "./pages/onboarding/SelectPlan";
-import PhoneSetup from "./pages/onboarding/PhoneSetup";
 import UpgradePrompt from "./pages/onboarding/UpgradePrompt";
+import PhoneSetup from "./pages/onboarding/PhoneSetup";
 import SetupServices from "./pages/onboarding/SetupServices";
 import TestCall from "./pages/onboarding/TestCall";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -56,9 +57,9 @@ const App = () => (
             {/* Admin portal hidden in production - use pre-prod environment instead */}
             {!isProduction && <Route path="/adminaccess" element={<AdminAccess />} />}
             <Route path="/onboarding/select-plan" element={<ProtectedRoute><SelectPlan /></ProtectedRoute>} />
+            <Route path="/onboarding/upgrade" element={<ProtectedRoute><UpgradePrompt /></ProtectedRoute>} />
             <Route path="/onboarding/phone" element={<ProtectedRoute><PhoneSetup /></ProtectedRoute>} />
-            <Route path="/onboarding/upgrade-prompt" element={<ProtectedRoute><UpgradePrompt /></ProtectedRoute>} />
-            <Route path="/onboarding/setup-services" element={<ProtectedRoute><SetupServices /></ProtectedRoute>} />
+            <Route path="/onboarding/setup" element={<ProtectedRoute><SetupServices /></ProtectedRoute>} />
             <Route path="/onboarding/test-call" element={<ProtectedRoute><TestCall /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/calls" element={<ProtectedRoute><CallHistory /></ProtectedRoute>} />
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/dashboard/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/dashboard/bookings" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
             <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
+            <Route path="/dashboard/providers" element={<ProtectedRoute><Providers /></ProtectedRoute>} />
             <Route path="/dashboard/services" element={<ProtectedRoute><MyServices /></ProtectedRoute>} />
             <Route path="/dashboard/voice-behavior" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
             <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />

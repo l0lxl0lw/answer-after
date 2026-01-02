@@ -74,6 +74,7 @@ export default function Settings() {
     business_hours_schedule: defaultSchedule,
     notification_email: '',
     notification_phone: '',
+    business_phone: '',
     emergency_keywords: [] as string[],
   });
 
@@ -102,18 +103,19 @@ export default function Settings() {
     { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST - no DST)' },
   ];
 
-  // Handle checkout success redirect
+  // Load organization data
   useEffect(() => {
     if (organization) {
       // Parse business_hours_schedule from organization or use default
       const scheduleFromOrg = (organization as any).business_hours_schedule as WeekSchedule | null;
-      
+
       setOrgForm({
         name: organization.name,
         timezone: organization.timezone,
         business_hours_schedule: scheduleFromOrg || defaultSchedule,
         notification_email: organization.notification_email || '',
         notification_phone: organization.notification_phone || '',
+        business_phone: (organization as any).business_phone_number || '',
         emergency_keywords: organization.emergency_keywords || [],
       });
     }
@@ -486,6 +488,31 @@ export default function Settings() {
                     schedule={orgForm.business_hours_schedule}
                     onChange={(schedule) => setOrgForm({ ...orgForm, business_hours_schedule: schedule })}
                   />
+                </CardContent>
+              </Card>
+
+              {/* Business Phone */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Business Phone Number</CardTitle>
+                  <CardDescription>
+                    The phone number you forward to your AI agent
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label htmlFor="business-phone">Business Phone Number</Label>
+                    <Input
+                      id="business-phone"
+                      type="tel"
+                      value={orgForm.business_phone}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This is the number you forward to your AI agent. Set during account setup.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
 

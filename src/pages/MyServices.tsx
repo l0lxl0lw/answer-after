@@ -13,11 +13,14 @@ import {
   Settings2,
   Loader2,
   Crown,
+  Users,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { RoleMultiSelect } from "@/components/providers/RoleMultiSelect";
+import { useRoles } from "@/hooks/use-roles";
 import {
   Dialog,
   DialogContent,
@@ -68,6 +71,7 @@ interface Service {
   price_cents: number;
   duration_minutes: number;
   category: string;
+  provider_roles: string[] | null;
   is_active: boolean;
   organization_id: string;
   created_at: string;
@@ -79,6 +83,7 @@ interface FormData {
   price_cents: number;
   duration_minutes: number;
   category: string;
+  provider_roles: string[];
 }
 
 const emptyForm: FormData = {
@@ -87,6 +92,7 @@ const emptyForm: FormData = {
   price_cents: 0,
   duration_minutes: 60,
   category: "routine",
+  provider_roles: [],
 };
 
 const categoryConfig = {
@@ -101,6 +107,7 @@ const MyServices = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: subscription, isLoading: subLoading } = useSubscription();
+  const { data: roles = [] } = useRoles();
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -150,6 +157,7 @@ const MyServices = () => {
         price_cents: data.price_cents,
         duration_minutes: data.duration_minutes,
         category: data.category,
+        provider_roles: data.provider_roles,
       });
       if (error) throw error;
     },
@@ -174,6 +182,7 @@ const MyServices = () => {
           price_cents: data.price_cents,
           duration_minutes: data.duration_minutes,
           category: data.category,
+          provider_roles: data.provider_roles,
         })
         .eq("id", id);
       if (error) throw error;
@@ -233,6 +242,7 @@ const MyServices = () => {
       price_cents: service.price_cents,
       duration_minutes: service.duration_minutes,
       category: service.category,
+      provider_roles: service.provider_roles || [],
     });
     setFormErrors({});
     setIsDialogOpen(true);
@@ -411,6 +421,21 @@ const MyServices = () => {
                         {config.label}
                       </Badge>
 
+                      {/* Assigned Roles */}
+                      {service.provider_roles && service.provider_roles.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-3">
+                          <Users className="w-3.5 h-3.5 text-muted-foreground mr-1" />
+                          {service.provider_roles.map((roleSlug) => {
+                            const role = roles.find((r) => r.slug === roleSlug);
+                            return role ? (
+                              <Badge key={roleSlug} variant="outline" className="text-xs">
+                                {role.name}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+
                       {/* Actions (show on hover) */}
                       <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                         <Button
@@ -538,6 +563,17 @@ const MyServices = () => {
                     <SelectItem value="installation">Installation</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Roles That Can Perform This Service</Label>
+                <RoleMultiSelect
+                  value={formData.provider_roles}
+                  onChange={(roles) => setFormData({ ...formData, provider_roles: roles })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Select which provider roles can perform this service
+                </p>
               </div>
             </div>
 

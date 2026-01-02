@@ -271,7 +271,7 @@ export default function TestCall() {
             </div>
             <div>
               <h1 className="font-display font-semibold text-lg">{COMPANY.nameCamelCase}</h1>
-              <p className="text-sm text-muted-foreground">Step 5 of 6 • Test your AI agent</p>
+              <p className="text-sm text-muted-foreground">Step 4 of 5 • Test your AI agent</p>
             </div>
           </div>
         </div>

@@ -1,32 +1,28 @@
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import {
   Phone,
   PhoneIncoming,
   Clock,
   ArrowLeft,
-  Play,
-  User,
-  Bot,
   Calendar,
-  MapPin,
   CheckCircle2,
   XCircle,
   MessageSquare,
-  Zap,
   FileText,
+  HelpCircle,
+  Volume2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useCall } from "@/hooks/use-api";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import type { CallEvent, CallTranscript } from "@/types/database";
 
 // Format duration from seconds to MM:SS
 function formatDuration(seconds: number | null): string {
@@ -36,172 +32,113 @@ function formatDuration(seconds: number | null): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-// Get icon for event type
-function getEventIcon(eventType: string) {
-  switch (eventType) {
-    case "initiated":
-      return Phone;
-    case "greeting":
-      return MessageSquare;
-    case "qualification":
-      return FileText;
-    case "non_emergency":
-      return CheckCircle2;
-    case "dispatched":
-      return Zap;
-    case "appointment_booked":
-      return Calendar;
-    case "completed":
-      return CheckCircle2;
-    case "failed":
-      return XCircle;
+// Get status badge info
+function getStatusBadge(status: string, callSuccessful: string | null) {
+  if (status !== "completed" && status !== "done") {
+    return { variant: "outline" as const, label: "In Progress", icon: HelpCircle };
+  }
+
+  switch (callSuccessful) {
+    case "success":
+      return { variant: "default" as const, label: "Successful", icon: CheckCircle2 };
+    case "failure":
+      return { variant: "destructive" as const, label: "Failed", icon: XCircle };
     default:
-      return Phone;
+      return { variant: "secondary" as const, label: "Completed", icon: CheckCircle2 };
   }
 }
 
-// Get color for event type
-function getEventColor(eventType: string) {
-  switch (eventType) {
-    case "failed":
-      return "text-destructive bg-destructive/10 border-destructive/20";
-    case "dispatched":
-    case "appointment_booked":
-      return "text-success bg-success/10 border-success/20";
-    case "completed":
-      return "text-success bg-success/10 border-success/20";
-    case "greeting":
-    case "qualification":
-      return "text-info bg-info/10 border-info/20";
-    default:
-      return "text-primary bg-primary/10 border-primary/20";
-  }
+// Transcript message from ElevenLabs
+interface TranscriptMessage {
+  role: "user" | "agent";
+  message: string;
+  time_in_call_secs?: number;
 }
 
-// Timeline Event Component
-function TimelineEvent({ event, index }: { event: CallEvent; index: number }) {
-  const Icon = getEventIcon(event.event_type);
-  const colorClass = getEventColor(event.event_type);
+// Transcript Message Component - ElevenLabs style
+function TranscriptMessageRow({
+  message,
+  index,
+  callStartTime
+}: {
+  message: TranscriptMessage;
+  index: number;
+  callStartTime: Date;
+}) {
+  const isAgent = message.role === "agent";
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      className="relative pl-8 pb-8 last:pb-0"
-    >
-      {/* Timeline line */}
-      <div className="absolute left-[15px] top-8 bottom-0 w-px bg-border last:hidden" />
-      
-      {/* Event dot */}
-      <div
-        className={cn(
-          "absolute left-0 w-8 h-8 rounded-full border-2 flex items-center justify-center",
-          colorClass
-        )}
-      >
-        <Icon className="w-4 h-4" />
-      </div>
-
-      {/* Event content */}
-      <div className="bg-card border border-border rounded-xl p-4 ml-4">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="font-medium capitalize">
-            {event.event_type.replace(/_/g, " ")}
-          </h4>
-          <span className="text-xs text-muted-foreground">
-            {format(new Date(event.created_at), "h:mm:ss a")}
-          </span>
-        </div>
-
-        {event.ai_response && (
-          <div className="mb-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
-            <div className="flex items-center gap-2 mb-1">
-              <Bot className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium text-primary">AI Response</span>
-            </div>
-            <p className="text-sm">{event.ai_response}</p>
-          </div>
-        )}
-
-        {event.ai_prompt && (
-          <div className="p-3 rounded-lg bg-muted/50 border border-border">
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">AI Prompt</span>
-            </div>
-            <p className="text-sm text-muted-foreground">{event.ai_prompt}</p>
-          </div>
-        )}
-
-        {event.event_data && Object.keys(event.event_data).length > 0 && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            <pre className="bg-muted/30 p-2 rounded overflow-x-auto">
-              {JSON.stringify(event.event_data, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-// Transcript Message Component
-function TranscriptMessage({ transcript, index }: { transcript: CallTranscript; index: number }) {
-  const isAI = transcript.speaker === "ai" || transcript.speaker === "assistant" || transcript.speaker === "system";
+  // Calculate actual time by adding seconds to call start time
+  const messageTime = message.time_in_call_secs !== undefined
+    ? new Date(callStartTime.getTime() + message.time_in_call_secs * 1000)
+    : null;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: index * 0.03 }}
-      className={cn("flex gap-3 mb-4", isAI ? "justify-start" : "justify-end")}
+      className={cn("flex mb-4", isAgent ? "justify-start" : "justify-end")}
     >
-      {isAI && (
-        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/10 mt-5">
-          <Bot className="w-4 h-4 text-primary" />
-        </div>
-      )}
-      <div className={cn("max-w-[75%]", isAI ? "items-start" : "items-end")}>
-        <p className={cn("text-xs font-medium mb-1", isAI ? "text-primary" : "text-muted-foreground text-right")}>
-          {isAI ? "AI Assistant" : "Customer"}
-        </p>
+      <div className={cn("max-w-[80%] flex flex-col", isAgent ? "items-start" : "items-end")}>
+        {isAgent && (
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <span className="text-xs text-muted-foreground">AI Assistant</span>
+          </div>
+        )}
         <div
           className={cn(
-            "p-3 rounded-2xl",
-            isAI
-              ? "bg-muted rounded-tl-sm"
-              : "bg-primary text-primary-foreground rounded-tr-sm"
+            "p-3 rounded-lg",
+            isAgent
+              ? "bg-muted"
+              : "bg-zinc-800 text-white dark:bg-zinc-700"
           )}
         >
-          <p className="text-sm">{transcript.content}</p>
-          <div
-            className={cn(
-              "flex items-center gap-2 mt-1 text-xs",
-              isAI ? "text-muted-foreground" : "text-primary-foreground/70"
-            )}
-          >
-            {transcript.timestamp_ms && (
-              <span>{formatDuration(Math.floor(transcript.timestamp_ms / 1000))}</span>
-            )}
-            {transcript.confidence && transcript.confidence < 1 && (
-              <span>• {Math.round(transcript.confidence * 100)}% confidence</span>
-            )}
-          </div>
+          <p className="text-sm">{message.message}</p>
         </div>
+        {messageTime && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {format(messageTime, "h:mm:ss a")}
+          </p>
+        )}
       </div>
-      {!isAI && (
-        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-muted mt-5">
-          <User className="w-4 h-4 text-muted-foreground" />
-        </div>
-      )}
     </motion.div>
   );
 }
 
+// Hook to fetch ElevenLabs conversation details
+function useElevenLabsConversation(conversationId: string | null) {
+  return useQuery({
+    queryKey: ['elevenlabs-conversation', conversationId],
+    queryFn: async () => {
+      if (!conversationId) return null;
+
+      const session = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-elevenlabs-conversation?conversation_id=${conversationId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.data.session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch conversation');
+      }
+
+      return response.json();
+    },
+    enabled: !!conversationId,
+  });
+}
+
 export default function CallDetail() {
-  const { id } = useParams<{ id: string }>();
-  const { data: call, isLoading } = useCall(id || "");
+  const { id: conversationId } = useParams<{ id: string }>();
+
+  const { data: conversation, isLoading, error } = useElevenLabsConversation(conversationId || null);
 
   if (isLoading) {
     return (
@@ -215,14 +152,14 @@ export default function CallDetail() {
     );
   }
 
-  if (!call) {
+  if (error || !conversation) {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
           <Phone className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-          <h2 className="font-display text-xl font-bold mb-2">Call not found</h2>
+          <h2 className="font-display text-xl font-bold mb-2">Conversation not found</h2>
           <p className="text-muted-foreground mb-4">
-            The call you're looking for doesn't exist or has been removed.
+            {error?.message || "The conversation you're looking for doesn't exist or has been removed."}
           </p>
           <Link to="/dashboard/calls">
             <Button>
@@ -234,6 +171,11 @@ export default function CallDetail() {
       </DashboardLayout>
     );
   }
+
+  const badge = getStatusBadge(conversation.status, conversation.call_successful);
+  const BadgeIcon = badge.icon;
+  const transcript: TranscriptMessage[] = conversation.transcript || [];
+  const recordingUrl = conversation.recording_url;
 
   return (
     <DashboardLayout>
@@ -259,26 +201,18 @@ export default function CallDetail() {
               </div>
               <div>
                 <h1 className="font-display text-2xl font-bold">
-                  {call.caller_name || "Unknown Caller"}
+                  Call #{conversationId?.slice(-6)}
                 </h1>
-                <p className="text-muted-foreground">{call.caller_phone}</p>
+                <p className="text-muted-foreground">
+                  {format(new Date(conversation.started_at), "MMMM d, yyyy 'at' h:mm a")}
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Badge
-                variant={call.outcome === "booked" ? "default" : "secondary"}
-                className="text-sm py-1 px-3 capitalize"
-              >
-                {call.outcome?.replace("_", " ") || "Pending"}
-              </Badge>
-              {call.recording_url && (
-                <Button variant="outline" size="sm">
-                  <Play className="w-4 h-4 mr-2" />
-                  Play Recording
-                </Button>
-              )}
-            </div>
+            <Badge variant={badge.variant} className="text-sm py-1 px-3">
+              <BadgeIcon className="w-3 h-3 mr-1" />
+              {badge.label}
+            </Badge>
           </div>
         </motion.div>
 
@@ -287,7 +221,7 @@ export default function CallDetail() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-4 gap-4"
+          className="grid grid-cols-1 md:grid-cols-3 gap-4"
         >
           <Card>
             <CardContent className="p-4 flex items-center gap-3">
@@ -297,7 +231,7 @@ export default function CallDetail() {
               <div>
                 <p className="text-xs text-muted-foreground">Date & Time</p>
                 <p className="font-medium text-sm">
-                  {format(new Date(call.started_at), "MMM d, yyyy h:mm a")}
+                  {format(new Date(conversation.started_at), "MMM d, yyyy h:mm a")}
                 </p>
               </div>
             </CardContent>
@@ -311,7 +245,7 @@ export default function CallDetail() {
               <div>
                 <p className="text-xs text-muted-foreground">Duration</p>
                 <p className="font-medium text-sm">
-                  {formatDuration(call.duration_seconds)}
+                  {formatDuration(conversation.duration_seconds)}
                 </p>
               </div>
             </CardContent>
@@ -320,26 +254,12 @@ export default function CallDetail() {
           <Card>
             <CardContent className="p-4 flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Phone className="w-5 h-5 text-primary" />
+                <MessageSquare className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Phone Line</p>
+                <p className="text-xs text-muted-foreground">Messages</p>
                 <p className="font-medium text-sm">
-                  {call.phone_number?.friendly_name || call.phone_number?.phone_number || "Unknown"}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Status</p>
-                <p className="font-medium text-sm capitalize">
-                  {call.status.replace("_", " ")}
+                  {conversation.message_count || transcript.length} messages
                 </p>
               </div>
             </CardContent>
@@ -347,7 +267,7 @@ export default function CallDetail() {
         </motion.div>
 
         {/* Summary */}
-        {call.summary && (
+        {conversation.summary && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -361,84 +281,76 @@ export default function CallDetail() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{call.summary}</p>
+                <p className="text-muted-foreground">{conversation.summary}</p>
               </CardContent>
             </Card>
           </motion.div>
         )}
 
-        {/* Tabs: Timeline & Transcript */}
+        {/* Audio Player */}
+        {recordingUrl && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.17 }}
+          >
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Volume2 className="w-5 h-5 text-primary" />
+                  Call Recording
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <audio
+                  controls
+                  src={recordingUrl}
+                  className="w-full"
+                  preload="metadata"
+                >
+                  Your browser does not support the audio element.
+                </audio>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Transcript */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
         >
-          <Tabs defaultValue="timeline" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="timeline" className="flex items-center gap-2">
-                <Zap className="w-4 h-4" />
-                Timeline ({call.events.length})
-              </TabsTrigger>
-              <TabsTrigger value="transcript" className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Transcript ({call.transcripts.length})
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="timeline" className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Call Event Timeline</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Complete state transitions and AI interactions
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {call.events.length > 0 ? (
-                    <div className="relative">
-                      {call.events.map((event, index) => (
-                        <TimelineEvent key={event.id} event={event} index={index} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p>No events recorded</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="transcript" className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Conversation Transcript</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Full call transcript with speaker identification
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {call.transcripts.length > 0 ? (
-                    <ScrollArea className="h-[500px] pr-4">
-                      {call.transcripts.map((transcript, index) => (
-                        <TranscriptMessage
-                          key={transcript.id}
-                          transcript={transcript}
-                          index={index}
-                        />
-                      ))}
-                    </ScrollArea>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p>No transcript available</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-primary" />
+                Conversation Transcript
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Full call transcript with speaker identification
+              </p>
+            </CardHeader>
+            <CardContent>
+              {transcript.length > 0 ? (
+                <ScrollArea className="h-[500px] pr-4">
+                  {transcript.map((message, index) => (
+                    <TranscriptMessageRow
+                      key={index}
+                      message={message}
+                      index={index}
+                      callStartTime={new Date(conversation.started_at)}
+                    />
+                  ))}
+                </ScrollArea>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No transcript available for this call</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </motion.div>
       </div>
     </DashboardLayout>

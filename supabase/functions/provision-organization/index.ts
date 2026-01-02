@@ -3,7 +3,7 @@ import { createAnonClient, createServiceClient } from "../_shared/db.ts";
 import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { config } from "../_shared/config.ts";
-import type { OrganizationProvisionRequest, OrganizationProvisionResponse } from "../_shared/types.ts";
+import { DEFAULT_PLAN, type OrganizationProvisionRequest, type OrganizationProvisionResponse } from "../_shared/types.ts";
 
 const logger = createLogger('provision-organization');
 
@@ -32,11 +32,12 @@ serve(async (req) => {
     const log = logger.withContext({ userId: user.id, email: user.email });
     log.info('User authenticated');
 
-    // Get organization name, notification phone, timezone, and planId from user metadata or request body
+    // Get organization name, notification phone, business phone, timezone, and planId from user metadata or request body
     let organizationName = user.user_metadata?.organization_name;
     let notificationPhone: string | null = null;
+    let businessPhone: string | null = null;
     let timezone = 'America/New_York';
-    let planId = 'core';
+    let planId = DEFAULT_PLAN;
 
     try {
       const body = await req.json();
@@ -45,6 +46,9 @@ serve(async (req) => {
       }
       if (body.notificationPhone) {
         notificationPhone = body.notificationPhone;
+      }
+      if (body.businessPhone) {
+        businessPhone = body.businessPhone;
       }
       if (body.timezone) {
         timezone = body.timezone;
@@ -134,6 +138,7 @@ serve(async (req) => {
         timezone: timezone,
         notification_email: user.email,
         notification_phone: notificationPhone,
+        business_phone_number: businessPhone,
       })
       .select()
       .single();
@@ -224,6 +229,17 @@ serve(async (req) => {
       log.warn('Error creating agent record (non-fatal)', { error: agentError.message });
     } else {
       log.step('Organization agent record created');
+    }
+
+    // 6. Seed default provider roles
+    const { error: rolesError } = await supabaseAdmin.rpc('seed_default_provider_roles', {
+      org_id: newOrg.id
+    });
+
+    if (rolesError) {
+      log.warn('Error seeding default provider roles (non-fatal)', { error: rolesError.message });
+    } else {
+      log.step('Default provider roles seeded');
     }
 
     return successResponse({
