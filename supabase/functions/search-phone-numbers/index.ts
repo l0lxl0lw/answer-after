@@ -28,19 +28,19 @@ serve(async (req) => {
 
     // Get user's organization and Twilio subaccount
     const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('institution_id')
+      .from('users')
+      .select('account_id')
       .eq('id', user.id)
       .single();
 
-    if (!profile?.institution_id) {
+    if (!profile?.account_id) {
       return errorResponse('No organization found', 404);
     }
 
     const { data: org } = await supabaseAdmin
-      .from('institutions')
+      .from('accounts')
       .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
-      .eq('id', profile.institution_id)
+      .eq('id', profile.account_id)
       .single();
 
     // Use subaccount if available, otherwise use master account
@@ -52,7 +52,7 @@ serve(async (req) => {
       areaCode?: string;
     }>(req);
 
-    log.step('Searching numbers', { numberType, areaCode, orgId: profile.institution_id });
+    log.step('Searching numbers', { numberType, areaCode, orgId: profile.account_id });
 
     const searchParams = new URLSearchParams({
       VoiceEnabled: 'true',

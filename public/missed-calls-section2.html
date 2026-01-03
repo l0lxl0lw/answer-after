@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>See How Fast You're Losing Leads</title>
+
+  <style>
+    /* ============================================
+       RESET & BASE STYLES
+       ============================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      background: #0f172a;
+    }
+
+    /* ============================================
+       MAIN SECTION
+       ============================================ */
+    .interactive-section {
+      min-height: 100vh;
+      padding: 60px 24px;
+      background: linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #f8fafc;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* ============================================
+       HEADER
+       ============================================ */
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #93c5fd;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .section-title .highlight {
+      background: linear-gradient(135deg, #f87171 0%, #fb923c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .section-subtitle {
+      font-size: 18px;
+      color: #94a3b8;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ============================================
+       INTERACTIVE GRAPH CONTAINER
+       ============================================ */
+    .graph-container {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 40px;
+      margin-bottom: 40px;
+    }
+
+    .graph-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .graph-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .graph-description {
+      font-size: 14px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    /* Current stats display */
+    .current-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-box {
+      text-align: right;
+    }
+
+    .stat-box-label {
+      font-size: 12px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-box-value {
+      font-size: 32px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.3s ease;
+    }
+
+    .stat-box-value.good { color: #4ade80; }
+    .stat-box-value.warning { color: #fbbf24; }
+    .stat-box-value.danger { color: #f87171; }
+    .stat-box-value.critical { color: #dc2626; }
+
+    /* ============================================
+       SVG GRAPH
+       ============================================ */
+    .graph-wrapper {
+      position: relative;
+      margin-bottom: 24px;
+    }
+
+    .graph-svg {
+      width: 100%;
+      height: 300px;
+      overflow: visible;
+    }
+
+    /* Graph elements */
+    .grid-line {
+      stroke: rgba(255, 255, 255, 0.06);
+      stroke-width: 1;
+    }
+
+    .axis-label {
+      fill: #64748b;
+      font-size: 12px;
+    }
+
+    .graph-area {
+      transition: d 0.3s ease;
+    }
+
+    .graph-line {
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+    }
+
+    .data-point {
+      cursor: pointer;
+      transition: r 0.2s ease, filter 0.2s ease;
+    }
+
+    .data-point:hover {
+      r: 8;
+      filter: drop-shadow(0 0 12px currentColor);
+    }
+
+    /* Tooltip */
+    .graph-tooltip {
+      position: absolute;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 12px 16px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, -100%) translateY(-12px);
+      transition: opacity 0.2s ease;
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    .graph-tooltip.visible {
+      opacity: 1;
+    }
+
+    .tooltip-time {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .tooltip-value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .tooltip-message {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+      max-width: 180px;
+    }
+
+    /* ============================================
+       INTERACTIVE SLIDER
+       ============================================ */
+    .slider-container {
+      padding: 0 10px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .slider-label strong {
+      color: #f1f5f9;
+    }
+
+    .time-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(90deg,
+        #22c55e 0%,
+        #22c55e 5%,
+        #eab308 15%,
+        #f97316 30%,
+        #ef4444 50%,
+        #dc2626 100%
+      );
+      outline: none;
+      cursor: pointer;
+    }
+
+    .time-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #f8fafc;
+      cursor: grab;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(59, 130, 246, 0.3);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .time-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(59, 130, 246, 0.4);
+    }
+
+    .time-slider::-webkit-slider-thumb:active {
+      cursor: grabbing;
+    }
+
+    .time-slider::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #f8fafc;
+      cursor: grab;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Time markers */
+    .time-markers {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding: 0 4px;
+    }
+
+    .time-marker {
+      font-size: 11px;
+      color: #64748b;
+      text-align: center;
+      position: relative;
+    }
+
+    .time-marker::before {
+      content: '';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* ============================================
+       ZONE INDICATORS
+       ============================================ */
+    .zones-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 32px;
+    }
+
+    .zone-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      transition: all 0.3s ease;
+      opacity: 0.5;
+    }
+
+    .zone-card.active {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+
+    .zone-card.green { border-color: rgba(34, 197, 94, 0.3); }
+    .zone-card.green.active { background: rgba(34, 197, 94, 0.1); box-shadow: 0 4px 20px rgba(34, 197, 94, 0.2); }
+
+    .zone-card.yellow { border-color: rgba(234, 179, 8, 0.3); }
+    .zone-card.yellow.active { background: rgba(234, 179, 8, 0.1); box-shadow: 0 4px 20px rgba(234, 179, 8, 0.2); }
+
+    .zone-card.orange { border-color: rgba(249, 115, 22, 0.3); }
+    .zone-card.orange.active { background: rgba(249, 115, 22, 0.1); box-shadow: 0 4px 20px rgba(249, 115, 22, 0.2); }
+
+    .zone-card.red { border-color: rgba(239, 68, 68, 0.3); }
+    .zone-card.red.active { background: rgba(239, 68, 68, 0.1); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.2); }
+
+    .zone-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .zone-time {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 4px;
+    }
+
+    .zone-label {
+      font-size: 11px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ============================================
+       LEAD FUNNEL VISUALIZATION
+       ============================================ */
+    .funnel-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 48px;
+    }
+
+    .funnel-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+    }
+
+    .funnel-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .funnel-title svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .funnel-visual {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .funnel-bar {
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.5s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .funnel-bar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+      100% { transform: translateX(100%); }
+    }
+
+    .funnel-bar.incoming {
+      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      width: 100%;
+    }
+
+    .funnel-bar.answered {
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+    }
+
+    .funnel-bar.missed {
+      background: linear-gradient(90deg, #ef4444, #dc2626);
+    }
+
+    .funnel-bar.converted {
+      background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+    }
+
+    .funnel-bar-label {
+      color: white;
+      z-index: 1;
+    }
+
+    .funnel-bar-value {
+      color: white;
+      font-weight: 700;
+      z-index: 1;
+    }
+
+    /* ============================================
+       COMPARISON CARDS
+       ============================================ */
+    .comparison-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 48px;
+    }
+
+    .comparison-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+    }
+
+    .comparison-card.bad {
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .comparison-card.good {
+      border-color: rgba(34, 197, 94, 0.2);
+    }
+
+    .comparison-label {
+      font-size: 12px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+
+    .comparison-value {
+      font-size: 48px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .comparison-card.bad .comparison-value { color: #f87171; }
+    .comparison-card.good .comparison-value { color: #4ade80; }
+
+    .comparison-text {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .comparison-arrow {
+      font-size: 32px;
+      color: #3b82f6;
+    }
+
+    /* ============================================
+       CTA SECTION
+       ============================================ */
+    .cta-section {
+      text-align: center;
+      padding: 48px;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 20px;
+    }
+
+    .cta-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .cta-text {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-bottom: 32px;
+      max-width: 500px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .cta-text .emphasis {
+      color: #4ade80;
+      font-weight: 600;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      border: none;
+    }
+
+    .cta-button.primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+    }
+
+    .cta-button.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    }
+
+    .cta-button.secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: #f1f5f9;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .cta-button.secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .cta-button svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 900px) {
+      .funnel-section {
+        grid-template-columns: 1fr;
+      }
+
+      .comparison-row {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .comparison-arrow {
+        transform: rotate(90deg);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .interactive-section {
+        padding: 40px 16px;
+      }
+
+      .graph-container {
+        padding: 24px;
+      }
+
+      .graph-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .current-stats {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .stat-box {
+        text-align: left;
+      }
+
+      .zones-container {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .graph-svg {
+        height: 220px;
+      }
+
+      .cta-section {
+        padding: 32px 24px;
+      }
+
+      .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .cta-button {
+        width: 100%;
+        max-width: 280px;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <section class="interactive-section">
+    <div class="container">
+
+      <!-- Header -->
+      <header class="section-header">
+        <div class="section-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20V10M18 20V4M6 20v-4"/>
+          </svg>
+          Interactive Data Visualization
+        </div>
+        <h1 class="section-title">
+          Watch Your Leads <span class="highlight">Disappear</span> in Real-Time
+        </h1>
+        <p class="section-subtitle">
+          Drag the slider to see exactly how response time destroys your conversion rate
+        </p>
+      </header>
+
+      <!-- Main Interactive Graph -->
+      <div class="graph-container">
+        <div class="graph-header">
+          <div>
+            <h2 class="graph-title">Lead Conversion Rate vs Response Time</h2>
+            <p class="graph-description">Based on industry research across 100,000+ leads</p>
+          </div>
+          <div class="current-stats">
+            <div class="stat-box">
+              <div class="stat-box-label">Response Time</div>
+              <div class="stat-box-value good" id="current-time">0 min</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-box-label">Conversion Rate</div>
+              <div class="stat-box-value good" id="current-rate">100%</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-box-label">Leads Lost</div>
+              <div class="stat-box-value good" id="leads-lost">0%</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SVG Graph -->
+        <div class="graph-wrapper">
+          <svg class="graph-svg" id="conversion-graph" viewBox="0 0 1000 300" preserveAspectRatio="none">
+            <!-- Grid lines -->
+            <g class="grid">
+              <line class="grid-line" x1="50" y1="50" x2="950" y2="50"/>
+              <line class="grid-line" x1="50" y1="100" x2="950" y2="100"/>
+              <line class="grid-line" x1="50" y1="150" x2="950" y2="150"/>
+              <line class="grid-line" x1="50" y1="200" x2="950" y2="200"/>
+              <line class="grid-line" x1="50" y1="250" x2="950" y2="250"/>
+            </g>
+
+            <!-- Y-axis labels -->
+            <g class="y-labels">
+              <text class="axis-label" x="40" y="55" text-anchor="end">100%</text>
+              <text class="axis-label" x="40" y="105" text-anchor="end">75%</text>
+              <text class="axis-label" x="40" y="155" text-anchor="end">50%</text>
+              <text class="axis-label" x="40" y="205" text-anchor="end">25%</text>
+              <text class="axis-label" x="40" y="255" text-anchor="end">0%</text>
+            </g>
+
+            <!-- Gradient definitions -->
+            <defs>
+              <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.3"/>
+                <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
+              </linearGradient>
+              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#22c55e"/>
+                <stop offset="20%" style="stop-color:#eab308"/>
+                <stop offset="50%" style="stop-color:#f97316"/>
+                <stop offset="100%" style="stop-color:#ef4444"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Area fill -->
+            <path class="graph-area" fill="url(#areaGradient)" id="graph-area"/>
+
+            <!-- Line -->
+            <path class="graph-line" stroke="url(#lineGradient)" id="graph-line"/>
+
+            <!-- Data points -->
+            <g id="data-points"></g>
+
+            <!-- Current position indicator -->
+            <g id="position-indicator">
+              <line id="position-line" x1="50" y1="50" x2="50" y2="250" stroke="#f8fafc" stroke-width="2" stroke-dasharray="4,4" opacity="0.5"/>
+              <circle id="position-dot" cx="50" cy="50" r="8" fill="#f8fafc" filter="drop-shadow(0 0 8px rgba(255,255,255,0.5))"/>
+            </g>
+          </svg>
+
+          <!-- Tooltip -->
+          <div class="graph-tooltip" id="graph-tooltip">
+            <div class="tooltip-time" id="tooltip-time">0 minutes</div>
+            <div class="tooltip-value" id="tooltip-value">100%</div>
+            <div class="tooltip-message" id="tooltip-message">Optimal response window</div>
+          </div>
+        </div>
+
+        <!-- Time Slider -->
+        <div class="slider-container">
+          <div class="slider-label">
+            <span>Drag to simulate response delay</span>
+            <strong id="slider-time">Instant (0 min)</strong>
+          </div>
+          <input type="range" class="time-slider" id="time-slider" min="0" max="100" value="0">
+          <div class="time-markers">
+            <span class="time-marker">0 min</span>
+            <span class="time-marker">5 min</span>
+            <span class="time-marker">15 min</span>
+            <span class="time-marker">30 min</span>
+            <span class="time-marker">1 hour</span>
+            <span class="time-marker">2+ hours</span>
+          </div>
+        </div>
+
+        <!-- Zone indicators -->
+        <div class="zones-container">
+          <div class="zone-card green active" data-zone="green">
+            <div class="zone-icon">🟢</div>
+            <div class="zone-time">0-5 min</div>
+            <div class="zone-label">Golden Window</div>
+          </div>
+          <div class="zone-card yellow" data-zone="yellow">
+            <div class="zone-icon">🟡</div>
+            <div class="zone-time">5-15 min</div>
+            <div class="zone-label">Risky Zone</div>
+          </div>
+          <div class="zone-card orange" data-zone="orange">
+            <div class="zone-icon">🟠</div>
+            <div class="zone-time">15-30 min</div>
+            <div class="zone-label">Danger Zone</div>
+          </div>
+          <div class="zone-card red" data-zone="red">
+            <div class="zone-icon">🔴</div>
+            <div class="zone-time">30+ min</div>
+            <div class="zone-label">Lost Cause</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lead Funnel Comparison -->
+      <div class="funnel-section">
+        <!-- Without Our Solution -->
+        <div class="funnel-card">
+          <h3 class="funnel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            Without AI Receptionist
+          </h3>
+          <div class="funnel-visual" id="funnel-without">
+            <div class="funnel-bar incoming" style="width: 100%">
+              <span class="funnel-bar-label">Incoming Leads</span>
+              <span class="funnel-bar-value">100</span>
+            </div>
+            <div class="funnel-bar answered" id="without-answered" style="width: 70%">
+              <span class="funnel-bar-label">Answered</span>
+              <span class="funnel-bar-value">70</span>
+            </div>
+            <div class="funnel-bar missed" id="without-missed" style="width: 30%">
+              <span class="funnel-bar-label">Missed Calls</span>
+              <span class="funnel-bar-value">30</span>
+            </div>
+            <div class="funnel-bar converted" id="without-converted" style="width: 25%">
+              <span class="funnel-bar-label">Converted</span>
+              <span class="funnel-bar-value">25</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- With Our Solution -->
+        <div class="funnel-card">
+          <h3 class="funnel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            With AI Receptionist
+          </h3>
+          <div class="funnel-visual" id="funnel-with">
+            <div class="funnel-bar incoming" style="width: 100%">
+              <span class="funnel-bar-label">Incoming Leads</span>
+              <span class="funnel-bar-value">100</span>
+            </div>
+            <div class="funnel-bar answered" style="width: 100%">
+              <span class="funnel-bar-label">Answered (24/7)</span>
+              <span class="funnel-bar-value">100</span>
+            </div>
+            <div class="funnel-bar missed" style="width: 0%; min-width: 80px; opacity: 0.3;">
+              <span class="funnel-bar-label">Missed</span>
+              <span class="funnel-bar-value">0</span>
+            </div>
+            <div class="funnel-bar converted" style="width: 78%">
+              <span class="funnel-bar-label">Converted</span>
+              <span class="funnel-bar-value">78</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Before/After Comparison -->
+      <div class="comparison-row">
+        <div class="comparison-card bad">
+          <div class="comparison-label">Industry Average</div>
+          <div class="comparison-value" id="compare-before">25%</div>
+          <div class="comparison-text">Conversion rate with slow follow-up</div>
+        </div>
+        <div class="comparison-arrow">→</div>
+        <div class="comparison-card good">
+          <div class="comparison-label">With Instant Response</div>
+          <div class="comparison-value">78%</div>
+          <div class="comparison-text">Conversion rate with AI receptionist</div>
+        </div>
+      </div>
+
+      <!-- CTA Section -->
+      <div class="cta-section">
+        <h2 class="cta-title">Stop Watching Leads Slip Away</h2>
+        <p class="cta-text">
+          Our AI answers every call in <span class="emphasis">under 1 second</span>,
+          keeping you in the golden window 24/7.
+        </p>
+        <div class="cta-buttons">
+          <a href="#demo" class="cta-button primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            See Live Demo
+          </a>
+          <a href="#trial" class="cta-button secondary">
+            Start Free Trial
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <script>
+    /**
+     * ============================================
+     * INTERACTIVE CONVERSION GRAPH
+     * Shows how conversion rate drops over time
+     * ============================================
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+
+      // Data points: [minutes, conversion rate %]
+      // Based on research showing rapid decay in first hour
+      const dataPoints = [
+        { time: 0, rate: 100, label: 'Instant', message: 'Maximum conversion potential' },
+        { time: 1, rate: 95, label: '1 min', message: 'Still in the golden window' },
+        { time: 5, rate: 80, label: '5 min', message: 'End of optimal response time' },
+        { time: 10, rate: 60, label: '10 min', message: 'Significant drop begins' },
+        { time: 15, rate: 45, label: '15 min', message: 'Half your leads are gone' },
+        { time: 30, rate: 30, label: '30 min', message: 'Only 30% chance remains' },
+        { time: 60, rate: 20, label: '1 hour', message: '80% of opportunity lost' },
+        { time: 120, rate: 10, label: '2 hours', message: 'Nearly impossible to convert' },
+      ];
+
+      // SVG dimensions
+      const svgWidth = 1000;
+      const svgHeight = 300;
+      const padding = { top: 50, right: 50, bottom: 50, left: 50 };
+      const graphWidth = svgWidth - padding.left - padding.right;
+      const graphHeight = svgHeight - padding.top - padding.bottom;
+
+      // Scale functions
+      function xScale(minutes) {
+        const maxMinutes = 120;
+        return padding.left + (minutes / maxMinutes) * graphWidth;
+      }
+
+      function yScale(rate) {
+        return padding.top + ((100 - rate) / 100) * graphHeight;
+      }
+
+      // Generate smooth curve path
+      function generatePath(points) {
+        if (points.length < 2) return '';
+
+        let path = `M ${xScale(points[0].time)} ${yScale(points[0].rate)}`;
+
+        for (let i = 1; i < points.length; i++) {
+          const prev = points[i - 1];
+          const curr = points[i];
+
+          // Control points for smooth curve
+          const cp1x = xScale(prev.time) + (xScale(curr.time) - xScale(prev.time)) / 3;
+          const cp1y = yScale(prev.rate);
+          const cp2x = xScale(curr.time) - (xScale(curr.time) - xScale(prev.time)) / 3;
+          const cp2y = yScale(curr.rate);
+
+          path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${xScale(curr.time)} ${yScale(curr.rate)}`;
+        }
+
+        return path;
+      }
+
+      // Generate area path (closed)
+      function generateAreaPath(points) {
+        const linePath = generatePath(points);
+        const lastPoint = points[points.length - 1];
+        const firstPoint = points[0];
+        return `${linePath} L ${xScale(lastPoint.time)} ${svgHeight - padding.bottom} L ${xScale(firstPoint.time)} ${svgHeight - padding.bottom} Z`;
+      }
+
+      // Draw the graph
+      const graphLine = document.getElementById('graph-line');
+      const graphArea = document.getElementById('graph-area');
+      const dataPointsGroup = document.getElementById('data-points');
+
+      graphLine.setAttribute('d', generatePath(dataPoints));
+      graphArea.setAttribute('d', generateAreaPath(dataPoints));
+
+      // Add data point circles
+      dataPoints.forEach((point, index) => {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', xScale(point.time));
+        circle.setAttribute('cy', yScale(point.rate));
+        circle.setAttribute('r', '6');
+        circle.setAttribute('fill', getColorForRate(point.rate));
+        circle.setAttribute('class', 'data-point');
+        circle.setAttribute('data-index', index);
+
+        circle.addEventListener('mouseenter', () => showTooltip(point, circle));
+        circle.addEventListener('mouseleave', hideTooltip);
+
+        dataPointsGroup.appendChild(circle);
+      });
+
+      // Tooltip functions
+      const tooltip = document.getElementById('graph-tooltip');
+      const tooltipTime = document.getElementById('tooltip-time');
+      const tooltipValue = document.getElementById('tooltip-value');
+      const tooltipMessage = document.getElementById('tooltip-message');
+
+      function showTooltip(point, element) {
+        const rect = element.getBoundingClientRect();
+        const containerRect = document.querySelector('.graph-wrapper').getBoundingClientRect();
+
+        tooltipTime.textContent = point.label;
+        tooltipValue.textContent = point.rate + '%';
+        tooltipValue.style.color = getColorForRate(point.rate);
+        tooltipMessage.textContent = point.message;
+
+        tooltip.style.left = (rect.left - containerRect.left + rect.width / 2) + 'px';
+        tooltip.style.top = (rect.top - containerRect.top) + 'px';
+        tooltip.classList.add('visible');
+      }
+
+      function hideTooltip() {
+        tooltip.classList.remove('visible');
+      }
+
+      // Color based on rate
+      function getColorForRate(rate) {
+        if (rate >= 80) return '#22c55e';
+        if (rate >= 50) return '#eab308';
+        if (rate >= 30) return '#f97316';
+        return '#ef4444';
+      }
+
+      // Slider interaction
+      const slider = document.getElementById('time-slider');
+      const sliderTimeLabel = document.getElementById('slider-time');
+      const currentTimeDisplay = document.getElementById('current-time');
+      const currentRateDisplay = document.getElementById('current-rate');
+      const leadsLostDisplay = document.getElementById('leads-lost');
+      const positionLine = document.getElementById('position-line');
+      const positionDot = document.getElementById('position-dot');
+      const zoneCards = document.querySelectorAll('.zone-card');
+
+      function updateFromSlider(value) {
+        // Map slider (0-100) to minutes (0-120)
+        const minutes = (value / 100) * 120;
+
+        // Interpolate rate from data points
+        let rate = 100;
+        for (let i = 1; i < dataPoints.length; i++) {
+          if (minutes <= dataPoints[i].time) {
+            const prev = dataPoints[i - 1];
+            const curr = dataPoints[i];
+            const t = (minutes - prev.time) / (curr.time - prev.time);
+            rate = prev.rate + (curr.rate - prev.rate) * t;
+            break;
+          }
+        }
+        if (minutes >= dataPoints[dataPoints.length - 1].time) {
+          rate = dataPoints[dataPoints.length - 1].rate;
+        }
+
+        rate = Math.round(rate);
+        const leadsLost = 100 - rate;
+
+        // Update displays
+        const timeLabel = formatTime(minutes);
+        sliderTimeLabel.textContent = timeLabel;
+        currentTimeDisplay.textContent = timeLabel;
+        currentRateDisplay.textContent = rate + '%';
+        leadsLostDisplay.textContent = leadsLost + '%';
+
+        // Update colors
+        const color = getColorForRate(rate);
+        currentTimeDisplay.className = 'stat-box-value ' + getColorClass(rate);
+        currentRateDisplay.className = 'stat-box-value ' + getColorClass(rate);
+        leadsLostDisplay.className = 'stat-box-value ' + (leadsLost > 50 ? 'danger' : leadsLost > 20 ? 'warning' : 'good');
+
+        // Update position indicator
+        const x = xScale(minutes);
+        const y = yScale(rate);
+        positionLine.setAttribute('x1', x);
+        positionLine.setAttribute('x2', x);
+        positionDot.setAttribute('cx', x);
+        positionDot.setAttribute('cy', y);
+        positionDot.setAttribute('fill', color);
+
+        // Update zone cards
+        updateZones(minutes);
+
+        // Update funnel
+        updateFunnel(rate);
+      }
+
+      function formatTime(minutes) {
+        if (minutes < 1) return 'Instant (0 min)';
+        if (minutes < 60) return Math.round(minutes) + ' min';
+        const hours = Math.floor(minutes / 60);
+        const mins = Math.round(minutes % 60);
+        if (mins === 0) return hours + ' hour' + (hours > 1 ? 's' : '');
+        return hours + 'h ' + mins + 'm';
+      }
+
+      function getColorClass(rate) {
+        if (rate >= 80) return 'good';
+        if (rate >= 50) return 'warning';
+        if (rate >= 30) return 'danger';
+        return 'critical';
+      }
+
+      function updateZones(minutes) {
+        zoneCards.forEach(card => {
+          card.classList.remove('active');
+        });
+
+        let activeZone;
+        if (minutes <= 5) activeZone = 'green';
+        else if (minutes <= 15) activeZone = 'yellow';
+        else if (minutes <= 30) activeZone = 'orange';
+        else activeZone = 'red';
+
+        document.querySelector(`.zone-card.${activeZone}`).classList.add('active');
+      }
+
+      function updateFunnel(rate) {
+        // Update the "without" funnel based on current rate
+        const answered = 70;
+        const missed = 30;
+        const converted = Math.round((rate / 100) * answered * 0.5 + (rate / 100) * missed * 0.1);
+
+        document.getElementById('without-converted').style.width = converted + '%';
+        document.getElementById('without-converted').querySelector('.funnel-bar-value').textContent = converted;
+
+        // Update comparison
+        document.getElementById('compare-before').textContent = converted + '%';
+      }
+
+      slider.addEventListener('input', (e) => {
+        updateFromSlider(parseInt(e.target.value));
+      });
+
+      // Initialize
+      updateFromSlider(0);
+
+      // Auto-play animation on load
+      setTimeout(() => {
+        let value = 0;
+        const interval = setInterval(() => {
+          value += 1;
+          slider.value = value;
+          updateFromSlider(value);
+
+          if (value >= 60) {
+            clearInterval(interval);
+            // Reset after pause
+            setTimeout(() => {
+              slider.value = 0;
+              updateFromSlider(0);
+            }, 2000);
+          }
+        }, 50);
+      }, 1000);
+
+    });
+  </script>
+</body>
+</html>

@@ -47,31 +47,31 @@ serve(async (req) => {
 
     log.info('User authenticated', { userId: user.id });
 
-    // Get user's institution
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('institution_id')
+    // Get user's account
+    const { data: userRecord, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('account_id')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile?.institution_id) {
-      return errorResponse('No institution found. Please sign up first.', 404);
+    if (userError || !userRecord?.account_id) {
+      return errorResponse('No account found. Please sign up first.', 404);
     }
 
-    const institutionId = profile.institution_id;
+    const accountId = userRecord.account_id;
 
-    // Get institution details
-    const { data: institution, error: instError } = await supabaseAdmin
-      .from('institutions')
+    // Get account details
+    const { data: account, error: accountError } = await supabaseAdmin
+      .from('accounts')
       .select('*')
-      .eq('id', institutionId)
+      .eq('id', accountId)
       .single();
 
-    if (instError || !institution) {
-      return errorResponse('Institution not found', 404);
+    if (accountError || !account) {
+      return errorResponse('Account not found', 404);
     }
 
-    log.info('Setting up institution', { institutionId, name: institution.name });
+    log.info('Setting up account', { accountId, name: account.name });
 
     // --- STEP 1: Clean existing sample data ---
     log.step('Cleaning existing data');
@@ -80,25 +80,25 @@ serve(async (req) => {
     await supabaseAdmin
       .from('calls')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     // Delete existing contacts for this institution
     await supabaseAdmin
       .from('contacts')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     // Delete existing services for this institution
     await supabaseAdmin
       .from('services')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     // Delete existing phone numbers
     await supabaseAdmin
       .from('phone_numbers')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     log.info('Cleaned existing data');
 
@@ -106,7 +106,7 @@ serve(async (req) => {
     log.step('Setting up subscription');
 
     const subscriptionData = {
-      institution_id: institutionId,
+      account_id: accountId,
       plan: 'business',
       status: 'active',
       stripe_customer_id: 'cus_dev_mock_123',
@@ -119,7 +119,7 @@ serve(async (req) => {
 
     const { error: subError } = await supabaseAdmin
       .from('subscriptions')
-      .upsert(subscriptionData, { onConflict: 'institution_id' });
+      .upsert(subscriptionData, { onConflict: 'account_id' });
 
     if (subError) {
       log.error('Subscription setup failed', subError);
@@ -132,7 +132,7 @@ serve(async (req) => {
     log.step('Purchasing phone number');
 
     // Extract area code from business phone or use default
-    const businessPhone = institution.business_phone_number || '+15551234567';
+    const businessPhone = account.business_phone_number || '+15551234567';
     const areaCode = businessPhone.replace(/\D/g, '').slice(-10, -7) || '555';
 
     const phoneResponse = await fetch(`${config.supabase.url}/functions/v1/purchase-phone-number`, {
@@ -160,7 +160,7 @@ serve(async (req) => {
 
     const servicesWithInstitution = SAMPLE_SERVICES.map(s => ({
       ...s,
-      institution_id: institutionId,
+      account_id: accountId,
       is_active: true,
     }));
 
@@ -179,7 +179,7 @@ serve(async (req) => {
 
     // Build context with sample services
     const agentContext = JSON.stringify({
-      greeting: `Hi! Thanks for calling ${institution.name}. How can I help you today?`,
+      greeting: `Hi! Thanks for calling ${account.name}. How can I help you today?`,
       services: SAMPLE_SERVICES.map(s => ({
         name: s.name,
         price: s.price_cents / 100,
@@ -197,7 +197,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         action: 'create-agent',
-        institutionId: institutionId,
+        accountId: accountId,
         context: agentContext,
       }),
     });
@@ -215,7 +215,7 @@ serve(async (req) => {
 
     const contactsWithInstitution = SAMPLE_CONTACTS.map(c => ({
       ...c,
-      institution_id: institutionId,
+      account_id: accountId,
       lead_status: c.status === 'lead' ? 'new' : 'converted',
     }));
 
@@ -236,7 +236,7 @@ serve(async (req) => {
     const { data: phoneNumbers } = await supabaseAdmin
       .from('phone_numbers')
       .select('id')
-      .eq('institution_id', institutionId)
+      .eq('account_id', accountId)
       .eq('is_active', true)
       .limit(1);
 
@@ -246,7 +246,7 @@ serve(async (req) => {
       const now = Date.now();
       const sampleCalls = [
         {
-          institution_id: institutionId,
+          account_id: accountId,
           phone_number_id: phoneNumberId,
           twilio_call_sid: `CA_dev_${crypto.randomUUID().substring(0, 8)}`,
           caller_phone: '+15559991111',
@@ -259,7 +259,7 @@ serve(async (req) => {
           ended_at: new Date(now - 2 * 60 * 60 * 1000 + 245000).toISOString(),
         },
         {
-          institution_id: institutionId,
+          account_id: accountId,
           phone_number_id: phoneNumberId,
           twilio_call_sid: `CA_dev_${crypto.randomUUID().substring(0, 8)}`,
           caller_phone: '+15558882222',
@@ -272,7 +272,7 @@ serve(async (req) => {
           ended_at: new Date(now - 5 * 60 * 60 * 1000 + 180000).toISOString(),
         },
         {
-          institution_id: institutionId,
+          account_id: accountId,
           phone_number_id: phoneNumberId,
           twilio_call_sid: `CA_dev_${crypto.randomUUID().substring(0, 8)}`,
           caller_phone: '+15557773333',
@@ -301,12 +301,12 @@ serve(async (req) => {
     log.step('Marking onboarding complete');
 
     const { error: orgError } = await supabaseAdmin
-      .from('institutions')
+      .from('accounts')
       .update({
         is_onboarding_complete: true,
         onboarding_completed_at: new Date().toISOString(),
       })
-      .eq('id', institutionId);
+      .eq('id', accountId);
 
     if (orgError) {
       log.warn('Onboarding update failed', { error: orgError.message });
@@ -318,8 +318,8 @@ serve(async (req) => {
       success: true,
       message: 'Dev Quick Setup complete!',
       data: {
-        institutionId,
-        institutionName: institution.name,
+        accountId,
+        accountName: account.name,
         subscription: { plan: 'business', status: 'active', credits: 72000 },
         phoneNumber: phoneResult.phoneNumber || 'Not purchased',
         agentId: agentResult.agent_id || 'Not created',

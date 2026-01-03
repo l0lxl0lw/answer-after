@@ -3,9 +3,9 @@ import { createAnonClient, createServiceClient } from "../_shared/db.ts";
 import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { config } from "../_shared/config.ts";
-import { DEFAULT_PLAN, type InstitutionProvisionRequest, type InstitutionProvisionResponse } from "../_shared/types.ts";
+import { DEFAULT_PLAN, type AccountProvisionRequest, type AccountProvisionResponse } from "../_shared/types.ts";
 
-const logger = createLogger('provision-institution');
+const logger = createLogger('provision-account');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -32,8 +32,8 @@ serve(async (req) => {
     const log = logger.withContext({ userId: user.id, email: user.email });
     log.info('User authenticated');
 
-    // Get institution name, notification phone, business phone, timezone, and planId from user metadata or request body
-    let institutionName = user.user_metadata?.institution_name;
+    // Get account name, notification phone, business phone, timezone, and planId from user metadata or request body
+    let accountName = user.user_metadata?.account_name || user.user_metadata?.institution_name;
     let notificationPhone: string | null = null;
     let businessPhone: string | null = null;
     let timezone = 'America/New_York';
@@ -41,8 +41,8 @@ serve(async (req) => {
 
     try {
       const body = await req.json();
-      if (body.institutionName) {
-        institutionName = body.institutionName;
+      if (body.accountName || body.institutionName) {
+        accountName = body.accountName || body.institutionName;
       }
       if (body.notificationPhone) {
         notificationPhone = body.notificationPhone;
@@ -60,26 +60,26 @@ serve(async (req) => {
       // No body or invalid JSON, continue with metadata
     }
 
-    if (!institutionName) {
-      institutionName = `${user.email?.split('@')[0]}'s Organization`;
+    if (!accountName) {
+      accountName = `${user.email?.split('@')[0]}'s Account`;
     }
 
-    log.info('Organization name determined', { institutionName, hasPhone: !!notificationPhone, timezone, planId, environment: config.environment });
+    log.info('Account name determined', { accountName, hasPhone: !!notificationPhone, timezone, planId, environment: config.environment });
 
-    // Check if user already has an institution
+    // Check if user already has an account
     const { data: existingProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('institution_id')
+      .from('users')
+      .select('account_id')
       .eq('id', user.id)
       .single();
 
-    if (existingProfile?.institution_id) {
-      log.info('User already has institution', { orgId: existingProfile.institution_id });
+    if (existingProfile?.account_id) {
+      log.info('User already has account', { accountId: existingProfile.account_id });
 
-      const { data: org } = await supabaseAdmin
-        .from('institutions')
+      const { data: account } = await supabaseAdmin
+        .from('accounts')
         .select('*')
-        .eq('id', existingProfile.institution_id)
+        .eq('id', existingProfile.account_id)
         .single();
 
       // Get tier credits for the selected plan
@@ -95,13 +95,13 @@ serve(async (req) => {
       const { data: subscription, error: subUpdateError } = await supabaseAdmin
         .from('subscriptions')
         .upsert({
-          institution_id: existingProfile.institution_id,
+          account_id: existingProfile.account_id,
           plan: planId,
           status: 'trial',
           total_credits: totalCredits,
           used_credits: 0,
         }, {
-          onConflict: 'institution_id'
+          onConflict: 'account_id'
         })
         .select()
         .single();
@@ -114,26 +114,26 @@ serve(async (req) => {
 
       return successResponse({
         success: true,
-        message: 'Organization already exists',
-        institutionId: existingProfile.institution_id,
-        institution: org,
+        message: 'Account already exists',
+        accountId: existingProfile.account_id,
+        account,
         subscription
       });
     }
 
-    // 1. Create the institution
-    const slug = institutionName
+    // 1. Create the account
+    const slug = accountName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '')
       .substring(0, 50) + '-' + user.id.substring(0, 8);
 
-    log.step('Creating institution', { slug });
+    log.step('Creating account', { slug });
 
-    const { data: newOrg, error: orgError } = await supabaseAdmin
-      .from('institutions')
+    const { data: newAccount, error: accountError } = await supabaseAdmin
+      .from('accounts')
       .insert({
-        name: institutionName,
+        name: accountName,
         slug,
         timezone: timezone,
         notification_email: user.email,
@@ -143,29 +143,29 @@ serve(async (req) => {
       .select()
       .single();
 
-    if (orgError) {
-      log.error('Failed to create institution', orgError);
-      throw new Error(`Failed to create institution: ${orgError.message}`);
+    if (accountError) {
+      log.error('Failed to create account', accountError);
+      throw new Error(`Failed to create account: ${accountError.message}`);
     }
 
-    log.info('Organization created', { orgId: newOrg.id });
+    log.info('Account created', { accountId: newAccount.id });
 
-    // 2. Update user profile with institution_id
+    // 2. Update user record with account_id
     const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .update({ institution_id: newOrg.id })
+      .from('users')
+      .update({ account_id: newAccount.id })
       .eq('id', user.id);
 
     if (profileError) {
-      log.error('Failed to update profile', profileError);
-      throw new Error(`Failed to update profile: ${profileError.message}`);
+      log.error('Failed to update user', profileError);
+      throw new Error(`Failed to update user: ${profileError.message}`);
     }
 
-    log.step('Profile updated with institution');
+    log.step('User updated with account');
 
     // 3. Create user role as owner
     const { error: roleError } = await supabaseAdmin
-      .from('user_roles')
+      .from('roles')
       .insert({
         user_id: user.id,
         role: 'owner'
@@ -193,7 +193,7 @@ serve(async (req) => {
     const { data: subscription, error: subError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
-        institution_id: newOrg.id,
+        account_id: newAccount.id,
         plan: planId,
         status: 'trial',
         total_credits: totalCredits,
@@ -211,29 +211,29 @@ serve(async (req) => {
 
     log.step('Subscription created', { plan: planId, status: 'trial', credits: totalCredits });
 
-    // 5. Create institution_agents record (placeholder - agent created after payment)
+    // 5. Create account_agents record (placeholder - agent created after payment)
     const agentContext = JSON.stringify({
-      institutionName: institutionName,
+      accountName: accountName,
       businessType: 'Service Business',
       services: [],
     });
 
     const { error: agentError } = await supabaseAdmin
-      .from('institution_agents')
+      .from('account_agents')
       .insert({
-        institution_id: newOrg.id,
+        account_id: newAccount.id,
         context: agentContext
       });
 
     if (agentError) {
       log.warn('Error creating agent record (non-fatal)', { error: agentError.message });
     } else {
-      log.step('Organization agent record created');
+      log.step('Account agent record created');
     }
 
     // 6. Seed default provider roles
     const { error: rolesError } = await supabaseAdmin.rpc('seed_default_provider_roles', {
-      org_id: newOrg.id
+      p_account_id: newAccount.id
     });
 
     if (rolesError) {
@@ -244,9 +244,9 @@ serve(async (req) => {
 
     return successResponse({
       success: true,
-      message: 'Organization provisioned successfully. Complete payment to activate phone and agent.',
-      institutionId: newOrg.id,
-      institution: newOrg,
+      message: 'Account provisioned successfully. Complete payment to activate phone and agent.',
+      accountId: newAccount.id,
+      account: newAccount,
       subscription,
       nextStep: 'Complete payment to provision phone number and AI agent'
     });

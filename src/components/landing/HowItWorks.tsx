@@ -5,26 +5,26 @@ const steps = [
   {
     icon: PhoneIncoming,
     step: "01",
-    title: "Customer Calls",
-    description: "Every incoming call is answered instantly by your AI receptionist — 24 hours a day, 7 days a week.",
+    title: "Lead Calls In",
+    description: "Every call answered instantly — within seconds, not minutes. 85% of callers won't try again if you miss them.",
   },
   {
     icon: MessageSquare,
     step: "02",
-    title: "AI Conversation",
-    description: "Our AI engages naturally, understanding their needs and collecting service details.",
+    title: "Instant Engagement",
+    description: "AI engages the prospect immediately, gathering their needs while they're most interested in buying.",
   },
   {
     icon: CalendarCheck,
     step: "03",
-    title: "Smart Booking",
-    description: "Based on your rules, the AI schedules appointments and confirms with the customer.",
+    title: "Book While Hot",
+    description: "Schedule appointments on the spot. Leads contacted within 5 minutes are 10x more likely to convert.",
   },
   {
     icon: BellRing,
     step: "04",
-    title: "Automated Reminders",
-    description: "AI sends reminder calls and texts before appointments, capturing confirmations automatically.",
+    title: "Persistent Follow-Up",
+    description: "Automated reminders and follow-ups keep leads engaged until they convert — no prospect left behind.",
   },
 ];
 
@@ -46,48 +46,37 @@ export function HowItWorks() {
             How It Works
           </span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold mb-6">
-            Simple Setup,{" "}
-            <span className="text-gradient">Powerful Results</span>
+            From Missed Call to{" "}
+            <span className="text-gradient">Booked Appointment</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Get started in minutes and let your AI receptionist handle calls around the clock while you focus on running your business.
+            Set up in minutes. Start capturing leads that would've gone to your competitors while you were busy or after hours.
           </p>
         </motion.div>
 
         {/* Steps */}
-        <div className="relative">
-          {/* Connection Line */}
-          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-border to-transparent hidden lg:block" />
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {steps.map((step, index) => (
-              <motion.div
-                key={step.step}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.15 }}
-                className="relative"
-              >
-                <div className="flex flex-col items-center text-center">
-                  {/* Step Number */}
-                  <div className="relative mb-6">
-                    <div className="w-20 h-20 rounded-2xl bg-card border-2 border-border flex items-center justify-center shadow-lg relative z-10">
-                      <step.icon className="w-8 h-8 text-primary" />
-                    </div>
-                    <span className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gradient-hero flex items-center justify-center text-xs font-bold text-primary-foreground shadow-glow">
-                      {step.step}
-                    </span>
-                  </div>
-                  
-                  <h3 className="font-display font-semibold text-xl mb-3">{step.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {step.description}
-                  </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {steps.map((step, index) => (
+            <motion.div
+              key={step.step}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: index * 0.15 }}
+              className="relative"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-2xl bg-card border border-border flex items-center justify-center mb-5">
+                  <step.icon className="w-7 h-7 text-primary" />
                 </div>
-              </motion.div>
-            ))}
-          </div>
+
+                <h3 className="font-display font-semibold text-xl mb-3">{step.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  {step.description}
+                </p>
+              </div>
+            </motion.div>
+          ))}
         </div>
       </div>
     </section>

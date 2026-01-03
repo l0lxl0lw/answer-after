@@ -57,7 +57,7 @@ function getWebhookBaseUrl(): string {
  * NOTE: This is legacy code for non-workflow agents. Only includes contact tools.
  * For lead recovery workflow, use buildWorkflowAgentConfig instead.
  */
-function buildInlineWebhookTools(institutionId: string): any[] {
+function buildInlineWebhookTools(accountId: string): any[] {
   const baseUrl = getWebhookBaseUrl();
   const tools: any[] = [];
 
@@ -73,13 +73,13 @@ function buildInlineWebhookTools(institutionId: string): any[] {
       request_body_schema: {
         type: "object",
         properties: {
-          institution_id: { type: "string", const: institutionId, description: "Institution ID (auto-filled)" },
+          account_id: { type: "string", const: accountId, description: "Account ID (auto-filled)" },
           phone: { type: "string", description: "Customer phone number. Required field." },
           name: { type: "string", description: "Customer full name." },
           address: { type: "string", description: "Customer address including street, city, state, and zip code." },
           email: { type: "string", description: "Customer email address." }
         },
-        required: ["institution_id", "phone"]
+        required: ["account_id", "phone"]
       }
     }
   });
@@ -96,10 +96,10 @@ function buildInlineWebhookTools(institutionId: string): any[] {
       request_body_schema: {
         type: "object",
         properties: {
-          institution_id: { type: "string", const: institutionId, description: "Institution ID (auto-filled)" },
+          account_id: { type: "string", const: accountId, description: "Account ID (auto-filled)" },
           phone: { type: "string", description: "Phone number to look up. Can be from caller ID." }
         },
-        required: ["institution_id", "phone"]
+        required: ["account_id", "phone"]
       }
     }
   });
@@ -108,7 +108,7 @@ function buildInlineWebhookTools(institutionId: string): any[] {
 }
 
 /**
- * Get workflow configuration from institution
+ * Get workflow configuration from account
  */
 function getWorkflowConfig(orgData: any): WorkflowConfig {
   const workflowConfig = orgData.workflow_config || {};
@@ -129,7 +129,7 @@ function getWorkflowConfig(orgData: any): WorkflowConfig {
  */
 async function buildWorkflowAgentConfig(
   supabase: any,
-  institutionId: string,
+  accountId: string,
   orgData: any,
   agentName: string,
   llmModel: string = 'gemini-2.5-flash'
@@ -137,20 +137,10 @@ async function buildWorkflowAgentConfig(
   const baseUrl = getWebhookBaseUrl();
   const workflowConfig = getWorkflowConfig(orgData);
 
-  // Get escalation contact for emergency transfers
-  const { data: escalationContact } = await supabase
-    .from('escalation_contacts')
-    .select('phone, name')
-    .eq('institution_id', institutionId)
-    .eq('is_active', true)
-    .order('priority', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const onCallPhone = escalationContact?.phone || orgData.notification_phone || '';
+  const onCallPhone = orgData.notification_phone || '';
 
   // Build workflow
-  const workflow = buildLeadRecoveryWorkflow(institutionId, baseUrl, workflowConfig);
+  const workflow = buildLeadRecoveryWorkflow(accountId, baseUrl, workflowConfig);
 
   // Build dynamic variables configuration
   const dynamicVarsConfig = buildDynamicVariablesConfig(
@@ -197,32 +187,22 @@ Be warm, helpful, and professional.`;
  */
 async function getDynamicVariablesForCall(
   supabase: any,
-  institutionId: string,
+  accountId: string,
   callerPhone: string
 ): Promise<Record<string, string>> {
-  // Get institution
+  // Get account
   const { data: org } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('name, workflow_config, notification_phone')
-    .eq('id', institutionId)
+    .eq('id', accountId)
     .single();
-
-  // Get escalation contact
-  const { data: escalation } = await supabase
-    .from('escalation_contacts')
-    .select('phone, name')
-    .eq('institution_id', institutionId)
-    .eq('is_active', true)
-    .order('priority', { ascending: true })
-    .limit(1)
-    .maybeSingle();
 
   const workflowConfig = org?.workflow_config || {};
 
   return {
     org_name: org?.name || 'Our company',
-    on_call_phone: escalation?.phone || org?.notification_phone || '',
-    on_call_name: escalation?.name || 'our technician',
+    on_call_phone: org?.notification_phone || '',
+    on_call_name: 'our technician',
     caller_phone: callerPhone,
     service_categories: (workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general']).join(', '),
     callback_timeframe: `within ${workflowConfig.callback_hours_offset || 2} hours`,
@@ -245,19 +225,19 @@ serve(async (req) => {
       const body = await req.json();
 
       if (body.action === 'create-agent') {
-        return await handleCreateAgent(supabase, body.institutionId, body.context);
+        return await handleCreateAgent(supabase, body.accountId, body.context);
       }
 
       if (body.action === 'update-agent') {
-        return await handleUpdateAgent(supabase, body.institutionId, body.context, body.voiceId);
+        return await handleUpdateAgent(supabase, body.accountId, body.context, body.voiceId);
       }
 
       if (body.action === 'rename-agent') {
-        return await handleRenameAgent(supabase, body.institutionId, body.name);
+        return await handleRenameAgent(supabase, body.accountId, body.name);
       }
 
       if (body.action === 'import-phone') {
-        return await handleImportPhone(supabase, body.institutionId, body.agentId, body.phoneNumber);
+        return await handleImportPhone(supabase, body.accountId, body.agentId, body.phoneNumber);
       }
     }
 
@@ -463,8 +443,8 @@ async function handleWebSocketConnection(req: Request, url: URL, supabase: any) 
   return response;
 }
 
-async function handleCreateAgent(supabase: any, institutionId: string, context?: string) {
-  const log = logger.withContext({ institutionId, action: 'create-agent' });
+async function handleCreateAgent(supabase: any, accountId: string, context?: string) {
+  const log = logger.withContext({ accountId, action: 'create-agent' });
 
   let apiKey: string;
   try {
@@ -473,34 +453,34 @@ async function handleCreateAgent(supabase: any, institutionId: string, context?:
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!institutionId) {
-    return errorResponse('Institution ID is required', 400);
+  if (!accountId) {
+    return errorResponse('Account ID is required', 400);
   }
 
   log.step('Creating ElevenLabs agent');
 
   const { data: orgData, error: orgError } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('*')
-    .eq('id', institutionId)
+    .eq('id', accountId)
     .single();
 
   if (orgError) {
-    log.error('Error fetching institution', orgError);
-    return errorResponse('Organization not found', 404);
+    log.error('Error fetching account', orgError);
+    return errorResponse('Account not found', 404);
   }
 
-  // Get or create institution_agents record
+  // Get or create account_agents record
   let { data: agentRecord } = await supabase
-    .from('institution_agents')
+    .from('account_agents')
     .select('*')
-    .eq('institution_id', institutionId)
+    .eq('account_id', accountId)
     .maybeSingle();
 
   if (!agentRecord) {
     const { data: newRecord } = await supabase
-      .from('institution_agents')
-      .insert({ institution_id: institutionId, context: context || null })
+      .from('account_agents')
+      .insert({ account_id: accountId, context: context || null })
       .select()
       .single();
     agentRecord = newRecord;
@@ -509,11 +489,15 @@ async function handleCreateAgent(supabase: any, institutionId: string, context?:
   const agentContext = context || agentRecord?.context || '';
 
   // Build inline webhook tools (contact tools only for legacy mode)
-  const inlineTools = buildInlineWebhookTools(institutionId);
+  const inlineTools = buildInlineWebhookTools(accountId);
   log.info('Built inline tools', { toolCount: inlineTools.length, toolNames: inlineTools.map((t: any) => t.name) });
 
   // Build prompt with tool instructions
   const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
+
+  // Fetch knowledge base documents
+  const kbDocs = await getKnowledgeBaseDocuments(supabase, accountId);
+  log.info('Fetched KB documents', { count: kbDocs.length });
 
   const DEFAULT_VOICE_ID = '625jGFaa0zTLtQfxwc6Q';
 
@@ -525,22 +509,33 @@ async function handleCreateAgent(supabase: any, institutionId: string, context?:
 
   const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
   const modePrefix = USE_WORKFLOW_AGENTS ? '[WORKFLOW]' : '[INBOUND]';
-  const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${institutionId}`;
+  const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${accountId}`;
 
   // Build agent config - use workflow or inline tools based on feature flag
   let agentConfig: any;
 
   if (USE_WORKFLOW_AGENTS) {
     log.info('Using workflow-based agent configuration');
-    agentConfig = await buildWorkflowAgentConfig(supabase, institutionId, orgData, agentName, llmModel);
+    agentConfig = await buildWorkflowAgentConfig(supabase, accountId, orgData, agentName, llmModel);
   } else {
     // Legacy: Build agent config with inline tools
+    const promptConfig: any = { prompt: systemPrompt };
+
+    // Add knowledge base if there are documents
+    if (kbDocs.length > 0) {
+      promptConfig.knowledge_base = kbDocs.map(doc => ({
+        type: 'file',
+        id: doc.id,
+        name: doc.name,
+      }));
+    }
+
     agentConfig = {
       name: agentName,
       conversation_config: {
         agent: {
           first_message: firstMessage,
-          prompt: { prompt: systemPrompt },
+          prompt: promptConfig,
           llm: { model: llmModel },
           tools: inlineTools  // Inline webhook tools with api_schema
         },
@@ -563,19 +558,19 @@ async function handleCreateAgent(supabase: any, institutionId: string, context?:
     log.info('ElevenLabs agent created', { agentId: agentData.agent_id });
 
     await supabase
-      .from('institution_agents')
+      .from('account_agents')
       .update({ elevenlabs_agent_id: agentData.agent_id, context: agentContext || null })
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     // Import phone number to ElevenLabs
     try {
-      await importPhoneNumberToElevenLabs(supabase, institutionId, agentData.agent_id, agentName, apiKey);
+      await importPhoneNumberToElevenLabs(supabase, accountId, agentData.agent_id, agentName, apiKey);
     } catch (importError) {
       const err = importError as Error;
       log.error('Phone import failed', {
         error: err.message,
         stack: err.stack,
-        institutionId,
+        accountId,
         agentId: agentData.agent_id
       });
       console.error('[ElevenLabs Phone Import] FAILED:', err.message, err.stack);
@@ -595,19 +590,19 @@ async function handleCreateAgent(supabase: any, institutionId: string, context?:
 
 async function importPhoneNumberToElevenLabs(
   supabase: any,
-  institutionId: string,
+  accountId: string,
   agentId: string,
   agentLabel: string,
   apiKey: string,
   phoneNumberParam?: string  // Optional: if provided, query by phone number directly
 ): Promise<void> {
-  console.log(`[ElevenLabs Phone Import] Starting for org: ${institutionId}, agent: ${agentId}, phone: ${phoneNumberParam || 'not provided'}`);
+  console.log(`[ElevenLabs Phone Import] Starting for org: ${accountId}, agent: ${agentId}, phone: ${phoneNumberParam || 'not provided'}`);
 
   // Always use the org's actual subaccount credentials - this is where the phone was purchased
   const { data: orgData, error: orgError } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
-    .eq('id', institutionId)
+    .eq('id', accountId)
     .single();
 
   if (orgError) {
@@ -648,12 +643,12 @@ async function importPhoneNumberToElevenLabs(
     phoneData = result.data;
     phoneError = result.error;
   } else {
-    // Fallback: query by institution_id
-    console.log(`[ElevenLabs Phone Import] Querying by institution_id: ${institutionId}`);
+    // Fallback: query by account_id
+    console.log(`[ElevenLabs Phone Import] Querying by account_id: ${accountId}`);
     const result = await supabase
       .from('phone_numbers')
       .select('id, phone_number, elevenlabs_phone_number_id')
-      .eq('institution_id', institutionId)
+      .eq('account_id', accountId)
       .eq('is_active', true)
       .maybeSingle();
     phoneData = result.data;
@@ -665,7 +660,7 @@ async function importPhoneNumberToElevenLabs(
   }
 
   if (!phoneData) {
-    throw new Error(`[ElevenLabs Phone Import] No phone number found - phoneNumber: ${phoneNumberParam}, orgId: ${institutionId}`);
+    throw new Error(`[ElevenLabs Phone Import] No phone number found - phoneNumber: ${phoneNumberParam}, orgId: ${accountId}`);
   }
 
   console.log(`[ElevenLabs Phone Import] Found phone: ${phoneData.phone_number}, elevenlabs_id: ${phoneData.elevenlabs_phone_number_id || 'none'}`);
@@ -791,6 +786,25 @@ When to use these tools:
   return { prompt: fullPrompt, firstMessage };
 }
 
+/**
+ * Fetch knowledge base documents for an account
+ */
+async function getKnowledgeBaseDocuments(supabase: any, accountId: string): Promise<Array<{ id: string; name: string }>> {
+  const { data: docs } = await supabase
+    .from('knowledge_base_documents')
+    .select('elevenlabs_document_id, name')
+    .eq('account_id', accountId);
+
+  if (!docs || docs.length === 0) {
+    return [];
+  }
+
+  return docs.map((doc: { elevenlabs_document_id: string; name: string }) => ({
+    id: doc.elevenlabs_document_id,
+    name: doc.name,
+  }));
+}
+
 function getDefaultBasePrompt(): string {
   return `You are a friendly AI receptionist for {{orgName}}, a professional service company.
 
@@ -812,8 +826,8 @@ Business hours: {{businessHoursStart}} to {{businessHoursEnd}}
 When you have gathered enough information (name, phone, address, issue description), summarize the appointment details and confirm with the caller.`;
 }
 
-async function handleUpdateAgent(supabase: any, institutionId: string, context?: string, voiceId?: string) {
-  const log = logger.withContext({ institutionId, action: 'update-agent' });
+async function handleUpdateAgent(supabase: any, accountId: string, context?: string, voiceId?: string) {
+  const log = logger.withContext({ accountId, action: 'update-agent' });
 
   let apiKey: string;
   try {
@@ -822,41 +836,45 @@ async function handleUpdateAgent(supabase: any, institutionId: string, context?:
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!institutionId) {
-    return errorResponse('Institution ID is required', 400);
+  if (!accountId) {
+    return errorResponse('Account ID is required', 400);
   }
 
   log.step('Updating ElevenLabs agent');
 
   const { data: orgData } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('*')
-    .eq('id', institutionId)
+    .eq('id', accountId)
     .single();
 
   if (!orgData) {
-    return errorResponse('Organization not found', 404);
+    return errorResponse('Account not found', 404);
   }
 
   const { data: agentRecord } = await supabase
-    .from('institution_agents')
+    .from('account_agents')
     .select('*')
-    .eq('institution_id', institutionId)
+    .eq('account_id', accountId)
     .maybeSingle();
 
   if (!agentRecord?.elevenlabs_agent_id) {
     log.info('No existing agent found, creating new one');
-    return handleCreateAgent(supabase, institutionId, context);
+    return handleCreateAgent(supabase, accountId, context);
   }
 
   const agentContext = context || agentRecord?.context || '';
 
   // Build inline webhook tools (contact tools only for legacy mode)
-  const inlineTools = buildInlineWebhookTools(institutionId);
+  const inlineTools = buildInlineWebhookTools(accountId);
   log.info('Built inline tools for update', { toolCount: inlineTools.length, toolNames: inlineTools.map((t: any) => t.name) });
 
   // Build prompt with tool instructions
   const { prompt: systemPrompt, firstMessage } = await buildAgentPrompt(supabase, orgData, agentContext);
+
+  // Fetch knowledge base documents
+  const kbDocs = await getKnowledgeBaseDocuments(supabase, accountId);
+  log.info('Fetched KB documents for update', { count: kbDocs.length });
 
   let llmModel = 'gemini-2.5-flash';
   try {
@@ -871,15 +889,26 @@ async function handleUpdateAgent(supabase: any, institutionId: string, context?:
     log.info('Using workflow-based agent configuration for update');
     const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
     const modePrefix = '[WORKFLOW]';
-    const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${institutionId}`;
-    updateConfig = await buildWorkflowAgentConfig(supabase, institutionId, orgData, agentName, llmModel);
+    const agentName = `${envPrefix}${modePrefix} ${orgData.name} - ${accountId}`;
+    updateConfig = await buildWorkflowAgentConfig(supabase, accountId, orgData, agentName, llmModel);
   } else {
     // Legacy: Build update config with inline tools
+    const promptConfig: any = { prompt: systemPrompt };
+
+    // Add knowledge base if there are documents
+    if (kbDocs.length > 0) {
+      promptConfig.knowledge_base = kbDocs.map(doc => ({
+        type: 'file',
+        id: doc.id,
+        name: doc.name,
+      }));
+    }
+
     updateConfig = {
       conversation_config: {
         agent: {
           first_message: firstMessage,
-          prompt: { prompt: systemPrompt },
+          prompt: promptConfig,
           llm: { model: llmModel },
           tools: inlineTools  // Inline webhook tools with api_schema
         }
@@ -902,24 +931,24 @@ async function handleUpdateAgent(supabase: any, institutionId: string, context?:
     log.info('ElevenLabs agent updated', { useWorkflow: USE_WORKFLOW_AGENTS });
 
     await supabase
-      .from('institution_agents')
+      .from('account_agents')
       .update({ context: agentContext || null })
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     // Import phone number if not already imported (ensures phone is linked to agent)
     const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
     const modePrefix = '[INBOUND]';
-    const agentLabel = `${envPrefix}${modePrefix} ${orgData.name} - ${institutionId}`;
+    const agentLabel = `${envPrefix}${modePrefix} ${orgData.name} - ${accountId}`;
 
     try {
-      await importPhoneNumberToElevenLabs(supabase, institutionId, agentRecord.elevenlabs_agent_id, agentLabel, apiKey);
+      await importPhoneNumberToElevenLabs(supabase, accountId, agentRecord.elevenlabs_agent_id, agentLabel, apiKey);
       log.info('Phone import completed during update');
     } catch (importError) {
       const err = importError as Error;
       log.error('Phone import failed during update', {
         error: err.message,
         stack: err.stack,
-        institutionId,
+        accountId,
         agentId: agentRecord.elevenlabs_agent_id
       });
       // Don't fail the whole update if phone import fails
@@ -937,8 +966,8 @@ async function handleUpdateAgent(supabase: any, institutionId: string, context?:
   }
 }
 
-async function handleRenameAgent(supabase: any, institutionId: string, name: string) {
-  const log = logger.withContext({ institutionId, action: 'rename-agent' });
+async function handleRenameAgent(supabase: any, accountId: string, name: string) {
+  const log = logger.withContext({ accountId, action: 'rename-agent' });
 
   let apiKey: string;
   try {
@@ -947,16 +976,16 @@ async function handleRenameAgent(supabase: any, institutionId: string, name: str
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!institutionId || !name) {
-    return errorResponse('Institution ID and name are required', 400);
+  if (!accountId || !name) {
+    return errorResponse('Account ID and name are required', 400);
   }
 
   log.step('Renaming ElevenLabs agent', { newName: name });
 
   const { data: agentRecord } = await supabase
-    .from('institution_agents')
+    .from('account_agents')
     .select('elevenlabs_agent_id')
-    .eq('institution_id', institutionId)
+    .eq('account_id', accountId)
     .maybeSingle();
 
   if (!agentRecord?.elevenlabs_agent_id) {
@@ -965,7 +994,7 @@ async function handleRenameAgent(supabase: any, institutionId: string, name: str
 
   const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
   const modePrefix = '[INBOUND]';
-  const agentName = `${envPrefix}${modePrefix} ${name} - ${institutionId}`;
+  const agentName = `${envPrefix}${modePrefix} ${name} - ${accountId}`;
 
   try {
     await makeElevenLabsRequest(
@@ -987,8 +1016,8 @@ async function handleRenameAgent(supabase: any, institutionId: string, name: str
   }
 }
 
-async function handleImportPhone(supabase: any, institutionId: string, agentId: string, phoneNumber?: string) {
-  const log = logger.withContext({ institutionId, agentId, phoneNumber, action: 'import-phone' });
+async function handleImportPhone(supabase: any, accountId: string, agentId: string, phoneNumber?: string) {
+  const log = logger.withContext({ accountId, agentId, phoneNumber, action: 'import-phone' });
 
   let apiKey: string;
   try {
@@ -997,31 +1026,31 @@ async function handleImportPhone(supabase: any, institutionId: string, agentId: 
     return errorResponse('ElevenLabs API key not configured', 500);
   }
 
-  if (!institutionId || !agentId) {
-    return errorResponse('Institution ID and Agent ID are required', 400);
+  if (!accountId || !agentId) {
+    return errorResponse('Account ID and Agent ID are required', 400);
   }
 
   log.step('Importing phone to ElevenLabs', { phoneNumber });
 
   // Get org name for label
   const { data: orgData } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('name')
-    .eq('id', institutionId)
+    .eq('id', accountId)
     .single();
 
   const envPrefix = config.isLocal ? '[LOCAL]' : config.isDevelopment ? '[DEV]' : '';
   const modePrefix = '[INBOUND]';
-  const agentLabel = `${envPrefix}${modePrefix} ${orgData?.name || 'Unknown'} - ${institutionId}`;
+  const agentLabel = `${envPrefix}${modePrefix} ${orgData?.name || 'Unknown'} - ${accountId}`;
 
   try {
-    await importPhoneNumberToElevenLabs(supabase, institutionId, agentId, agentLabel, apiKey, phoneNumber);
+    await importPhoneNumberToElevenLabs(supabase, accountId, agentId, agentLabel, apiKey, phoneNumber);
 
     // Get the phone number ID that was just imported
     const { data: phoneData } = await supabase
       .from('phone_numbers')
       .select('elevenlabs_phone_number_id')
-      .eq('institution_id', institutionId)
+      .eq('account_id', accountId)
       .eq('is_active', true)
       .maybeSingle();
 

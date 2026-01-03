@@ -44,7 +44,7 @@ export type AppointmentStatus =
 
 export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing' | 'pending';
 
-export type SubscriptionPlan = 'core' | 'growth' | 'pro' | 'business' | 'enterprise';
+export type SubscriptionPlan = 'starter' | 'pro' | 'business' | 'enterprise';
 
 export type AuditAction =
   | 'call.created'
@@ -70,9 +70,6 @@ export type IntakeCategory =
   | 'pest_control'
   | 'general';
 
-export type EscalationRole = 'owner' | 'manager' | 'technician' | 'on_call';
-
-export type CallTriggerType = 'coverage' | 'overflow' | 'direct';
 
 // ============= Core Entities =============
 
@@ -83,7 +80,7 @@ export interface WorkflowConfig {
   callback_hours_offset?: number;
 }
 
-export interface Institution {
+export interface Account {
   id: string;
   name: string;
   slug: string;
@@ -99,7 +96,7 @@ export interface Institution {
 
 export interface User {
   id: string;
-  institution_id: string | null;
+  account_id: string | null;
   email: string;
   full_name: string;
   phone: string | null;
@@ -109,7 +106,7 @@ export interface User {
   updated_at: string;
 }
 
-export interface UserRole_Record {
+export interface Role {
   id: string;
   user_id: string;
   role: UserRole;
@@ -118,7 +115,7 @@ export interface UserRole_Record {
 
 export interface PhoneNumber {
   id: string;
-  institution_id: string;
+  account_id: string;
   twilio_sid: string | null;
   phone_number: string; // E.164 format
   friendly_name: string | null;
@@ -132,7 +129,7 @@ export interface PhoneNumber {
 
 export interface Call {
   id: string;
-  institution_id: string;
+  account_id: string;
   phone_number_id: string | null;
   contact_id: string | null;
   intake_id: string | null;
@@ -150,11 +147,6 @@ export interface Call {
   ended_at: string | null;
   created_at: string;
   updated_at: string;
-  // Lead recovery fields
-  was_transferred: boolean;
-  transferred_to_phone: string | null;
-  transferred_to_contact_id: string | null;
-  trigger_type: CallTriggerType | null;
   // Legacy lead tracking fields (now on contacts table)
   interest_level: InterestLevel | null;
   lead_status: LeadStatus;
@@ -166,7 +158,7 @@ export interface Call {
 
 export interface Contact {
   id: string;
-  institution_id: string;
+  account_id: string;
   phone: string;
   name: string | null;
   email: string | null;
@@ -216,23 +208,9 @@ export interface CallTranscript {
 
 // ============= Lead Recovery =============
 
-export interface EscalationContact {
-  id: string;
-  institution_id: string;
-  name: string;
-  phone: string;
-  email: string | null;
-  role: EscalationRole;
-  priority: number;
-  is_active: boolean;
-  coverage_schedule: Record<string, { start: string; end: string }> | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface CallIntake {
   id: string;
-  institution_id: string;
+  account_id: string;
   call_id: string | null;
   contact_id: string | null;
   caller_name: string | null;
@@ -267,7 +245,7 @@ export interface CallIntakeWithContact extends CallIntake {
 
 export interface Appointment {
   id: string;
-  institution_id: string;
+  account_id: string;
   call_id: string | null;
   customer_name: string;
   customer_phone: string;
@@ -288,7 +266,7 @@ export interface Appointment {
 
 export interface Subscription {
   id: string;
-  institution_id: string;
+  account_id: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   plan: string;
@@ -304,7 +282,7 @@ export interface Subscription {
 
 export interface AuditLog {
   id: string;
-  institution_id: string;
+  account_id: string;
   user_id: string | null;
   action: AuditAction;
   resource_type: string;
@@ -325,7 +303,7 @@ export interface CallWithDetails extends Call {
   appointment?: Appointment;
 }
 
-export interface InstitutionWithSubscription extends Institution {
+export interface AccountWithSubscription extends Account {
   subscription: Subscription | null;
   phone_numbers: PhoneNumber[];
   user_count: number;
@@ -352,4 +330,15 @@ export interface CallsByOutcome {
   outcome: CallOutcome;
   count: number;
   percentage: number;
+}
+
+// ============= Knowledge Base =============
+
+export interface KnowledgeBaseDocument {
+  id: string;
+  account_id: string;
+  elevenlabs_document_id: string;
+  name: string;
+  file_size_bytes: number | null;
+  created_at: string;
 }

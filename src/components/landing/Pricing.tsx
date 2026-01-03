@@ -183,7 +183,7 @@ export function Pricing() {
           <div className="bg-card border border-border rounded-xl p-6">
             <h4 className="font-semibold text-foreground mb-2">Need more capacity?</h4>
             <p className="text-muted-foreground text-sm mb-3">
-              Top up anytime with credit packages. Credits never expire and are used first.
+              Top up anytime with minute packages. Minutes never expire and are used first.
             </p>
             <div className="flex items-center justify-center gap-4 text-sm">
               <span className="text-foreground"><strong>$5</strong> <span className="text-muted-foreground">for 5 min</span></span>

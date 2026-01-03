@@ -463,7 +463,7 @@ export interface ElevenLabsTool {
  */
 export async function createCalendarTool(
   webhookUrl: string,
-  institutionId: string,
+  accountId: string,
   apiKey: string
 ): Promise<ElevenLabsTool> {
   const toolConfig = {
@@ -477,7 +477,7 @@ export async function createCalendarTool(
         'Content-Type': 'application/json',
       },
       request_body: {
-        institution_id: institutionId,
+        account_id: accountId,
       },
     },
     parameters: {
@@ -565,11 +565,11 @@ export async function listTools(
 /**
  * Create a save contact tool for an agent
  * Allows the agent to save customer contact information during live calls
- * Organization ID is baked into the webhook for security isolation
+ * Account ID is baked into the webhook for security isolation
  */
 export async function createSaveContactTool(
   webhookUrl: string,
-  institutionId: string,
+  accountId: string,
   apiKey: string
 ): Promise<ElevenLabsTool> {
   const toolConfig = {
@@ -583,7 +583,7 @@ export async function createSaveContactTool(
         'Content-Type': 'application/json',
       },
       request_body: {
-        institution_id: institutionId,
+        account_id: accountId,
       },
     },
     parameters: {
@@ -629,11 +629,11 @@ export async function createSaveContactTool(
 /**
  * Create a lookup contact tool for an agent
  * Allows the agent to identify returning customers by phone number
- * Organization ID is baked into the webhook for security isolation
+ * Account ID is baked into the webhook for security isolation
  */
 export async function createLookupContactTool(
   webhookUrl: string,
-  institutionId: string,
+  accountId: string,
   apiKey: string
 ): Promise<ElevenLabsTool> {
   const toolConfig = {
@@ -647,7 +647,7 @@ export async function createLookupContactTool(
         'Content-Type': 'application/json',
       },
       request_body: {
-        institution_id: institutionId,
+        account_id: accountId,
       },
     },
     parameters: {
@@ -676,6 +676,98 @@ export async function createLookupContactTool(
     name: result.name || 'lookup_contact',
     type: result.type || 'webhook',
   };
+}
+
+// ============================================
+// KNOWLEDGE BASE HELPERS
+// ============================================
+
+export interface KnowledgeBaseDocument {
+  id: string;
+  name: string;
+}
+
+/**
+ * Upload a file to ElevenLabs knowledge base
+ * @param file - The file data as Uint8Array
+ * @param fileName - The name to give the document
+ * @param apiKey - ElevenLabs API key
+ * @returns The created document with id and name
+ */
+export async function uploadKnowledgeBaseDocument(
+  file: Uint8Array,
+  fileName: string,
+  apiKey: string
+): Promise<KnowledgeBaseDocument> {
+  const formData = new FormData();
+  // Create Blob directly from the Uint8Array - Deno supports this
+  const blob = new Blob([file.buffer as ArrayBuffer], { type: 'application/pdf' });
+  formData.append('file', blob, fileName);
+  formData.append('name', fileName);
+
+  const response = await fetch(`${ELEVENLABS_API_BASE}/convai/knowledge-base/file`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorMessage = `ElevenLabs KB upload error (${response.status})`;
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorMessage = errorJson.detail?.message || errorJson.detail || errorJson.error || errorMessage;
+    } catch {
+      errorMessage = errorText || errorMessage;
+    }
+    throw new EdgeFunctionError(
+      errorMessage,
+      'ELEVENLABS_KB_UPLOAD_ERROR',
+      response.status
+    );
+  }
+
+  const result = await response.json();
+  return {
+    id: result.id,
+    name: result.name || fileName,
+  };
+}
+
+/**
+ * Delete a document from ElevenLabs knowledge base
+ * @param documentId - The ElevenLabs document ID
+ * @param apiKey - ElevenLabs API key
+ */
+export async function deleteKnowledgeBaseDocument(
+  documentId: string,
+  apiKey: string
+): Promise<void> {
+  await makeElevenLabsRequest(
+    `/convai/knowledge-base/document/${documentId}`,
+    {
+      apiKey,
+      method: 'DELETE',
+    }
+  );
+}
+
+/**
+ * Get all knowledge base documents for an agent
+ * Note: This lists documents in the account's KB, not necessarily attached to an agent
+ * @param apiKey - ElevenLabs API key
+ * @returns Array of knowledge base documents
+ */
+export async function listKnowledgeBaseDocuments(
+  apiKey: string
+): Promise<KnowledgeBaseDocument[]> {
+  const result = await makeElevenLabsRequest<{ documents: KnowledgeBaseDocument[] }>(
+    '/convai/knowledge-base',
+    { apiKey }
+  );
+  return result.documents || [];
 }
 
 // ============================================
@@ -715,7 +807,7 @@ export async function getSignedUrlWithVariables(
  * Creates a workflow with intake → emergency detection → transfer/callback flow
  */
 export function buildLeadRecoveryWorkflow(
-  institutionId: string,
+  accountId: string,
   webhookBaseUrl: string,
   config: WorkflowConfig
 ): AgentWorkflow {
@@ -744,7 +836,7 @@ export function buildLeadRecoveryWorkflow(
         body_schema: {
           type: 'object',
           properties: {
-            institution_id: { type: 'string', const: institutionId },
+            account_id: { type: 'string', const: accountId },
             caller_name: { type: 'string', description: 'Caller name from conversation' },
             caller_phone: { type: 'string', description: 'Caller phone number' },
             caller_address: { type: 'string', description: 'Caller address if provided' },
@@ -761,7 +853,7 @@ export function buildLeadRecoveryWorkflow(
             },
             is_emergency: { type: 'boolean', description: 'Whether this is an emergency' },
           },
-          required: ['institution_id', 'caller_phone', 'issue_description'],
+          required: ['account_id', 'caller_phone', 'issue_description'],
         },
       },
     },

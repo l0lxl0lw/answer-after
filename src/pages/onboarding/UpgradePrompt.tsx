@@ -180,7 +180,7 @@ export default function UpgradePrompt() {
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
                 <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                <span className="text-sm">{selectedPlan.credits} credits/month (~{Math.floor(selectedPlan.credits / 3)} calls)</span>
+                <span className="text-sm">{Math.round(selectedPlan.credits / 60)} minutes/month (~{Math.floor(selectedPlan.credits / 180)} calls)</span>
               </li>
               {selectedPlan.features && (selectedPlan.features as string[]).map((feature: string, idx: number) => (
                 <li key={idx} className="flex items-start gap-3">
@@ -247,11 +247,11 @@ export default function UpgradePrompt() {
                 <ul className="space-y-3">
                   <li className="flex items-start gap-3">
                     <Check className={`w-5 h-5 ${isRecommended ? 'text-primary' : 'text-success'} flex-shrink-0 mt-0.5`} />
-                    <span className="text-sm font-medium">{upgradePlan.credits} credits/month (~{Math.floor(upgradePlan.credits / 3)} calls)</span>
+                    <span className="text-sm font-medium">{Math.round(upgradePlan.credits / 60)} minutes/month (~{Math.floor(upgradePlan.credits / 180)} calls)</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <Sparkles className={`w-5 h-5 ${isRecommended ? 'text-primary' : 'text-success'} flex-shrink-0 mt-0.5`} />
-                    <span className="text-sm font-medium">+{upgradePlan.credits - selectedPlan.credits} more credits</span>
+                    <span className="text-sm font-medium">+{Math.round((upgradePlan.credits - selectedPlan.credits) / 60)} more minutes</span>
                   </li>
                   {/* Show only NEW features gained by upgrading */}
                   {newFeatures.map((feature: string, idx: number) => (

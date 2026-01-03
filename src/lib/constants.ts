@@ -43,7 +43,6 @@ export type TopupPackageId = keyof typeof APP_CONFIG.topupPackages;
  */
 export const SUBSCRIPTION_PLANS = {
   STARTER: 'starter',
-  GROWTH: 'growth',
   PRO: 'pro',
   BUSINESS: 'business',
   ENTERPRISE: 'enterprise',

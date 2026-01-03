@@ -245,7 +245,7 @@ export default function SelectPlan() {
                     </p>
                   </div>
 
-                  {/* Credits */}
+                  {/* Minutes */}
                   <div
                     className={`mb-4 p-3 rounded-lg ${
                       tier.is_popular ? "bg-primary-foreground/10" : "bg-muted"
@@ -256,14 +256,14 @@ export default function SelectPlan() {
                         tier.is_popular ? "text-primary-foreground" : "text-foreground"
                       }`}
                     >
-                      {tier.credits.toLocaleString()} credits/mo
+                      {Math.round(tier.credits / 60)} minutes/mo
                     </div>
                     <div
                       className={`text-xs ${
                         tier.is_popular ? "text-primary-foreground/70" : "text-muted-foreground"
                       }`}
                     >
-                      ~{Math.round(tier.credits / 3)} calls per month
+                      ~{Math.round(tier.credits / 180)} calls per month
                     </div>
                   </div>
 

@@ -4,26 +4,26 @@
  */
 
 // ============================================
-// Institution Types
+// Account Types
 // ============================================
 
-export interface InstitutionProvisionRequest {
-  institutionName: string;
+export interface AccountProvisionRequest {
+  accountName: string;
   notificationPhone: string;
   businessPhone?: string;
   timezone: string;
 }
 
-export interface InstitutionProvisionResponse {
+export interface AccountProvisionResponse {
   success: boolean;
   message: string;
-  institutionId: string;
-  institution: Institution;
+  accountId: string;
+  account: Account;
   subscription: Subscription;
   nextStep?: string;
 }
 
-export interface Institution {
+export interface Account {
   id: string;
   name: string;
   slug: string;
@@ -41,6 +41,11 @@ export interface Institution {
   updated_at: string;
 }
 
+// Backward compatibility
+export type Institution = Account;
+export type InstitutionProvisionRequest = AccountProvisionRequest;
+export type InstitutionProvisionResponse = AccountProvisionResponse;
+
 // ============================================
 // Onboarding Types
 // ============================================
@@ -53,7 +58,7 @@ export type OnboardingStep =
   | 'finalize_subscription';
 
 export interface OnboardingRequest {
-  institutionId: string;
+  accountId: string;
   subscriptionPlan: string;
   areaCode?: string;
 }
@@ -99,7 +104,7 @@ export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled';
 
 export interface Subscription {
   id: string;
-  institution_id: string;
+  account_id: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   plan: SubscriptionPlan;
@@ -121,7 +126,7 @@ export type UserRole = 'owner' | 'admin' | 'staff';
 
 export interface Profile {
   id: string;
-  institution_id: string | null;
+  account_id: string | null;
   email: string;
   full_name: string;
   phone: string | null;
@@ -139,7 +144,7 @@ export interface Profile {
 
 export interface InstitutionAgent {
   id: string;
-  institution_id: string;
+  account_id: string;
   elevenlabs_agent_id: string | null;
   context: string | null; // JSON string
   created_at: string;
@@ -188,7 +193,7 @@ export interface AgentActionResponse {
 
 export interface PhoneNumber {
   id: string;
-  institution_id: string;
+  account_id: string;
   twilio_sid: string | null;
   phone_number: string;
   friendly_name: string | null;

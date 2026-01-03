@@ -3,7 +3,7 @@ import { createServiceClient } from "../_shared/db.ts";
 import { corsPreflightResponse, errorResponse, successResponse } from "../_shared/errors.ts";
 import { createLogger } from "../_shared/logger.ts";
 
-const logger = createLogger('admin-list-institutions');
+const logger = createLogger('admin-list-accounts');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -13,9 +13,9 @@ serve(async (req) => {
   try {
     const supabaseAdmin = createServiceClient();
 
-    // Fetch all institutions with related data
-    const { data: institutions, error } = await supabaseAdmin
-      .from('institutions')
+    // Fetch all accounts with related data
+    const { data: accounts, error } = await supabaseAdmin
+      .from('accounts')
       .select(`
         id,
         name,
@@ -24,17 +24,17 @@ serve(async (req) => {
         is_onboarding_complete,
         phone_numbers(phone_number),
         subscriptions(plan, status, stripe_subscription_id),
-        institution_agents(elevenlabs_agent_id),
-        profiles(email, full_name)
+        account_agents(elevenlabs_agent_id),
+        users(email, full_name)
       `)
       .order('created_at', { ascending: false });
 
     if (error) {
-      logger.error('Error fetching institutions', error);
+      logger.error('Error fetching accounts', error);
       throw error;
     }
 
-    return successResponse({ success: true, data: institutions || [] });
+    return successResponse({ success: true, data: accounts || [] });
 
   } catch (error) {
     logger.error('Handler error', error as Error);

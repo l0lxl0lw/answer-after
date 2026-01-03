@@ -60,27 +60,17 @@ async function getDynamicVariablesForWorkflow(
 ): Promise<Record<string, string>> {
   // Get institution
   const { data: org } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('name, workflow_config, notification_phone')
     .eq('id', institutionId)
     .single();
-
-  // Get escalation contact (highest priority, active)
-  const { data: escalation } = await supabase
-    .from('escalation_contacts')
-    .select('phone, name')
-    .eq('institution_id', institutionId)
-    .eq('is_active', true)
-    .order('priority', { ascending: true })
-    .limit(1)
-    .maybeSingle();
 
   const workflowConfig = org?.workflow_config || {};
 
   return {
     org_name: org?.name || 'Our company',
-    on_call_phone: escalation?.phone || org?.notification_phone || '',
-    on_call_name: escalation?.name || 'our technician',
+    on_call_phone: org?.notification_phone || '',
+    on_call_name: 'our technician',
     caller_phone: callerPhone,
     service_categories: (workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general']).join(', '),
     callback_timeframe: `within ${workflowConfig.callback_hours_offset || 2} hours`,
@@ -184,7 +174,7 @@ serve(async (req) => {
       // Find the call record with contact
       const { data: existingCall } = await supabase
         .from('calls')
-        .select('id, is_emergency, institution_id, contact_id, caller_phone')
+        .select('id, is_emergency, account_id, contact_id, caller_phone')
         .eq('twilio_call_sid', callSid)
         .maybeSingle();
 
@@ -278,7 +268,7 @@ serve(async (req) => {
             .from('contacts')
             .update(contactUpdate)
             .eq('id', existingCall.contact_id);
-        } else if (existingCall.institution_id && existingCall.caller_phone) {
+        } else if (existingCall.account_id && existingCall.caller_phone) {
           // If no contact_id on call, try to find/update contact by phone
           const contactUpdate: Record<string, unknown> = {
             updated_at: new Date().toISOString(),
@@ -293,13 +283,13 @@ serve(async (req) => {
           await supabase
             .from('contacts')
             .update(contactUpdate)
-            .eq('institution_id', existingCall.institution_id)
+            .eq('account_id', existingCall.account_id)
             .eq('phone', existingCall.caller_phone);
         }
 
         // Deduct credits based on call duration (1 credit per second)
         // Priority: Use purchased credits first, then plan credits
-        if (callDuration && callDuration > 0 && existingCall.institution_id) {
+        if (callDuration && callDuration > 0 && existingCall.account_id) {
           let remainingToDeduct = callDuration;
           let purchasedCreditsUsed = 0;
           let planCreditsUsed = 0;
@@ -308,7 +298,7 @@ serve(async (req) => {
           const { data: purchasedCredits } = await supabase
             .from('purchased_credits')
             .select('id, credits_remaining')
-            .eq('institution_id', existingCall.institution_id)
+            .eq('account_id', existingCall.account_id)
             .gt('credits_remaining', 0)
             .order('purchased_at', { ascending: true });
 
@@ -334,7 +324,7 @@ serve(async (req) => {
             const { data: subscription } = await supabase
               .from('subscriptions')
               .select('id, used_credits, total_credits')
-              .eq('institution_id', existingCall.institution_id)
+              .eq('account_id', existingCall.account_id)
               .maybeSingle();
 
             if (subscription) {
@@ -351,7 +341,7 @@ serve(async (req) => {
           }
 
           log.info('Credits deducted', {
-            institutionId: existingCall.institution_id,
+            institutionId: existingCall.account_id,
             callDuration,
             purchasedCreditsUsed,
             planCreditsUsed,
@@ -369,7 +359,7 @@ serve(async (req) => {
     // Find phone number and organization
     const { data: phoneData } = await supabase
       .from('phone_numbers')
-      .select('id, institution_id')
+      .select('id, account_id')
       .eq('phone_number', calledNumber)
       .eq('is_active', true)
       .maybeSingle();
@@ -377,15 +367,15 @@ serve(async (req) => {
     let agentId = null;
 
     if (phoneData) {
-      // Get ElevenLabs agent ID from organization_agents table
+      // Get ElevenLabs agent ID from account_agents table
       const { data: agentData } = await supabase
-        .from('institution_agents')
+        .from('account_agents')
         .select('elevenlabs_agent_id')
-        .eq('institution_id', phoneData.institution_id)
+        .eq('account_id', phoneData.account_id)
         .maybeSingle();
 
       agentId = agentData?.elevenlabs_agent_id;
-      log.info('Agent found', { institutionId: phoneData.institution_id, agentId });
+      log.info('Agent found', { institutionId: phoneData.account_id, agentId });
 
       // Create or find call record
       const { data: existingCall } = await supabase
@@ -399,12 +389,12 @@ serve(async (req) => {
         const { data: contact } = await supabase
           .from('contacts')
           .upsert({
-            institution_id: phoneData.institution_id,
+            account_id: phoneData.account_id,
             phone: callerPhone,
             status: 'lead',
             source: 'inbound_call',
           }, {
-            onConflict: 'institution_id,phone',
+            onConflict: 'account_id,phone',
             ignoreDuplicates: false,
           })
           .select('id')
@@ -416,7 +406,7 @@ serve(async (req) => {
         await supabase
           .from('calls')
           .insert({
-            institution_id: phoneData.institution_id,
+            account_id: phoneData.account_id,
             phone_number_id: phoneData.id,
             contact_id: contact?.id || null,
             twilio_call_sid: callSid,
@@ -433,16 +423,16 @@ serve(async (req) => {
     if (phoneData) {
       const { data: greetingFile } = await supabase.storage
         .from('greetings')
-        .getPublicUrl(`${phoneData.institution_id}/greeting.mp3`);
+        .getPublicUrl(`${phoneData.account_id}/greeting.mp3`);
 
       // Check if file exists by trying to fetch its metadata
       const { data: fileList } = await supabase.storage
         .from('greetings')
-        .list(phoneData.institution_id);
+        .list(phoneData.account_id);
 
       if (fileList && fileList.some(f => f.name === 'greeting.mp3')) {
         greetingAudioUrl = greetingFile.publicUrl;
-        log.info('Greeting audio found', { institutionId: phoneData.institution_id });
+        log.info('Greeting audio found', { institutionId: phoneData.account_id });
       }
     }
 
@@ -479,7 +469,7 @@ serve(async (req) => {
 
     // For workflow agents, fetch and pass dynamic variables
     if (USE_WORKFLOW_AGENTS && phoneData) {
-      const dynamicVars = await getDynamicVariablesForWorkflow(supabase, phoneData.institution_id, callerPhone);
+      const dynamicVars = await getDynamicVariablesForWorkflow(supabase, phoneData.account_id, callerPhone);
       // Append dynamic variables as query parameters
       const varsParams = new URLSearchParams();
       for (const [key, value] of Object.entries(dynamicVars)) {

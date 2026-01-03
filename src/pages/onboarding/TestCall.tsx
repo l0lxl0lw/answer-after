@@ -37,7 +37,7 @@ export default function TestCall() {
 
   useEffect(() => {
     loadPhoneNumber();
-  }, [user?.institution_id]);
+  }, [user?.account_id]);
 
   // Auto-scroll transcripts
   useEffect(() => {
@@ -46,9 +46,9 @@ export default function TestCall() {
 
   // Listen for new calls via realtime + polling fallback
   useEffect(() => {
-    if (!isListening || !user?.institution_id) return;
+    if (!isListening || !user?.account_id) return;
 
-    log.debug('Setting up call listener for org:', user.institution_id);
+    log.debug('Setting up call listener for account:', user.account_id);
     const startTime = new Date().toISOString();
 
     // Realtime subscription
@@ -60,7 +60,7 @@ export default function TestCall() {
           event: "INSERT",
           schema: "public",
           table: "calls",
-          filter: `institution_id=eq.${user.institution_id}`,
+          filter: `account_id=eq.${user.account_id}`,
         },
         (payload) => {
           log.debug("New call detected via realtime!", payload);
@@ -73,7 +73,7 @@ export default function TestCall() {
           event: "UPDATE",
           schema: "public",
           table: "calls",
-          filter: `institution_id=eq.${user.institution_id}`,
+          filter: `account_id=eq.${user.account_id}`,
         },
         (payload) => {
           log.debug("Call updated:", payload);
@@ -96,7 +96,7 @@ export default function TestCall() {
         const { data: recentCalls } = await supabase
           .from('calls')
           .select('*')
-          .eq('institution_id', user.institution_id)
+          .eq('account_id', user.account_id)
           .gte('created_at', startTime)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -114,7 +114,7 @@ export default function TestCall() {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
-  }, [isListening, user?.institution_id, callId, callDetected]);
+  }, [isListening, user?.account_id, callId, callDetected]);
 
   // Listen for transcripts when call is active
   useEffect(() => {
@@ -146,13 +146,13 @@ export default function TestCall() {
   }, [callId]);
 
   const loadPhoneNumber = async () => {
-    if (!user?.institution_id) return;
+    if (!user?.account_id) return;
 
     try {
       const { data } = await supabase
         .from("phone_numbers")
         .select("phone_number")
-        .eq("institution_id", user.institution_id)
+        .eq("account_id", user.account_id)
         .eq("is_active", true)
         .maybeSingle();
 
@@ -202,18 +202,18 @@ export default function TestCall() {
   };
 
   const completeOnboarding = async () => {
-    if (!user?.institution_id) return;
+    if (!user?.account_id) return;
 
     setIsCompleting(true);
 
     try {
       const { error } = await supabase
-        .from("institutions")
+        .from("accounts")
         .update({
           is_onboarding_complete: true,
           onboarding_completed_at: new Date().toISOString(),
         })
-        .eq("id", user.institution_id);
+        .eq("id", user.account_id);
 
       if (error) {
         throw error;
@@ -302,7 +302,7 @@ export default function TestCall() {
           transition={{ delay: 0.1 }}
           className="bg-gradient-to-br from-primary/10 to-accent/10 border-2 border-primary rounded-xl p-8 mb-6 text-center"
         >
-          <p className="text-sm text-muted-foreground mb-2">Your AI-Powered Number</p>
+          <p className="text-sm text-muted-foreground mb-2">Your Lead Capture Number</p>
           <a
             href={`tel:${phoneNumber}`}
             className="text-4xl font-bold text-primary hover:text-primary/80 transition-colors inline-block"

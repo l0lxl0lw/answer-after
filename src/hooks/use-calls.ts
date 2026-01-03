@@ -18,7 +18,7 @@ export interface Conversation {
 // Call from database (preferred - no external API calls)
 export interface CallRecord {
   id: string;
-  institution_id: string;
+  account_id: string;
   caller_phone: string;
   caller_name: string | null;
   status: string;
@@ -44,16 +44,16 @@ export function useCallHistory(params?: { search?: string; page?: number; per_pa
   const perPage = params?.per_page || 20;
 
   return useQuery({
-    queryKey: ['call-history', user?.institution_id, params],
+    queryKey: ['call-history', user?.account_id, params],
     queryFn: async () => {
-      if (!user?.institution_id) return { calls: [], total: 0, page, per_page: perPage };
+      if (!user?.account_id) return { calls: [], total: 0, page, per_page: perPage };
 
       // Build query
       let query = supabase
         .from('calls')
         .select(`
           id,
-          institution_id,
+          account_id,
           caller_phone,
           caller_name,
           status,
@@ -65,7 +65,7 @@ export function useCallHistory(params?: { search?: string; page?: number; per_pa
           elevenlabs_conversation_id,
           contact:contact_id(id, name)
         `, { count: 'exact' })
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .order('started_at', { ascending: false });
 
       // Apply search filter
@@ -92,7 +92,7 @@ export function useCallHistory(params?: { search?: string; page?: number; per_pa
         per_page: perPage,
       };
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -112,7 +112,7 @@ export function useCallDetail(callId: string) {
         .from('calls')
         .select(`
           id,
-          institution_id,
+          account_id,
           caller_phone,
           caller_name,
           status,
@@ -134,7 +134,7 @@ export function useCallDetail(callId: string) {
 
       return call as CallRecord;
     },
-    enabled: !!callId && !!user?.institution_id,
+    enabled: !!callId && !!user?.account_id,
   });
 }
 
@@ -142,9 +142,9 @@ export function useConversations(params?: { search?: string; page?: number; per_
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['conversations', user?.institution_id, params],
+    queryKey: ['conversations', user?.account_id, params],
     queryFn: async () => {
-      if (!user?.institution_id) return { conversations: [], meta: { page: 1, per_page: 20, total: 0, has_more: false } };
+      if (!user?.account_id) return { conversations: [], meta: { page: 1, per_page: 20, total: 0, has_more: false } };
 
       const session = await supabase.auth.getSession();
 
@@ -176,7 +176,7 @@ export function useConversations(params?: { search?: string; page?: number; per_
         meta: data.meta,
       };
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -184,9 +184,9 @@ export function useCalls(params?: CallListParams) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['calls', 'twilio', user?.institution_id, params],
+    queryKey: ['calls', 'twilio', user?.account_id, params],
     queryFn: async () => {
-      if (!user?.institution_id) return { calls: [], meta: { page: 1, per_page: 20, total: 0, total_pages: 0 } };
+      if (!user?.account_id) return { calls: [], meta: { page: 1, per_page: 20, total: 0, total_pages: 0 } };
 
       // Build query params for edge function
       const queryParams = new URLSearchParams();
@@ -224,7 +224,7 @@ export function useCalls(params?: CallListParams) {
         meta: data?.meta || { page: 1, per_page: 20, total: 0, total_pages: 0 },
       };
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -254,7 +254,7 @@ export function useCall(id: string) {
       const callData = await response.json();
       return callData;
     },
-    enabled: !!id && !!user?.institution_id,
+    enabled: !!id && !!user?.account_id,
   });
 }
 
@@ -262,9 +262,9 @@ export function useRecentCalls(limit = 5) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['calls', 'twilio', 'recent', user?.institution_id, limit],
+    queryKey: ['calls', 'twilio', 'recent', user?.account_id, limit],
     queryFn: async () => {
-      if (!user?.institution_id) return [];
+      if (!user?.account_id) return [];
 
       const { data, error } = await supabase.functions.invoke('get-twilio-calls', {
         body: null,
@@ -281,7 +281,7 @@ export function useRecentCalls(limit = 5) {
       // Return only the first 'limit' calls
       return (data?.calls || []).slice(0, limit);
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
     refetchInterval: 15000,
   });
 }

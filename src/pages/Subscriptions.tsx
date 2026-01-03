@@ -35,8 +35,8 @@ export default function Subscriptions() {
       queryClient.invalidateQueries({ queryKey: ['purchased-credits'] });
 
       // Show success toast
-      toast.success('Credits added!', {
-        description: `${creditsAdded || '300'} credits have been added to your account.`,
+      toast.success('Minutes added!', {
+        description: `${creditsAdded || '5'} minutes have been added to your account.`,
       });
 
       // Clean up URL params
@@ -59,7 +59,7 @@ export default function Subscriptions() {
     if (shouldSkipStripe()) {
       shadcnToast({
         title: "Development Mode",
-        description: "Stripe credit top-ups are disabled in local environment.",
+        description: "Stripe minute top-ups are disabled in local environment.",
       });
       return;
     }
@@ -75,16 +75,6 @@ export default function Subscriptions() {
     return Math.floor(priceCents / 100);
   };
 
-  const formatCredits = (credits: number) => {
-    if (credits <= 0) return "Custom";
-    return credits.toLocaleString();
-  };
-
-  const formatMinutes = (credits: number) => {
-    if (credits <= 0) return "";
-    const minutes = Math.round(credits / 60);
-    return `(${minutes} min)`;
-  };
 
   const getPlanIndex = (planId: string) => tiers?.findIndex(t => t.plan_id === planId) ?? -1;
   const currentPlanIndex = getPlanIndex(currentPlan);
@@ -153,12 +143,12 @@ export default function Subscriptions() {
                 </Button>
               </div>
 
-              {/* Main credit display */}
+              {/* Main minutes display */}
               <div className="text-center mb-4">
                 <div className="text-4xl font-bold text-foreground">
-                  {totalAvailable.toLocaleString()}
+                  {Math.round(totalAvailable / 60)}
                 </div>
-                <div className="text-sm text-muted-foreground">credits available</div>
+                <div className="text-sm text-muted-foreground">minutes available</div>
               </div>
 
               {/* Progress bar */}
@@ -178,14 +168,14 @@ export default function Subscriptions() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Monthly plan</span>
                   <span>
-                    <span className="font-medium">{planRemaining.toLocaleString()}</span>
-                    <span className="text-muted-foreground"> / {planTotal.toLocaleString()}</span>
+                    <span className="font-medium">{Math.round(planRemaining / 60)}</span>
+                    <span className="text-muted-foreground"> / {Math.round(planTotal / 60)} min</span>
                   </span>
                 </div>
                 {purchasedCredits > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Bonus credits</span>
-                    <span className="font-medium text-success">+{purchasedCredits.toLocaleString()}</span>
+                    <span className="text-muted-foreground">Bonus minutes</span>
+                    <span className="font-medium text-success">+{Math.round(purchasedCredits / 60)}</span>
                   </div>
                 )}
               </div>
@@ -359,14 +349,14 @@ export default function Subscriptions() {
           <div className="bg-card border border-border rounded-xl p-6">
             <h4 className="font-semibold text-foreground mb-2">Need more capacity?</h4>
             <p className="text-muted-foreground text-sm mb-5">
-              Top up anytime with credit packages. Credits never expire and are used first.
+              Top up anytime with minute packages. Minutes never expire and are used first.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Basic Package */}
               <div className="p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
                 <div className="text-lg font-bold text-foreground">$5</div>
-                <div className="text-sm text-muted-foreground">300 credits</div>
-                <div className="text-xs text-muted-foreground mb-3">~5 minutes</div>
+                <div className="text-sm text-foreground font-medium">5 minutes</div>
+                <div className="text-xs text-muted-foreground mb-3">$1/min</div>
                 <Button
                   size="sm"
                   variant="outline"
@@ -381,8 +371,8 @@ export default function Subscriptions() {
               <div className="p-4 rounded-lg border-2 border-primary bg-primary/5">
                 <div className="text-xs font-medium text-primary mb-1">Best Value</div>
                 <div className="text-lg font-bold text-foreground">$15</div>
-                <div className="text-sm text-muted-foreground">1,000 credits</div>
-                <div className="text-xs text-muted-foreground mb-3">~17 minutes</div>
+                <div className="text-sm text-foreground font-medium">17 minutes</div>
+                <div className="text-xs text-muted-foreground mb-3">$0.88/min</div>
                 <Button
                   size="sm"
                   onClick={() => handleTopup('value')}
@@ -395,8 +385,8 @@ export default function Subscriptions() {
               {/* Bulk Package */}
               <div className="p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
                 <div className="text-lg font-bold text-foreground">$40</div>
-                <div className="text-sm text-muted-foreground">3,000 credits</div>
-                <div className="text-xs text-muted-foreground mb-3">~50 minutes</div>
+                <div className="text-sm text-foreground font-medium">50 minutes</div>
+                <div className="text-xs text-muted-foreground mb-3">$0.80/min</div>
                 <Button
                   size="sm"
                   variant="outline"
@@ -409,7 +399,7 @@ export default function Subscriptions() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Overage auto-charges at $1.50/min if you run out of credits.
+              Overage auto-charges at $1.50/min if you run out of minutes.
             </p>
           </div>
         </motion.div>
@@ -461,7 +451,7 @@ export default function Subscriptions() {
                       ))}
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="p-3 font-medium">Monthly Credits</td>
+                      <td className="p-3 font-medium">Monthly Minutes</td>
                       {tiers.map((tier) => (
                         <td
                           key={tier.plan_id}
@@ -470,24 +460,35 @@ export default function Subscriptions() {
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          <div>{formatCredits(tier.credits)}</div>
-                          {tier.credits > 0 && (
-                            <div className="text-xs text-muted-foreground">{formatMinutes(tier.credits)}</div>
+                          <div>{tier.credits <= 0 ? "Custom" : `${Math.round(tier.credits / 60)} min`}</div>
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-3 font-medium">Monthly SMS</td>
+                      {tiers.map((tier) => (
+                        <td
+                          key={tier.plan_id}
+                          className={cn(
+                            "text-center p-3",
+                            tier.plan_id === currentPlan && "bg-primary/5"
                           )}
+                        >
+                          {(tier.sms_limit ?? 0) < 0 ? "Unlimited" : (tier.sms_limit ?? 0) === 0 ? "—" : tier.sms_limit}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b border-border">
                       <td className="p-3 font-medium">Phone Numbers</td>
                       {tiers.map((tier) => (
-                        <td 
-                          key={tier.plan_id} 
+                        <td
+                          key={tier.plan_id}
                           className={cn(
                             "text-center p-3",
                             tier.plan_id === currentPlan && "bg-primary/5"
                           )}
                         >
-                          {tier.phone_lines <= 0 ? "Custom" : tier.phone_lines}
+                          {(tier.phone_lines ?? 1) < 0 ? "Custom" : tier.phone_lines ?? 1}
                         </td>
                       ))}
                     </tr>
@@ -519,12 +520,6 @@ export default function Subscriptions() {
                       label="API Access" 
                       tiers={tiers} 
                       getValue={(t) => t.has_api_access} 
-                      currentPlan={currentPlan}
-                    />
-                    <ComparisonRow
-                      label="Voice Selection"
-                      tiers={tiers}
-                      getValue={(t) => t.has_voice_selection}
                       currentPlan={currentPlan}
                     />
                     <ComparisonRow

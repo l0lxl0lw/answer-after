@@ -63,7 +63,7 @@ serve(async (req) => {
 
         // Fetch organization data
         const { data: org, error: orgError } = await supabaseAdmin
-          .from('institutions')
+          .from('accounts')
           .select('id, name, timezone, business_hours_start, business_hours_end, business_hours_schedule')
           .eq('id', institutionId)
           .single();
@@ -77,14 +77,14 @@ serve(async (req) => {
         const { data: services } = await supabaseAdmin
           .from('services')
           .select('name, price_cents, duration_minutes')
-          .eq('institution_id', institutionId)
+          .eq('account_id', institutionId)
           .eq('is_active', true);
 
         // Fetch agent context
         const { data: agent } = await supabaseAdmin
-          .from('institution_agents')
+          .from('account_agents')
           .select('context')
-          .eq('institution_id', institutionId)
+          .eq('account_id', institutionId)
           .maybeSingle();
 
         // Build placeholder values and render

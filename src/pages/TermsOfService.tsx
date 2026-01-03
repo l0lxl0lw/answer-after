@@ -37,14 +37,14 @@ export default function TermsOfService() {
           <section>
             <h2 className="font-display text-2xl font-semibold mb-4">1. Acceptance of Terms</h2>
             <p className="text-muted-foreground leading-relaxed">
-              By accessing or using Answer After's AI-powered after-hours call handling service ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the Service.
+              By accessing or using Answer After's AI-powered lead capture and call handling service ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the Service.
             </p>
           </section>
 
           <section>
             <h2 className="font-display text-2xl font-semibold mb-4">2. Description of Service</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Answer After provides an AI-powered call handling service that answers calls on behalf of your business during after-hours periods, schedules appointments, and manages customer inquiries. The Service includes voice AI technology, appointment scheduling, and integration with your business systems.
+              Answer After provides an AI-powered lead capture and call handling service that ensures instant response to every inquiry, schedules appointments, and manages customer follow-ups 24/7. The Service includes voice AI technology, appointment scheduling, and integration with your business systems.
             </p>
           </section>
 

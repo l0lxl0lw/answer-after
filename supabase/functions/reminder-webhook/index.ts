@@ -174,9 +174,9 @@ Determine the customer's response. Return ONLY one of these exact words:
 
 async function notifyInstitution(supabase: any, reminder: any, outcome: string, log: any) {
   const { data: orgData } = await supabase
-    .from('institutions')
+    .from('accounts')
     .select('notification_email, notification_phone, name')
-    .eq('id', reminder.institution_id)
+    .eq('id', reminder.account_id)
     .single();
 
   if (!orgData) return;

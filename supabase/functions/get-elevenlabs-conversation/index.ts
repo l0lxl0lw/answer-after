@@ -60,12 +60,12 @@ Deno.serve(async (req) => {
     }
 
     const { data: profile } = await supabase
-      .from("profiles")
-      .select("institution_id")
+      .from("users")
+      .select("account_id")
       .eq("id", user.id)
       .single();
 
-    const institutionId = profile?.institution_id;
+    const institutionId = profile?.account_id;
 
     const elevenlabsApiKey = getElevenLabsApiKey();
 
@@ -95,14 +95,14 @@ Deno.serve(async (req) => {
         const { data: contact } = await supabaseAdmin
           .from('contacts')
           .upsert({
-            institution_id: institutionId,
+            account_id: institutionId,
             phone: callerPhone,
             name: callerName || null,
             address: callerAddress || null,
             status: 'customer',
             source: 'inbound_call',
           }, {
-            onConflict: 'institution_id,phone',
+            onConflict: 'account_id,phone',
             ignoreDuplicates: false
           })
           .select('id')

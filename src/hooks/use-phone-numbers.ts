@@ -7,19 +7,19 @@ export function usePhoneNumbers() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['phone-numbers', user?.institution_id],
+    queryKey: ['phone-numbers', user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return [];
+      if (!user?.account_id) return [];
 
       const { data, error } = await supabase
         .from('phone_numbers')
         .select('*')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }

@@ -19,7 +19,11 @@ import Settings from "./pages/Settings";
 import Integrations from "./pages/Integrations";
 import Subscriptions from "./pages/Subscriptions";
 import MyAgent from "./pages/MyAgent";
-import EscalationContacts from "./pages/EscalationContacts";
+import MyServices from "./pages/MyServices";
+import Team from "./pages/Team";
+import Campaigns from "./pages/Campaigns";
+import CampaignDetail from "./pages/CampaignDetail";
+import Widget from "./pages/Widget";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import SelectPlan from "./pages/onboarding/SelectPlan";
@@ -65,10 +69,14 @@ const App = () => (
             <Route path="/dashboard/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
             <Route path="/dashboard/voice-behavior" element={<ProtectedRoute><MyAgent /></ProtectedRoute>} />
+            <Route path="/dashboard/services" element={<ProtectedRoute><MyServices /></ProtectedRoute>} />
+            <Route path="/dashboard/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
             <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
-            <Route path="/dashboard/escalation" element={<ProtectedRoute><EscalationContacts /></ProtectedRoute>} />
             <Route path="/dashboard/account" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/dashboard/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
+            <Route path="/dashboard/campaigns" element={<ProtectedRoute><Campaigns /></ProtectedRoute>} />
+            <Route path="/dashboard/campaigns/:id" element={<ProtectedRoute><CampaignDetail /></ProtectedRoute>} />
+            <Route path="/dashboard/widget" element={<ProtectedRoute><Widget /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

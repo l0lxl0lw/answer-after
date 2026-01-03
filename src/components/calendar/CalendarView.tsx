@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   format,
   addDays,
@@ -174,7 +175,7 @@ export function CalendarView({ defaultView = "day" }: CalendarViewProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
                 <CalendarDays className="w-4 h-4" />
-                Providers
+                Members
                 {selectedProviders.length > 0 && (
                   <Badge variant="secondary" className="ml-1">
                     {selectedProviders.length}
@@ -183,7 +184,7 @@ export function CalendarView({ defaultView = "day" }: CalendarViewProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Filter by Provider</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by Member</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {providers?.map((provider) => (
                 <DropdownMenuCheckboxItem
@@ -275,12 +276,12 @@ export function CalendarView({ defaultView = "day" }: CalendarViewProps) {
         ) : providers && providers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No Providers Found</h3>
+            <h3 className="text-lg font-medium mb-2">No Members Found</h3>
             <p className="text-muted-foreground mb-4">
               Add team members to start scheduling appointments
             </p>
             <Button asChild variant="outline">
-              <a href="/dashboard/providers">Add Providers</a>
+              <Link to="/dashboard/team">Add Members</Link>
             </Button>
           </div>
         ) : view === "day" ? (

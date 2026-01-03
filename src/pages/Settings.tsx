@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useInstitution } from '@/hooks/use-institution';
+import { useAccount } from '@/hooks/use-account';
 import { usePhoneNumbers } from '@/hooks/use-phone-numbers';
 import { useSubscription, useCurrentSubscriptionTier } from '@/hooks/use-subscriptions';
 import { toast } from '@/hooks/use-toast';
@@ -38,7 +38,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function Settings() {
   const { user } = useAuth();
-  const { data: institution, isLoading: instLoading } = useInstitution();
+  const { data: account, isLoading: accountLoading } = useAccount();
   const { data: phoneNumbers, isLoading: phonesLoading, refetch: refetchPhones } = usePhoneNumbers();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   // Use the new hook to get tier-specific feature flags like phone_lines
@@ -110,35 +110,35 @@ export default function Settings() {
     { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST - no DST)' },
   ];
 
-  // Load institution data
+  // Load account data
   useEffect(() => {
-    if (institution) {
-      // Parse business_hours_schedule from institution or use default
-      const scheduleFromInst = (institution as any).business_hours_schedule as WeekSchedule | null;
-      const workflowConfig = (institution as any).workflow_config || {};
+    if (account) {
+      // Parse business_hours_schedule from account or use default
+      const scheduleFromAcct = (account as any).business_hours_schedule as WeekSchedule | null;
+      const workflowConfig = (account as any).workflow_config || {};
 
       setOrgForm({
-        name: institution.name,
-        timezone: institution.timezone,
-        business_hours_schedule: scheduleFromInst || defaultSchedule,
-        notification_email: institution.notification_email || '',
-        notification_phone: institution.notification_phone || '',
-        business_phone: (institution as any).business_phone_number || '',
-        emergency_keywords: workflowConfig.emergency_keywords || institution.emergency_keywords || [],
+        name: account.name,
+        timezone: account.timezone,
+        business_hours_schedule: scheduleFromAcct || defaultSchedule,
+        notification_email: account.notification_email || '',
+        notification_phone: account.notification_phone || '',
+        business_phone: (account as any).business_phone_number || '',
+        emergency_keywords: workflowConfig.emergency_keywords || account.emergency_keywords || [],
         service_categories: workflowConfig.service_categories || ['hvac', 'plumbing', 'electrical', 'general'],
         transfer_enabled: workflowConfig.transfer_enabled !== false,
         callback_hours_offset: workflowConfig.callback_hours_offset || 2,
       });
     }
-  }, [institution]);
+  }, [account]);
 
-  const handleSaveInstitution = async () => {
-    if (!user?.institution_id) return;
+  const handleSaveAccount = async () => {
+    if (!user?.account_id) return;
 
     setIsSavingOrg(true);
     try {
       // Check if name has changed
-      const nameChanged = institution && orgForm.name !== institution.name;
+      const nameChanged = account && orgForm.name !== account.name;
 
       // Build workflow_config object
       const workflowConfig = {
@@ -149,7 +149,7 @@ export default function Settings() {
       };
 
       const { error } = await supabase
-        .from('institutions')
+        .from('accounts')
         .update({
           name: orgForm.name,
           timezone: orgForm.timezone,
@@ -158,7 +158,7 @@ export default function Settings() {
           notification_phone: orgForm.notification_phone || null,
           workflow_config: workflowConfig,
         })
-        .eq('id', user.institution_id);
+        .eq('id', user.account_id);
 
       if (error) throw error;
 
@@ -168,7 +168,7 @@ export default function Settings() {
           const { error: agentError } = await supabase.functions.invoke('elevenlabs-agent', {
             body: {
               action: 'rename-agent',
-              institutionId: user.institution_id,
+              accountId: user.account_id,
               name: orgForm.name,
             },
           });
@@ -184,10 +184,10 @@ export default function Settings() {
 
       toast({
         title: 'Settings saved',
-        description: 'Your institution settings have been updated.',
+        description: 'Your account settings have been updated.',
       });
     } catch (error: any) {
-      console.error('Error saving organization:', error);
+      console.error('Error saving account:', error);
       toast({
         title: 'Error saving settings',
         description: error.message || 'Please try again.',
@@ -233,10 +233,10 @@ export default function Settings() {
   };
 
   const handleAddPhoneNumber = async () => {
-    if (!user?.institution_id) {
+    if (!user?.account_id) {
       toast({
-        title: 'No institution',
-        description: 'You need to be part of an institution to add phone numbers.',
+        title: 'No account',
+        description: 'You need to be part of an account to add phone numbers.',
         variant: 'destructive',
       });
       return;
@@ -256,7 +256,7 @@ export default function Settings() {
       const { error } = await supabase
         .from('phone_numbers')
         .insert({
-          institution_id: user.institution_id,
+          account_id: user.account_id,
           phone_number: newPhone.phone_number,
           friendly_name: newPhone.friendly_name || newPhone.phone_number,
           is_active: true,
@@ -433,10 +433,11 @@ export default function Settings() {
 
   const getPlanPrice = (plan: string) => {
     switch (plan) {
-      case 'starter': return '$99';
-      case 'professional': return '$199';
-      case 'enterprise': return '$499';
-      default: return '$99';
+      case 'starter': return '$49';
+      case 'pro': return '$199';
+      case 'business': return '$499';
+      case 'enterprise': return 'Custom';
+      default: return '$49';
     }
   };
 
@@ -450,16 +451,16 @@ export default function Settings() {
         >
           <h1 className="text-2xl font-bold text-foreground">Account</h1>
           <p className="text-muted-foreground mt-1">
-            Manage your institution, phone numbers, and preferences
+            Manage your account, phone numbers, and preferences
           </p>
         </motion.div>
 
         {/* Tabs */}
-        <Tabs defaultValue="institution" className="space-y-6">
+        <Tabs defaultValue="account" className="space-y-6">
           <TabsList className="grid w-full grid-cols-4 bg-muted/50">
-            <TabsTrigger value="institution" className="flex items-center gap-2">
+            <TabsTrigger value="account" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Institution</span>
+              <span className="hidden sm:inline">Account</span>
             </TabsTrigger>
             <TabsTrigger value="phones" className="flex items-center gap-2">
               <Phone className="h-4 w-4" />
@@ -475,8 +476,8 @@ export default function Settings() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Institution Tab */}
-          <TabsContent value="institution">
+          {/* Account Tab */}
+          <TabsContent value="account">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -485,7 +486,7 @@ export default function Settings() {
               {/* Basic Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Institution Details</CardTitle>
+                  <CardTitle>Account Details</CardTitle>
                   <CardDescription>
                     Basic information about your business
                   </CardDescription>
@@ -705,7 +706,7 @@ export default function Settings() {
               </Card>
 
               <div className="flex justify-end">
-                <Button onClick={handleSaveInstitution} disabled={isSavingOrg}>
+                <Button onClick={handleSaveAccount} disabled={isSavingOrg}>
                   {isSavingOrg ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (

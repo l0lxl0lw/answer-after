@@ -51,7 +51,7 @@ export class TestClient {
     // Delete in reverse order of creation (respecting foreign keys)
     if (orgId) {
       // Delete organization-related data
-      await this.serviceRoleClient.from('organization_agents').delete().eq('organization_id', orgId);
+      await this.serviceRoleClient.from('account_agents').delete().eq('account_id', orgId);
       await this.serviceRoleClient.from('phone_numbers').delete().eq('organization_id', orgId);
       await this.serviceRoleClient.from('subscriptions').delete().eq('organization_id', orgId);
       await this.serviceRoleClient.from('purchased_credits').delete().eq('organization_id', orgId);
@@ -160,11 +160,11 @@ export class TestClient {
     return role?.role || null;
   }
 
-  async getOrganizationAgent(organizationId: string) {
+  async getAccountAgent(accountId: string) {
     const { data } = await this.serviceRoleClient
-      .from('organization_agents')
+      .from('account_agents')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('account_id', accountId)
       .maybeSingle();
 
     return data;

@@ -44,8 +44,8 @@ export function Footer() {
               </span>
             </Link>
             <p className="text-muted-foreground text-sm leading-relaxed mb-4 max-w-xs">
-              AI-powered after-hours call handling for service businesses. 
-              Never miss another opportunity.
+              Stop losing leads to missed calls and slow follow-ups.
+              Convert more of your marketing spend into revenue.
             </p>
           </div>
 

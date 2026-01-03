@@ -1,25 +1,25 @@
-// Institution hook
+// Account hook
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
-export function useInstitution() {
+export function useAccount() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['institution', user?.institution_id],
+    queryKey: ['account', user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
 
       const { data, error } = await supabase
-        .from('institutions')
+        .from('accounts')
         .select('*')
-        .eq('id', user.institution_id)
+        .eq('id', user.account_id)
         .maybeSingle();
 
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }

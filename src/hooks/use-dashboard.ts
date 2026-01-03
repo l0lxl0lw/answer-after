@@ -33,9 +33,9 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['dashboard', 'stats', user?.institution_id, period],
+    queryKey: ['dashboard', 'stats', user?.account_id, period],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
 
       const periodDays = getPeriodDays(period);
       const today = new Date();
@@ -58,7 +58,7 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
       const { data: periodCalls, error: periodError } = await supabase
         .from('calls')
         .select('id, outcome, started_at, duration_seconds')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .gte('started_at', periodStart.toISOString())
         .lte('started_at', today.toISOString());
 
@@ -68,7 +68,7 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
       const { data: prevPeriodCalls, error: prevPeriodError } = await supabase
         .from('calls')
         .select('id, outcome')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .gte('started_at', prevPeriodStart.toISOString())
         .lte('started_at', prevPeriodEnd.toISOString());
 
@@ -78,7 +78,7 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
       const { data: periodAppointments, error: appointmentsError } = await supabase
         .from('appointments')
         .select('id, created_at, service_price_cents')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .gte('created_at', periodStart.toISOString())
         .lte('created_at', today.toISOString());
 
@@ -88,7 +88,7 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
       const { data: prevPeriodAppointments } = await supabase
         .from('appointments')
         .select('id, service_price_cents')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .gte('created_at', prevPeriodStart.toISOString())
         .lte('created_at', prevPeriodEnd.toISOString());
 
@@ -218,7 +218,7 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
         chart_data: chartData,
       } as DashboardStats;
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
     refetchInterval: 30000,
   });
 }

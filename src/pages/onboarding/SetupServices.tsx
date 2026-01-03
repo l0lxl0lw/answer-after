@@ -5,14 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowRight, Sparkles, Plus, Trash2, Loader2, Wrench, Zap, Phone, AlertCircle } from "lucide-react";
+import { ArrowRight, Sparkles, Plus, Trash2, Loader2, Wrench, Zap, Phone, AlertCircle, Upload, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentSubscriptionTier } from "@/hooks/use-subscriptions";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { COMPANY } from "@/lib/constants";
 import { extractAreaCode, formatPhoneDisplay } from "@/lib/phoneUtils";
+import type { KnowledgeBaseDocument } from "@/types/database";
 
 // Feature gating now uses DB flags from subscription_tiers table:
 // - has_custom_agent: Controls access to greeting/service customization (Growth+)
@@ -20,6 +21,9 @@ import { extractAreaCode, formatPhoneDisplay } from "@/lib/phoneUtils";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger('SetupServices');
+
+const MAX_KB_DOCUMENTS = 3;
+const MAX_FILE_SIZE_MB = 20;
 
 interface Service {
   id: string;
@@ -36,15 +40,19 @@ export default function SetupServices() {
   const [context, setContext] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
   // Phone purchase state
   const [isPurchasingPhone, setIsPurchasingPhone] = useState(false);
   const [phonePurchaseError, setPhonePurchaseError] = useState<string | null>(null);
   const phonePurchaseAttempted = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useNavigate();
   const { toast } = useToast();
   const { session, user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Use the new hook that provides tier data with feature flags
   const { currentPlanId, currentTier, features, isLoading: isLoadingPlan } = useCurrentSubscriptionTier();
@@ -53,33 +61,33 @@ export default function SetupServices() {
 
   // Check for existing phone number
   const { data: existingPhone, isLoading: isLoadingPhone, refetch: refetchPhone } = useQuery({
-    queryKey: ["existing-phone", user?.institution_id],
+    queryKey: ["existing-phone", user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
       const { data } = await supabase
         .from("phone_numbers")
         .select("phone_number")
-        .eq("institution_id", user.institution_id)
+        .eq("account_id", user.account_id)
         .eq("is_active", true)
         .maybeSingle();
       return data;
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 
   // Get business phone from organization for area code
   const { data: orgData, isLoading: isLoadingOrg } = useQuery({
-    queryKey: ["org-business-phone", user?.institution_id],
+    queryKey: ["org-business-phone", user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
       const { data } = await supabase
-        .from("institutions")
+        .from("accounts")
         .select("business_phone_number")
-        .eq("id", user.institution_id)
+        .eq("id", user.account_id)
         .single();
       return data;
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 
   // Plan capabilities - now using DB feature flags instead of hardcoded plan names
@@ -89,21 +97,36 @@ export default function SetupServices() {
   const hasServiceSetup = features.hasCustomAgent;
   const hasContextSetup = features.hasCustomAiTraining;
 
+  // Fetch knowledge base documents (for Pro+ users)
+  const { data: kbDocuments = [], isLoading: isLoadingDocs, refetch: refetchDocs } = useQuery({
+    queryKey: ['knowledge-base-documents-onboarding', user?.account_id],
+    queryFn: async () => {
+      if (!user?.account_id) return [];
+      const { data } = await supabase
+        .from('knowledge_base_documents')
+        .select('*')
+        .eq('account_id', user.account_id)
+        .order('created_at', { ascending: false });
+      return (data || []) as KnowledgeBaseDocument[];
+    },
+    enabled: !!user?.account_id && hasContextSetup,
+  });
+
   // Core plan (no custom agent): Auto-create agent with defaults and skip
   // Using feature flag instead of hardcoded plan name check
   useEffect(() => {
-    if (!isLoadingPlan && !features.hasCustomAgent && user?.institution_id && session) {
+    if (!isLoadingPlan && !features.hasCustomAgent && user?.account_id && session) {
       log.debug('Plan without custom agent detected, auto-creating default agent');
       handleCoreAutoSetup();
     }
-  }, [isLoadingPlan, features.hasCustomAgent, user?.institution_id, session]);
+  }, [isLoadingPlan, features.hasCustomAgent, user?.account_id, session]);
 
   // Load existing data for plans with custom agent capability
   useEffect(() => {
     if (features.hasCustomAgent) {
       loadExistingData();
     }
-  }, [user?.institution_id, features.hasCustomAgent]);
+  }, [user?.account_id, features.hasCustomAgent]);
 
   // Auto-purchase phone number if not already done
   useEffect(() => {
@@ -163,14 +186,14 @@ export default function SetupServices() {
   }, [existingPhone, isLoadingPhone, isLoadingOrg, orgData, session]);
 
   const loadExistingData = async () => {
-    if (!user?.institution_id) return;
+    if (!user?.account_id) return;
 
     try {
       // Load services
       const { data: servicesData } = await supabase
         .from("services")
         .select("*")
-        .eq("institution_id", user.institution_id);
+        .eq("account_id", user.account_id);
 
       if (servicesData && servicesData.length > 0) {
         setServices(
@@ -185,9 +208,9 @@ export default function SetupServices() {
 
       // Load agent context
       const { data: agentData } = await supabase
-        .from("organization_agents")
+        .from("account_agents")
         .select("context")
-        .eq("institution_id", user.institution_id)
+        .eq("account_id", user.account_id)
         .maybeSingle();
 
       if (agentData?.context) {
@@ -205,7 +228,7 @@ export default function SetupServices() {
   };
 
   const handleCoreAutoSetup = async () => {
-    if (!session || !user?.institution_id) return;
+    if (!session || !user?.account_id) return;
 
     setIsCreatingAgent(true);
 
@@ -217,7 +240,7 @@ export default function SetupServices() {
         },
         body: {
           action: "create-agent",
-          institutionId: user.institution_id,
+          accountId: user.account_id,
         },
       });
 
@@ -230,7 +253,7 @@ export default function SetupServices() {
 
       toast({
         title: "Agent ready!",
-        description: "Your AI receptionist is set up with default settings.",
+        description: "Your AI agent is set up and ready to capture leads.",
       });
 
       // Navigate to test call
@@ -274,8 +297,121 @@ export default function SetupServices() {
     );
   };
 
+  const handleUploadDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Only PDF files are allowed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check document limit
+    if (kbDocuments.length >= MAX_KB_DOCUMENTS) {
+      toast({
+        title: 'Document limit reached',
+        description: `You can upload up to ${MAX_KB_DOCUMENTS} documents.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUploadingDocument(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-upload-knowledge`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      toast({
+        title: 'Document uploaded',
+        description: `${file.name} has been added to your knowledge base.`,
+      });
+
+      refetchDocs();
+    } catch (error: any) {
+      toast({
+        title: 'Upload failed',
+        description: error.message || 'Failed to upload document.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string) => {
+    setDeletingDocumentId(documentId);
+    try {
+      const { error } = await supabase.functions.invoke('agent-delete-knowledge', {
+        body: { documentId },
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Document deleted',
+        description: 'The document has been removed.',
+      });
+
+      refetchDocs();
+    } catch (error: any) {
+      toast({
+        title: 'Delete failed',
+        description: error.message || 'Failed to delete document.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  };
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const handleContinue = async () => {
-    if (!session || !user?.institution_id) {
+    if (!session || !user?.account_id) {
       toast({
         title: "Error",
         description: "Session expired. Please log in again.",
@@ -297,11 +433,11 @@ export default function SetupServices() {
           await supabase
             .from("services")
             .delete()
-            .eq("institution_id", user.institution_id);
+            .eq("account_id", user.account_id);
 
           // Insert new services
           const servicesToInsert = validServices.map((s) => ({
-            institution_id: user.institution_id,
+            account_id: user.account_id,
             name: s.name.trim(),
             price_cents: s.price ? Math.round(parseFloat(s.price) * 100) : 0,
             duration_minutes: s.duration ? parseInt(s.duration) : 60,
@@ -342,20 +478,20 @@ export default function SetupServices() {
 
       // Check if agent record exists
       const { data: existingAgent } = await supabase
-        .from("organization_agents")
+        .from("account_agents")
         .select("id, elevenlabs_agent_id")
-        .eq("institution_id", user.institution_id)
+        .eq("account_id", user.account_id)
         .maybeSingle();
 
       if (existingAgent) {
         // Update existing agent context
         await supabase
-          .from("organization_agents")
+          .from("account_agents")
           .update({
             context: JSON.stringify(agentContext),
             updated_at: new Date().toISOString(),
           })
-          .eq("institution_id", user.institution_id);
+          .eq("account_id", user.account_id);
       }
 
       // Create or update ElevenLabs agent
@@ -369,7 +505,7 @@ export default function SetupServices() {
         },
         body: {
           action,
-          institutionId: user.institution_id,
+          accountId: user.account_id,
           context: JSON.stringify(agentContext),
           greeting: agentContext.greeting,
         },
@@ -479,7 +615,7 @@ export default function SetupServices() {
           </div>
           <h2 className="font-display text-2xl font-bold mb-2">Setting Up Your Agent</h2>
           <p className="text-muted-foreground mb-4">
-            We're configuring your AI receptionist with smart defaults. This only takes a moment.
+            We're configuring your AI agent with smart defaults so you never miss a lead. This only takes a moment.
           </p>
           {isCreatingAgent && (
             <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
@@ -685,6 +821,98 @@ export default function SetupServices() {
               onChange={(e) => setContext(e.target.value)}
               className="min-h-[120px]"
             />
+          </motion.div>
+        )}
+
+        {/* Knowledge Base Section - Pro, Business only */}
+        {hasContextSetup && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-card border rounded-xl p-6 mb-6"
+          >
+            <div className="mb-3">
+              <Label className="text-base font-semibold">
+                Knowledge Base (Optional)
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Upload PDFs to give your agent detailed reference material like catalogs, policies, or documentation.
+              </p>
+            </div>
+
+            {/* Document list */}
+            {isLoadingDocs ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : kbDocuments.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {kbDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium truncate text-sm">{doc.name}</p>
+                        {doc.file_size_bytes && (
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(doc.file_size_bytes)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteDocument(doc.id)}
+                      disabled={deletingDocumentId === doc.id}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {deletingDocumentId === doc.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Upload button */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {kbDocuments.length}/{MAX_KB_DOCUMENTS} documents
+              </span>
+              {kbDocuments.length < MAX_KB_DOCUMENTS && (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleUploadDocument}
+                    className="hidden"
+                    id="kb-file-upload-onboarding"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingDocument}
+                  >
+                    {isUploadingDocument ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Upload PDF
+                  </Button>
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
 

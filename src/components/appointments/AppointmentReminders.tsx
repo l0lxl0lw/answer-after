@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 interface AppointmentRemindersProps {
   appointmentId: string;
   appointmentStart: string;
-  institutionId: string;
+  accountId: string;
 }
 
 interface Reminder {
@@ -28,7 +28,7 @@ interface Reminder {
   notes: string | null;
 }
 
-export function AppointmentReminders({ appointmentId, appointmentStart, institutionId }: AppointmentRemindersProps) {
+export function AppointmentReminders({ appointmentId, appointmentStart, accountId }: AppointmentRemindersProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -77,7 +77,7 @@ export function AppointmentReminders({ appointmentId, appointmentStart, institut
         .from('appointment_reminders')
         .insert({
           appointment_id: appointmentId,
-          institution_id: institutionId,
+          account_id: accountId,
           reminder_number: reminderNumber,
           scheduled_time: scheduledTime,
           reminder_type: 'call',

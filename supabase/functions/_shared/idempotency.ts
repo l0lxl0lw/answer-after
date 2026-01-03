@@ -117,6 +117,6 @@ export function generateWebhookKey(eventType: string, eventId: string): string {
 /**
  * Generate idempotency key for onboarding
  */
-export function generateOnboardingKey(institutionId: string): string {
-  return `onboarding:${institutionId}`;
+export function generateOnboardingKey(accountId: string): string {
+  return `onboarding:${accountId}`;
 }

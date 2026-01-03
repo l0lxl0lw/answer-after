@@ -14,29 +14,23 @@ const PLAN_CONFIG: Record<string, {
   credits: number;
   description: string;
 }> = {
-  core: {
-    name: 'Core',
-    monthlyPrice: 2900,  // $29/mo
-    credits: 250,
-    description: 'AI-powered after-hours call handling'
-  },
-  growth: {
-    name: 'Growth',
-    monthlyPrice: 9900, // $99/mo
-    credits: 600,
-    description: 'For growing service businesses'
+  starter: {
+    name: 'Starter',
+    monthlyPrice: 4900,  // $49/mo
+    credits: 6000,
+    description: 'Perfect for solo practices and after-hours coverage'
   },
   pro: {
     name: 'Pro',
     monthlyPrice: 19900, // $199/mo
-    credits: 1400,
-    description: 'For high-volume operations'
+    credits: 30000,
+    description: 'Best for busy practices needing full AI customization'
   },
   business: {
     name: 'Business',
     monthlyPrice: 49900, // $499/mo
-    credits: 3000,
-    description: 'For multi-location businesses'
+    credits: 72000,
+    description: 'Complete solution for high-volume and multi-location practices'
   },
 };
 
@@ -78,21 +72,21 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     log.info("User authenticated", { userId: user.id, email: user.email });
 
-    // Get user's institution_id
+    // Get user's account_id
     const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("institution_id")
+      .from("users")
+      .select("account_id")
       .eq("id", user.id)
       .single();
 
-    if (!profile?.institution_id) {
+    if (!profile?.account_id) {
       throw new Error("User has no organization. Please complete signup first.");
     }
-    const institutionId = profile.institution_id;
+    const institutionId = profile.account_id;
     log.info("Organization found", { institutionId });
 
     // Parse request body for plan selection
-    let planId = 'growth'; // default plan
+    let planId = 'starter'; // default plan
 
     try {
       const body = await req.json();
@@ -226,13 +220,13 @@ serve(async (req) => {
     const { error: subError } = await supabaseAdmin
       .from("subscriptions")
       .upsert({
-        institution_id: institutionId,
+        account_id: institutionId,
         plan: planId,
         status: 'pending',
         stripe_customer_id: customerId,
         total_credits: planConfig.credits,
       }, {
-        onConflict: 'institution_id'
+        onConflict: 'account_id'
       });
 
     if (subError) {

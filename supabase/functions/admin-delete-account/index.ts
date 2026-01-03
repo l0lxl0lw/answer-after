@@ -6,7 +6,7 @@ import { validateUUID, parseJsonBody } from "../_shared/validation.ts";
 import { deleteAgent, deletePhoneNumber, getElevenLabsApiKey } from "../_shared/elevenlabs.ts";
 import { getTwilioCredentials, makeTwilioRequest, getAccountUrl, getTwilioAuthHeader } from "../_shared/twilio.ts";
 
-const logger = createLogger('admin-delete-organization');
+const logger = createLogger('admin-delete-account');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,29 +18,35 @@ serve(async (req) => {
 
     const supabaseAdmin = createServiceClient();
 
-    const { institutionId } = await parseJsonBody<{ institutionId: string }>(req, ['institutionId']);
-    validateUUID(institutionId, 'institutionId');
+    // Support both accountId and institutionId for backward compatibility
+    const body = await parseJsonBody<{ accountId?: string; institutionId?: string }>(req);
+    const accountId = body.accountId || body.institutionId;
 
-    log.step('Starting deletion process', { institutionId });
+    if (!accountId) {
+      return errorResponse('accountId is required', 400);
+    }
+    validateUUID(accountId, 'accountId');
 
-    // Get organization details
-    const { data: org, error: orgError } = await supabaseAdmin
-      .from('institutions')
+    log.step('Starting deletion process', { accountId });
+
+    // Get account details
+    const { data: account, error: accountError } = await supabaseAdmin
+      .from('accounts')
       .select('*')
-      .eq('id', institutionId)
+      .eq('id', accountId)
       .single();
 
-    if (orgError || !org) {
-      return errorResponse('Institution not found', 404);
+    if (accountError || !account) {
+      return errorResponse('Account not found', 404);
     }
 
-    log.info('Found organization', { name: org.name });
+    log.info('Found account', { name: account.name });
 
     // Get the ElevenLabs agent ID
     const { data: agentRecord, error: agentRecordError } = await supabaseAdmin
-      .from('institution_agents')
+      .from('account_agents')
       .select('elevenlabs_agent_id')
-      .eq('institution_id', institutionId)
+      .eq('account_id', accountId)
       .maybeSingle();
 
     if (agentRecordError) {
@@ -70,15 +76,15 @@ serve(async (req) => {
     } else if (agentId) {
       log.warn('Cannot delete agent - no API key');
     } else {
-      log.info('No ElevenLabs agent found for this organization');
+      log.info('No ElevenLabs agent found for this account');
     }
 
     // Step 2: Delete phone numbers from ElevenLabs and reset Twilio webhooks
-    log.step('Getting phone numbers for organization');
+    log.step('Getting phone numbers for account');
     const { data: phoneNumbers } = await supabaseAdmin
       .from('phone_numbers')
       .select('phone_number, twilio_sid, elevenlabs_phone_number_id')
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (phoneNumbers && phoneNumbers.length > 0) {
       log.info('Processing phone numbers', {
@@ -107,8 +113,8 @@ serve(async (req) => {
       // Reset Twilio webhooks
       log.step('Resetting Twilio webhooks');
 
-      const twilioSubaccountSid = org.twilio_subaccount_sid;
-      const twilioSubaccountAuthToken = org.twilio_subaccount_auth_token;
+      const twilioSubaccountSid = account.twilio_subaccount_sid;
+      const twilioSubaccountAuthToken = account.twilio_subaccount_auth_token;
 
       let twilioAccountSid: string | null = null;
       let twilioAuthToken: string | null = null;
@@ -186,7 +192,7 @@ serve(async (req) => {
     const { error: remindersError } = await supabaseAdmin
       .from('appointment_reminders')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (remindersError) {
       throw new Error(`Failed to delete appointment reminders: ${remindersError.message}`);
@@ -197,7 +203,7 @@ serve(async (req) => {
     const { error: appointmentsError } = await supabaseAdmin
       .from('appointments')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (appointmentsError) {
       throw new Error(`Failed to delete appointments: ${appointmentsError.message}`);
@@ -208,7 +214,7 @@ serve(async (req) => {
     const { data: calls } = await supabaseAdmin
       .from('calls')
       .select('id')
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (calls && calls.length > 0) {
       const callIds = calls.map(c => c.id);
@@ -222,7 +228,7 @@ serve(async (req) => {
     const { error: callsError } = await supabaseAdmin
       .from('calls')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (callsError) {
       throw new Error(`Failed to delete calls: ${callsError.message}`);
@@ -233,7 +239,7 @@ serve(async (req) => {
     const { error: servicesError } = await supabaseAdmin
       .from('services')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (servicesError) {
       throw new Error(`Failed to delete services: ${servicesError.message}`);
@@ -244,7 +250,7 @@ serve(async (req) => {
     const { error: phoneError } = await supabaseAdmin
       .from('phone_numbers')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (phoneError) {
       throw new Error(`Failed to delete phone numbers: ${phoneError.message}`);
@@ -255,7 +261,7 @@ serve(async (req) => {
     const { error: creditsError } = await supabaseAdmin
       .from('purchased_credits')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (creditsError) {
       throw new Error(`Failed to delete purchased credits: ${creditsError.message}`);
@@ -266,36 +272,36 @@ serve(async (req) => {
     const { error: subscriptionsError } = await supabaseAdmin
       .from('subscriptions')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (subscriptionsError) {
       throw new Error(`Failed to delete subscriptions: ${subscriptionsError.message}`);
     }
 
-    // Delete institution agents
-    log.step('Deleting institution agents');
+    // Delete account agents
+    log.step('Deleting account agents');
     const { error: agentsError } = await supabaseAdmin
-      .from('institution_agents')
+      .from('account_agents')
       .delete()
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
     if (agentsError) {
-      throw new Error(`Failed to delete institution agents: ${agentsError.message}`);
+      throw new Error(`Failed to delete account agents: ${agentsError.message}`);
     }
 
     // Delete user roles and profiles
     log.step('Deleting user profiles and roles');
-    const { data: profiles } = await supabaseAdmin
-      .from('profiles')
+    const { data: users } = await supabaseAdmin
+      .from('users')
       .select('id')
-      .eq('institution_id', institutionId);
+      .eq('account_id', accountId);
 
-    if (profiles && profiles.length > 0) {
-      const userIds = profiles.map(p => p.id);
+    if (users && users.length > 0) {
+      const userIds = users.map(u => u.id);
 
       // Delete user roles
       const { error: rolesError } = await supabaseAdmin
-        .from('user_roles')
+        .from('roles')
         .delete()
         .in('user_id', userIds);
 
@@ -303,14 +309,14 @@ serve(async (req) => {
         throw new Error(`Failed to delete user roles: ${rolesError.message}`);
       }
 
-      // Delete profiles
-      const { error: profilesError } = await supabaseAdmin
-        .from('profiles')
+      // Delete users
+      const { error: usersError } = await supabaseAdmin
+        .from('users')
         .delete()
         .in('id', userIds);
 
-      if (profilesError) {
-        throw new Error(`Failed to delete profiles: ${profilesError.message}`);
+      if (usersError) {
+        throw new Error(`Failed to delete users: ${usersError.message}`);
       }
 
       // Delete auth users
@@ -323,22 +329,22 @@ serve(async (req) => {
       }
     }
 
-    // Step 4: Finally, delete the organization
-    log.step('Deleting organization');
-    const { error: deleteOrgError } = await supabaseAdmin
-      .from('institutions')
+    // Step 4: Finally, delete the account
+    log.step('Deleting account');
+    const { error: deleteAccountError } = await supabaseAdmin
+      .from('accounts')
       .delete()
-      .eq('id', institutionId);
+      .eq('id', accountId);
 
-    if (deleteOrgError) {
-      throw new Error(`Failed to delete organization: ${deleteOrgError.message}`);
+    if (deleteAccountError) {
+      throw new Error(`Failed to delete account: ${deleteAccountError.message}`);
     }
 
-    log.info('Institution deleted successfully', { institutionId });
+    log.info('Account deleted successfully', { accountId });
 
     return successResponse({
       success: true,
-      message: 'Institution and all resources deleted successfully',
+      message: 'Account and all resources deleted successfully',
     });
 
   } catch (error) {

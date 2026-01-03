@@ -37,7 +37,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="font-display text-2xl font-semibold mb-4">1. Introduction</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Answer After ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our AI-powered after-hours call handling service.
+              Answer After ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our AI-powered lead capture and call handling service.
             </p>
           </section>
 

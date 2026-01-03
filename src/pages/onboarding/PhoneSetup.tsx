@@ -35,20 +35,20 @@ export default function PhoneSetup() {
 
   // Check if user already has a phone number
   const { data: existingPhone } = useQuery({
-    queryKey: ["existing-phone", user?.institution_id],
+    queryKey: ["existing-phone", user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
 
       const { data } = await supabase
         .from("phone_numbers")
         .select("phone_number")
-        .eq("institution_id", user.institution_id)
+        .eq("account_id", user.account_id)
         .eq("is_active", true)
         .maybeSingle();
 
       return data;
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 
   const handleBusinessPhoneChange = (value: string) => {
@@ -78,10 +78,10 @@ export default function PhoneSetup() {
       return;
     }
 
-    if (!user?.institution_id) {
+    if (!user?.account_id) {
       toast({
         title: "Setup incomplete",
-        description: "Institution not found. Please try logging in again.",
+        description: "Account not found. Please try logging in again.",
         variant: "destructive",
       });
       navigate("/auth");
@@ -216,7 +216,7 @@ export default function PhoneSetup() {
             Enter Your Business Phone Number
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            We'll find you a new AI-powered phone number in the same area code and forward your existing number to it.
+            We'll set you up with a dedicated business line in the same area code — so you never miss a lead again.
           </p>
         </motion.div>
 
@@ -323,7 +323,7 @@ export default function PhoneSetup() {
           >
             <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" />
             <h3 className="font-display text-xl font-bold mb-2">Number Activated!</h3>
-            <p className="text-muted-foreground mb-1">Your new AI-powered number:</p>
+            <p className="text-muted-foreground mb-1">Your new lead capture number:</p>
             <p className="text-2xl font-bold text-success">{formatPhoneDisplay(foundNumber)}</p>
           </motion.div>
         )}

@@ -90,8 +90,8 @@ export const createSupabaseMock = () => {
           return mockDataStore.phoneNumbers[0] || null;
         case 'services':
           return mockDataStore.services;
-        case 'organization_agents':
-          return mockDataStore.organizationAgents[0] || null;
+        case 'account_agents':
+          return mockDataStore.accountAgents?.[0] || mockDataStore.organizationAgents?.[0] || null;
         case 'organizations':
           return mockDataStore.organizations[0] || null;
         case 'calls':

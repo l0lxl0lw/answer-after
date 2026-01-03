@@ -8,9 +8,9 @@ export function useAppointments(page = 1, perPage = 10) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['appointments', user?.institution_id, page, perPage],
+    queryKey: ['appointments', user?.account_id, page, perPage],
     queryFn: async () => {
-      if (!user?.institution_id) return { appointments: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
+      if (!user?.account_id) return { appointments: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
 
       const from = (page - 1) * perPage;
       const to = from + perPage - 1;
@@ -18,7 +18,7 @@ export function useAppointments(page = 1, perPage = 10) {
       const { data, error, count } = await supabase
         .from('appointments')
         .select('*', { count: 'exact' })
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .order('scheduled_start', { ascending: true })
         .range(from, to);
 
@@ -34,7 +34,7 @@ export function useAppointments(page = 1, perPage = 10) {
         },
       };
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -61,12 +61,12 @@ export function useCreateAppointment() {
 
   return useMutation({
     mutationFn: async (data: CreateAppointmentRequest) => {
-      if (!user?.institution_id) throw new Error('No organization');
+      if (!user?.account_id) throw new Error('No organization');
 
       const { data: appointment, error } = await supabase
         .from('appointments')
         .insert({
-          institution_id: user.institution_id,
+          account_id: user.account_id,
           call_id: data.call_id || null,
           customer_name: data.customer_name,
           customer_phone: data.customer_phone,

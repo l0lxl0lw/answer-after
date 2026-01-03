@@ -23,7 +23,7 @@ serve(async (req) => {
       .select(`
         id,
         appointment_id,
-        institution_id,
+        account_id,
         scheduled_time,
         appointments!inner(
           id,
@@ -50,12 +50,12 @@ serve(async (req) => {
     log.info('Found reminders to process', { count: dueReminders.length });
 
     // Check subscription tier for each organization
-    const orgIds = [...new Set(dueReminders.map(r => r.institution_id))];
+    const orgIds = [...new Set(dueReminders.map(r => r.account_id))];
 
     const { data: subscriptions } = await supabase
       .from('subscriptions')
-      .select('institution_id, plan')
-      .in('institution_id', orgIds)
+      .select('account_id, plan')
+      .in('account_id', orgIds)
       .eq('status', 'active');
 
     const { data: tiers } = await supabase
@@ -66,7 +66,7 @@ serve(async (req) => {
     const allowedPlans = new Set((tiers || []).map(t => t.plan_id));
     const orgPlans: Record<string, string> = {};
     (subscriptions || []).forEach(s => {
-      orgPlans[s.institution_id] = s.plan;
+      orgPlans[s.account_id] = s.plan;
     });
 
     const results: { reminderId: string; success: boolean; error?: string }[] = [];
@@ -75,7 +75,7 @@ serve(async (req) => {
 
     // Process each reminder
     for (const reminder of dueReminders) {
-      const orgPlan = orgPlans[reminder.institution_id];
+      const orgPlan = orgPlans[reminder.account_id];
 
       // Check if organization has outbound reminders feature
       if (!allowedPlans.has(orgPlan)) {

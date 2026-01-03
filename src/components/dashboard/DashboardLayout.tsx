@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useInstitution } from "@/hooks/use-institution";
+import { useAccount } from "@/hooks/use-account";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,10 @@ import {
   Users,
   MessageSquare,
   UserPlus,
-  PhoneForwarded,
+  Briefcase,
+  UsersRound,
+  Megaphone,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditsIndicator } from "./CreditsIndicator";
@@ -36,24 +39,41 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Organized sidebar sections - optimized for front desk operators
+// Sidebar sections organized by usage frequency:
+// 1. Daily - Dashboard, Schedule, Calls, Messages (checked every day)
+// 2. Frequently - Contacts: Leads, Customers (people you interact with)
+// 3. Occasionally - Business: Team, Services, AI Agent (setup that changes sometimes)
+// 4. Rarely - Settings: Integrations, Account (configure once)
 const sidebarSections = [
   {
-    label: null, // No label for top section - primary operations
+    label: null, // Daily operations - no label, always visible at top
     links: [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+      { name: "Schedule", href: "/dashboard/calendar", icon: Calendar },
       { name: "Calls", href: "/dashboard/calls", icon: PhoneCall },
-      { name: "Leads", href: "/dashboard/leads", icon: UserPlus },
-      { name: "Customers", href: "/dashboard/customers", icon: Users },
       { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
     ],
   },
-    {
-    label: "Configuration",
+  {
+    label: "Contacts", // Frequently - people you interact with
     links: [
+      { name: "Leads", href: "/dashboard/leads", icon: UserPlus },
+      { name: "Customers", href: "/dashboard/customers", icon: Users },
+    ],
+  },
+  {
+    label: "Business", // Occasionally - your business setup
+    links: [
+      { name: "Team", href: "/dashboard/team", icon: UsersRound },
+      { name: "Services", href: "/dashboard/services", icon: Briefcase },
+      { name: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
       { name: "AI Agent", href: "/dashboard/voice-behavior", icon: Bot },
-      { name: "Escalation", href: "/dashboard/escalation", icon: PhoneForwarded },
+    ],
+  },
+  {
+    label: "Settings", // Rarely - configuration items
+    links: [
+      { name: "Widget", href: "/dashboard/widget", icon: Globe },
       { name: "Integrations", href: "/dashboard/integrations", icon: Puzzle },
       { name: "Account", href: "/dashboard/account", icon: Settings },
     ],
@@ -159,7 +179,7 @@ interface SidebarContentProps {
 }
 
 function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps) {
-  const { data: organization } = useInstitution();
+  const { data: account } = useAccount();
   const { user } = useAuth();
   const [selectedMode, setSelectedMode] = useState<'inbound' | 'outbound'>('inbound');
   
@@ -319,9 +339,9 @@ function SidebarContent({ collapsed, currentPath, onClose }: SidebarContentProps
         </Button>
 
         {/* Credits Indicator with Menu */}
-        <CreditsIndicator 
-          collapsed={collapsed} 
-          organizationName={organization?.name}
+        <CreditsIndicator
+          collapsed={collapsed}
+          accountName={account?.name}
           onClose={onClose}
         />
       </div>

@@ -69,7 +69,7 @@ serve(async (req) => {
 
     // Get organization details
     const { data: org, error: orgError } = await supabase
-      .from('institutions')
+      .from('accounts')
       .select('*')
       .eq('id', institutionId)
       .single();
@@ -97,7 +97,7 @@ serve(async (req) => {
 
       // Save local subaccount to org so elevenlabs-agent can use it
       const { error: updateError } = await supabase
-        .from('institutions')
+        .from('accounts')
         .update({
           twilio_subaccount_sid: subaccountSid,
           twilio_subaccount_auth_token: subaccountAuthToken
@@ -148,7 +148,7 @@ serve(async (req) => {
 
       // Save to database
       const { error: updateError } = await supabase
-        .from('institutions')
+        .from('accounts')
         .update({
           twilio_subaccount_sid: subaccountSid,
           twilio_subaccount_auth_token: subaccountAuthToken
@@ -185,7 +185,7 @@ serve(async (req) => {
     const { data: existingPhones } = await supabase
       .from('phone_numbers')
       .select('*')
-      .eq('institution_id', institutionId)
+      .eq('account_id', institutionId)
       .eq('is_active', true);
 
     let phoneNumber: string | null = null;
@@ -258,7 +258,7 @@ serve(async (req) => {
           const { error: phoneInsertError } = await supabase
             .from('phone_numbers')
             .upsert({
-              institution_id: institutionId,
+              account_id: institutionId,
               phone_number: phoneNumber,
               friendly_name: existingNumber.friendly_name || 'Local Dev Line',
               is_shared: true, // Mark as shared since it's reused
@@ -275,7 +275,7 @@ serve(async (req) => {
             // Try updating existing record instead
             await supabase
               .from('phone_numbers')
-              .update({ institution_id: institutionId, is_active: true })
+              .update({ account_id: institutionId, is_active: true })
               .eq('phone_number', phoneNumber);
           }
 
@@ -371,7 +371,7 @@ serve(async (req) => {
             const { error: phoneInsertError } = await supabase
               .from('phone_numbers')
               .insert({
-                institution_id: institutionId,
+                account_id: institutionId,
                 phone_number: phoneNumber,
                 friendly_name: availableNumber.friendly_name || 'Business Line',
                 is_shared: false,
@@ -402,9 +402,9 @@ serve(async (req) => {
 
     // Check if agent already exists
     const { data: agentRecord } = await supabase
-      .from('organization_agents')
+      .from('account_agents')
       .select('*')
-      .eq('institution_id', institutionId)
+      .eq('account_id', institutionId)
       .maybeSingle();
 
     let agentId = agentRecord?.elevenlabs_agent_id;
@@ -513,7 +513,7 @@ serve(async (req) => {
         status: 'active',
         plan: subscriptionPlan || DEFAULT_PLAN
       })
-      .eq('institution_id', institutionId);
+      .eq('account_id', institutionId);
 
     if (subUpdateError) {
       logStep('Failed to update subscription', { error: subUpdateError });
@@ -533,7 +533,7 @@ serve(async (req) => {
 
     // Update organization onboarding status
     const { error: orgOnboardingError } = await supabase
-      .from('institutions')
+      .from('accounts')
       .update({
         is_onboarding_complete: true,
         onboarding_completed_at: new Date().toISOString()

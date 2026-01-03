@@ -95,7 +95,7 @@ serve(async (req) => {
       }
 
       const { error: profileError } = await supabaseAdmin
-        .from('profiles')
+        .from('users')
         .update(updateData)
         .eq('id', targetUserId);
 

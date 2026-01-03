@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +38,7 @@ import {
   useDeleteContact,
   useContactCalls,
 } from "@/hooks/use-contacts";
+import { useImportContacts } from "@/hooks/use-import-contacts";
 import type { Contact } from "@/types/database";
 import {
   Search,
@@ -55,6 +56,11 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { formatPhoneDisplay } from "@/lib/phoneUtils";
@@ -134,14 +140,22 @@ export default function Customers() {
   const [searchInput, setSearchInput] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<CustomerFormData>(emptyForm);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    skipped: number;
+    errors: Array<{ row: number; phone: string; error: string }>;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useCustomers({ search }, page, 20);
   const createContact = useCreateContact();
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
+  const importContacts = useImportContacts();
 
   const customers = data?.contacts || [];
   const meta = data?.meta || { page: 1, per_page: 20, total: 0, total_pages: 0 };
@@ -222,6 +236,53 @@ export default function Customers() {
     setExpandedId(expandedId === id ? null : id);
   };
 
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Only CSV files are allowed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const result = await importContacts.mutateAsync(file);
+      setImportResult({
+        imported: result.imported,
+        skipped: result.skipped,
+        errors: result.errors,
+      });
+
+      if (result.imported > 0) {
+        toast({
+          title: 'Import complete',
+          description: `Successfully imported ${result.imported} contacts.`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Import failed',
+        description: error.message || 'Failed to import contacts.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCloseImport = () => {
+    setIsImportOpen(false);
+    setImportResult(null);
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -238,13 +299,119 @@ export default function Customers() {
               Manage your customer database
             </p>
           </div>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Customer
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            {/* Import CSV Button */}
+            <Dialog open={isImportOpen} onOpenChange={(open) => {
+              if (!open) handleCloseImport();
+              else setIsImportOpen(true);
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import CSV
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Import Contacts from CSV</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file to bulk import contacts. Required column: phone. Optional: name, email, address, notes.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {!importResult ? (
+                    <>
+                      <div
+                        className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <FileSpreadsheet className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-sm font-medium mb-1">
+                          {importContacts.isPending ? 'Importing...' : 'Click to upload CSV file'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Maximum 1,000 rows, 5MB file size
+                        </p>
+                        {importContacts.isPending && (
+                          <Loader2 className="w-6 h-6 mx-auto mt-4 animate-spin text-primary" />
+                        )}
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+                      <a
+                        href="/contact-import-template.csv"
+                        download
+                        className="flex items-center justify-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download CSV template
+                      </a>
+                    </>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Results summary */}
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+                          <CheckCircle2 className="w-5 h-5 mx-auto text-success mb-1" />
+                          <p className="text-2xl font-bold text-success">{importResult.imported}</p>
+                          <p className="text-xs text-muted-foreground">Imported</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+                          <AlertCircle className="w-5 h-5 mx-auto text-warning mb-1" />
+                          <p className="text-2xl font-bold text-warning">{importResult.skipped}</p>
+                          <p className="text-xs text-muted-foreground">Updated</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                          <AlertCircle className="w-5 h-5 mx-auto text-destructive mb-1" />
+                          <p className="text-2xl font-bold text-destructive">{importResult.errors.length}</p>
+                          <p className="text-xs text-muted-foreground">Errors</p>
+                        </div>
+                      </div>
+
+                      {/* Error details */}
+                      {importResult.errors.length > 0 && (
+                        <div className="rounded-lg border bg-destructive/5 p-3 max-h-40 overflow-y-auto">
+                          <p className="text-sm font-medium text-destructive mb-2">Errors:</p>
+                          {importResult.errors.slice(0, 10).map((err, i) => (
+                            <p key={i} className="text-xs text-muted-foreground">
+                              Row {err.row}: {err.phone} - {err.error}
+                            </p>
+                          ))}
+                          {importResult.errors.length > 10 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              +{importResult.errors.length - 10} more errors
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  {importResult ? (
+                    <Button onClick={handleCloseImport}>Done</Button>
+                  ) : (
+                    <Button variant="outline" onClick={() => setIsImportOpen(false)}>
+                      Cancel
+                    </Button>
+                  )}
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Add Customer Button */}
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Customer
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Customer</DialogTitle>
@@ -311,6 +478,7 @@ export default function Customers() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </motion.div>
 
         {/* Search */}

@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stop Losing Leads to Missed Calls</title>
+
+  <style>
+    /* ============================================
+       RESET & BASE STYLES
+       ============================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============================================
+       MISSED CALLS SECTION STYLES
+       Modern, clean design with urgency indicators
+       ============================================ */
+    .missed-calls-section {
+      padding: 80px 24px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #f8fafc;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Subtle background pattern for depth */
+    .missed-calls-section::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image:
+        radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(239, 68, 68, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .missed-calls-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ============================================
+       HEADER SECTION
+       ============================================ */
+    .missed-calls-header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    /* Attention-grabbing badge */
+    .missed-calls-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #fca5a5;
+      margin-bottom: 24px;
+    }
+
+    .missed-calls-badge svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .missed-calls-headline {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 700;
+      line-height: 1.1;
+      margin: 0 0 16px;
+      letter-spacing: -0.02em;
+    }
+
+    /* Gradient text highlight for emphasis */
+    .missed-calls-headline .highlight {
+      background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .missed-calls-subheadline {
+      font-size: clamp(18px, 2.5vw, 22px);
+      color: #94a3b8;
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ============================================
+       STATS GRID - The visual hook
+       ============================================ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-bottom: 60px;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.3s ease, border-color 0.3s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Colored top border accent */
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--stat-color), transparent);
+    }
+
+    /* Card color variations */
+    .stat-card.danger { --stat-color: #ef4444; }
+    .stat-card.warning { --stat-color: #f97316; }
+    .stat-card.critical { --stat-color: #dc2626; }
+
+    /* Icon container */
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .stat-card.danger .stat-icon {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+
+    .stat-card.warning .stat-icon {
+      background: rgba(249, 115, 22, 0.15);
+      color: #fb923c;
+    }
+
+    .stat-card.critical .stat-icon {
+      background: rgba(220, 38, 38, 0.15);
+      color: #f87171;
+    }
+
+    .stat-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    /* Large animated numbers */
+    .stat-number {
+      font-size: 56px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-card.danger .stat-number { color: #f87171; }
+    .stat-card.warning .stat-number { color: #fb923c; }
+    .stat-card.critical .stat-number { color: #f87171; }
+
+    .stat-label {
+      font-size: 18px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 8px;
+    }
+
+    .stat-description {
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* ============================================
+       PAIN POINT HIGHLIGHT BOX
+       ============================================ */
+    .pain-point {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 12px;
+      padding: 24px 32px;
+      margin-bottom: 48px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .pain-point-icon {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f87171;
+    }
+
+    .pain-point-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .pain-point-text {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #e2e8f0;
+    }
+
+    .pain-point-text strong {
+      color: #fca5a5;
+    }
+
+    /* ============================================
+       SOLUTION SECTION
+       ============================================ */
+    .solution-section {
+      text-align: center;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .solution-title {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #f1f5f9;
+    }
+
+    .solution-text {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    .solution-text .emphasis {
+      color: #22c55e;
+      font-weight: 600;
+    }
+
+    /* ============================================
+       CTA BUTTONS
+       ============================================ */
+    .cta-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .cta-button.primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      border: none;
+      box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+    }
+
+    .cta-button.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    }
+
+    .cta-button.secondary {
+      background: transparent;
+      color: #f1f5f9;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .cta-button.secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .cta-button svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* ============================================
+       TRUST INDICATORS
+       ============================================ */
+    .trust-indicators {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-top: 48px;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      flex-wrap: wrap;
+    }
+
+    .trust-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #64748b;
+    }
+
+    .trust-item svg {
+      width: 18px;
+      height: 18px;
+      color: #22c55e;
+    }
+
+    /* ============================================
+       ANIMATIONS
+       ============================================ */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Staggered animation delays */
+    .fade-in-delay-1 { transition-delay: 0.1s; }
+    .fade-in-delay-2 { transition-delay: 0.2s; }
+    .fade-in-delay-3 { transition-delay: 0.3s; }
+    .fade-in-delay-4 { transition-delay: 0.4s; }
+
+    /* ============================================
+       RESPONSIVE DESIGN
+       ============================================ */
+    @media (max-width: 768px) {
+      .missed-calls-section {
+        padding: 60px 20px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat-number {
+        font-size: 48px;
+      }
+
+      .pain-point {
+        flex-direction: column;
+        text-align: center;
+        align-items: center;
+      }
+
+      .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .cta-button {
+        width: 100%;
+        max-width: 300px;
+        justify-content: center;
+      }
+
+      .trust-indicators {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <section class="missed-calls-section" id="missed-calls-section">
+    <div class="missed-calls-container">
+
+      <!-- Header -->
+      <header class="missed-calls-header fade-in">
+        <div class="missed-calls-badge">
+          <!-- Phone with X icon -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+            <line x1="23" y1="1" x2="1" y2="23"/>
+          </svg>
+          The Hidden Cost of Missed Calls
+        </div>
+
+        <h2 class="missed-calls-headline">
+          Every Missed Call Is a <span class="highlight">Lost Customer</span>
+        </h2>
+
+        <p class="missed-calls-subheadline">
+          You spend thousands on marketing to generate leads. But when they call and no one answers,
+          that investment walks right out the door.
+        </p>
+      </header>
+
+      <!-- Statistics Grid -->
+      <div class="stats-grid">
+
+        <!-- Stat 1: Missed Calls Conversion -->
+        <div class="stat-card danger fade-in fade-in-delay-1">
+          <div class="stat-icon">
+            <!-- Phone missed icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2z"/>
+              <line x1="23" y1="1" x2="17" y2="7"/>
+              <line x1="17" y1="1" x2="23" y2="7"/>
+            </svg>
+          </div>
+          <div class="stat-number" data-target="50" data-prefix="<">&lt;0%</div>
+          <div class="stat-label">Conversion Rate on Missed Calls</div>
+          <p class="stat-description">
+            When a lead's first call goes unanswered, your chance of ever converting them
+            drops dramatically. Most will call your competitor instead.
+          </p>
+        </div>
+
+        <!-- Stat 2: Response Time Impact -->
+        <div class="stat-card warning fade-in fade-in-delay-2">
+          <div class="stat-icon">
+            <!-- Clock icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div class="stat-number" data-target="30">0%</div>
+          <div class="stat-label">Chance Left After 5+ Minutes</div>
+          <p class="stat-description">
+            The golden window is 5 minutes. Wait longer to follow up, and your conversion
+            probability plummets to just 30% of what it could have been.
+          </p>
+        </div>
+
+        <!-- Stat 3: Hourly Drop-off -->
+        <div class="stat-card critical fade-in fade-in-delay-3">
+          <div class="stat-icon">
+            <!-- Trending down icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+              <polyline points="17 6 23 6 23 12"/>
+            </svg>
+          </div>
+          <div class="stat-number" data-target="80">0%</div>
+          <div class="stat-label">Drop-off After 1 Hour</div>
+          <p class="stat-description">
+            Wait an hour to respond? You've lost 80% of your potential conversions.
+            By then, leads have moved on or cooled off completely.
+          </p>
+        </div>
+      </div>
+
+      <!-- Pain Point Highlight -->
+      <div class="pain-point fade-in fade-in-delay-3">
+        <div class="pain-point-icon">
+          <!-- Alert circle icon -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <p class="pain-point-text">
+          <strong>Here's the brutal truth:</strong> You're paying for every click, every ad impression,
+          every lead that comes through the door. But if your team can't answer every call instantly
+          or follow up within minutes, you're essentially <strong>burning that marketing budget</strong>.
+          The leads you worked so hard to attract are slipping through the cracks.
+        </p>
+      </div>
+
+      <!-- Solution Section -->
+      <div class="solution-section fade-in fade-in-delay-4">
+        <h3 class="solution-title">Never Miss Another Opportunity</h3>
+        <p class="solution-text">
+          Our AI-powered receptionist <span class="emphasis">answers every call instantly, 24/7</span>—even
+          at 2 AM or during your busiest hours. It captures lead information, books appointments,
+          and follows up automatically. No more missed calls. No more slow responses.
+          Just <span class="emphasis">more conversions</span>.
+        </p>
+
+        <div class="cta-buttons">
+          <a href="#demo" class="cta-button primary">
+            <!-- Play icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            See It In Action
+          </a>
+          <a href="#pricing" class="cta-button secondary">
+            Start Free Trial
+            <!-- Arrow right icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </a>
+        </div>
+
+        <!-- Trust Indicators -->
+        <div class="trust-indicators">
+          <div class="trust-item">
+            <!-- Check icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            No credit card required
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Setup in under 5 minutes
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Works with your existing phone
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <script>
+    /**
+     * ============================================
+     * INTERSECTION OBSERVER FOR ANIMATIONS
+     * Triggers fade-in and number counting when
+     * the section scrolls into view
+     * ============================================
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+      const section = document.getElementById('missed-calls-section');
+      const fadeElements = section.querySelectorAll('.fade-in');
+      const statNumbers = section.querySelectorAll('.stat-number');
+      let hasAnimated = false;
+
+      // Create intersection observer
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !hasAnimated) {
+            hasAnimated = true;
+
+            // Trigger fade-in animations
+            fadeElements.forEach(el => {
+              el.classList.add('visible');
+            });
+
+            // Animate the numbers
+            animateNumbers();
+          }
+        });
+      }, {
+        threshold: 0.3 // Trigger when 30% of section is visible
+      });
+
+      observer.observe(section);
+
+      /**
+       * Animate statistics numbers counting up
+       * Uses requestAnimationFrame for smooth animation
+       */
+      function animateNumbers() {
+        statNumbers.forEach(numberEl => {
+          const target = parseInt(numberEl.dataset.target, 10);
+          const prefix = numberEl.dataset.prefix || '';
+          const duration = 2000; // 2 seconds
+          const startTime = performance.now();
+
+          function updateNumber(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease out cubic for smooth deceleration
+            const easedProgress = 1 - Math.pow(1 - progress, 3);
+            const currentValue = Math.round(easedProgress * target);
+
+            numberEl.textContent = prefix + currentValue + '%';
+
+            if (progress < 1) {
+              requestAnimationFrame(updateNumber);
+            }
+          }
+
+          requestAnimationFrame(updateNumber);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

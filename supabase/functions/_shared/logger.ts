@@ -8,7 +8,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export interface LogContext {
   service?: string;
   userId?: string;
-  institutionId?: string;
+  accountId?: string;
   requestId?: string;
   [key: string]: unknown;
 }

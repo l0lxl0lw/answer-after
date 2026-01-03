@@ -18,21 +18,21 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Skip Edge Function requirements in development mode
   const isDevelopment = import.meta.env.MODE === 'development' || !import.meta.env.PROD;
 
-  // Check if user has incomplete signup (logged in but no organization)
+  // Check if user has incomplete signup (logged in but no account)
   // Skip auto-provisioning in development mode - users should set up manually via SQL
-  const hasIncompleteSignup = !isDevelopment && isAuthenticated && user && !user.institution_id;
+  const hasIncompleteSignup = !isDevelopment && isAuthenticated && user && !user.account_id;
 
   // Fetch organization, subscription, and phone number status
   const { data: onboardingData, isLoading: isLoadingOnboarding } = useQuery({
-    queryKey: ['onboarding-status', user?.institution_id],
+    queryKey: ['onboarding-status', user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
 
       // Fetch organization onboarding status
       const { data: org, error: orgError } = await supabase
-        .from('institutions')
+        .from('accounts')
         .select('is_onboarding_complete')
-        .eq('id', user.institution_id)
+        .eq('id', user.account_id)
         .single();
 
       if (orgError) {
@@ -44,7 +44,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       const { data: subscription, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .maybeSingle();
 
       if (subError) {
@@ -55,7 +55,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       const { data: phoneNumbers, error: phoneError } = await supabase
         .from('phone_numbers')
         .select('id')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .limit(1);
 
       if (phoneError) {
@@ -69,7 +69,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         subscription,
       };
     },
-    enabled: !!user?.institution_id && !hasIncompleteSignup,
+    enabled: !!user?.account_id && !hasIncompleteSignup,
   });
 
   // Check onboarding paths
@@ -80,7 +80,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Skip when already on onboarding path to avoid redirect loops
   let onboardingRedirect: string | null = null;
 
-  if (isAuthenticated && user?.institution_id && !isLoadingOnboarding && onboardingData && !isOnboardingPath) {
+  if (isAuthenticated && user?.account_id && !isLoadingOnboarding && onboardingData && !isOnboardingPath) {
     // If onboarding is not complete, determine which step they need
     if (!onboardingData.isOnboardingComplete) {
       // In production, check subscription first (Step 1)
@@ -104,12 +104,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       try {
         toast({
           title: "Completing setup...",
-          description: "Setting up your organization.",
+          description: "Setting up your account.",
         });
 
         // Call provision-organization to complete signup
         const { error: provisionError } = await supabase.functions.invoke(
-          'provision-organization',
+          'provision-account',
           {
             headers: {
               Authorization: `Bearer ${session.access_token}`,

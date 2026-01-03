@@ -43,11 +43,11 @@ const signupSchema = z
       .trim()
       .min(1, { message: "Name is required" })
       .max(100, { message: "Name must be less than 100 characters" }),
-    institutionName: z
+    accountName: z
       .string()
       .trim()
-      .min(1, { message: "Organization name is required" })
-      .max(100, { message: "Organization name must be less than 100 characters" }),
+      .min(1, { message: "Account name is required" })
+      .max(100, { message: "Account name must be less than 100 characters" }),
     email: z
       .string()
       .trim()
@@ -133,7 +133,7 @@ const Auth = () => {
     resolver: zodResolver(signupSchema),
     defaultValues: {
       name: "",
-      institutionName: "",
+      accountName: "",
       email: "",
       phone: "",
       password: "",
@@ -299,7 +299,7 @@ const Auth = () => {
     
     setIsLoading(true);
     try {
-      const result = await signup(signupData.email, signupData.password, signupData.name, signupData.institutionName);
+      const result = await signup(signupData.email, signupData.password, signupData.name, signupData.accountName);
       
       if (result.error) {
         toast({
@@ -321,15 +321,15 @@ const Auth = () => {
       const { data: sessionData } = await supabase.auth.getSession();
 
       if (sessionData.session) {
-        // First, provision the institution with phone number for notifications
+        // First, provision the account with phone number for notifications
         const { data: provisionData, error: provisionError } = await supabase.functions.invoke(
-          'provision-institution',
+          'provision-account',
           {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
             body: {
-              institutionName: signupData.institutionName,
+              accountName: signupData.accountName,
               notificationPhone: getPhoneDigits(signupData.phone),
               businessPhone: getPhoneDigits(signupData.phone),
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -341,17 +341,17 @@ const Auth = () => {
           console.error('Provisioning error:', provisionError);
           toast({
             title: "Setup issue",
-            description: "There was an issue setting up your institution. Please contact support.",
+            description: "There was an issue setting up your account. Please contact support.",
             variant: "destructive",
           });
           navigate(from, { replace: true });
           return;
         }
 
-        console.log('Organization provisioned:', provisionData);
+        console.log('Account provisioned:', provisionData);
 
         toast({
-          title: "Organization ready!",
+          title: "Account ready!",
           description: "Let's choose your plan...",
         });
 
@@ -397,7 +397,7 @@ const Auth = () => {
         options: {
           data: {
             full_name: testName,
-            institution_name: testOrg,
+            account_name: testOrg,
           },
         },
       });
@@ -410,20 +410,20 @@ const Auth = () => {
         throw new Error('Failed to get session after signup');
       }
 
-      // Step 3: Provision institution
+      // Step 3: Provision account
       toast({
         title: "Setting up dev environment...",
-        description: "Provisioning organization...",
+        description: "Provisioning account...",
       });
 
       const { error: provisionError } = await supabase.functions.invoke(
-        'provision-institution',
+        'provision-account',
         {
           headers: {
             Authorization: `Bearer ${sessionData.session.access_token}`,
           },
           body: {
-            institutionName: testOrg,
+            accountName: testOrg,
             notificationPhone: testPhone,
             businessPhone: testPhone,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -781,9 +781,9 @@ const Auth = () => {
                   )}
                 </div>
 
-                {/* Organization Name */}
+                {/* Account Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="signup-org">Organization Name</Label>
+                  <Label htmlFor="signup-org">Account Name</Label>
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
@@ -791,12 +791,12 @@ const Auth = () => {
                       type="text"
                       placeholder="Smile Dental Care"
                       className="pl-10 h-12"
-                      {...signupForm.register("institutionName")}
+                      {...signupForm.register("accountName")}
                     />
                   </div>
-                  {signupForm.formState.errors.institutionName && (
+                  {signupForm.formState.errors.accountName && (
                     <p className="text-sm text-destructive">
-                      {signupForm.formState.errors.institutionName.message}
+                      {signupForm.formState.errors.accountName.message}
                     </p>
                   )}
                 </div>
@@ -1065,15 +1065,15 @@ const Auth = () => {
             </h2>
 
             <p className="text-primary-foreground/80 max-w-sm mx-auto mb-8">
-              Join thousands of service businesses that capture every after-hours opportunity with AI-powered call handling.
+              85% of missed calls never call back. Stop losing leads to slow follow-ups and convert more of your marketing spend.
             </p>
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-6 max-w-md mx-auto">
               {[
-                { value: "99.9%", label: "Uptime" },
-                { value: "10K+", label: "Calls/day" },
-                { value: "$2M+", label: "Captured" },
+                { value: "< 5s", label: "Response" },
+                { value: "10x", label: "Conversions" },
+                { value: "24/7", label: "Coverage" },
               ].map((stat) => (
                 <div
                   key={stat.label}

@@ -315,16 +315,16 @@ describe('Signup Flow Integration Tests', () => {
         .single();
 
       const { data: agent } = await testClient.supabase
-        .from('organization_agents')
-        .select('organization_id')
-        .eq('organization_id', orgId)
+        .from('account_agents')
+        .select('account_id')
+        .eq('account_id', orgId)
         .single();
 
       // All relationships should be valid
       expect(profile?.organization_id).toBe(orgId);
       expect(userRole?.user_id).toBe(testUser.id);
       expect(subscription?.organization_id).toBe(orgId);
-      expect(agent?.organization_id).toBe(orgId);
+      expect(agent?.account_id).toBe(orgId);
     });
   });
 });

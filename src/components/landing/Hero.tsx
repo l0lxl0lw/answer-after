@@ -12,10 +12,10 @@ export function Hero() {
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
       
       {/* Grid Pattern */}
-      <div 
-        className="absolute inset-0 opacity-[0.015]"
+      <div
+        className="absolute inset-0 opacity-[0.03]"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23fff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       />
 
@@ -29,7 +29,7 @@ export function Hero() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-8"
           >
             <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-primary">AI-Powered Call Handling</span>
+            <span className="text-sm font-medium text-primary">85% of Missed Calls Never Call Back</span>
           </motion.div>
 
           {/* Headline */}
@@ -39,8 +39,8 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6"
           >
-            Your{" "}
-            <span className="text-gradient">24/7 AI Receptionist</span>
+            Stop Losing Leads to{" "}
+            <span className="text-gradient">Missed Calls</span>
           </motion.h1>
 
           {/* Subheadline */}
@@ -50,8 +50,8 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto mb-10"
           >
-            Answer After is like having a tireless receptionist that answers every call, 
-            books appointments, and sends reminder calls & texts — automatically capturing confirmations around the clock.
+            Every missed call costs you over half your leads. Answer After responds instantly to every inquiry,
+            follows up within minutes, and keeps prospects engaged 24/7 — so your marketing dollars actually convert.
           </motion.p>
 
           {/* CTA Buttons */}
@@ -82,9 +82,9 @@ export function Hero() {
             className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto"
           >
             {[
-              { icon: Phone, value: "10,000+", label: "Calls Handled" },
-              { icon: Clock, value: "99.9%", label: "Uptime" },
-              { icon: Calendar, value: "$2M+", label: "Revenue Captured" },
+              { icon: Phone, value: "< 5 sec", label: "Response Time" },
+              { icon: Clock, value: "24/7", label: "Lead Coverage" },
+              { icon: Calendar, value: "10x", label: "More Conversions" },
             ].map((stat, index) => (
               <motion.div
                 key={stat.label}

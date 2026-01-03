@@ -51,11 +51,11 @@ function useTheme() {
 
 interface CreditsIndicatorProps {
   collapsed?: boolean;
-  organizationName?: string;
+  accountName?: string;
   onClose?: () => void;
 }
 
-export function CreditsIndicator({ collapsed, organizationName, onClose }: CreditsIndicatorProps) {
+export function CreditsIndicator({ collapsed, accountName, onClose }: CreditsIndicatorProps) {
   const { data: subscription } = useSubscription();
   const { purchasedCredits } = useTotalAvailableCredits();
   const createTopup = useCreateCreditTopup();
@@ -77,8 +77,8 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
       queryClient.invalidateQueries({ queryKey: ['purchased-credits'] });
 
       // Show success toast
-      toast.success('Credits added!', {
-        description: `${creditsAdded || '300'} credits have been added to your account.`,
+      toast.success('Minutes added!', {
+        description: `${creditsAdded || '5'} minutes have been added to your account.`,
       });
 
       // Clean up URL params
@@ -167,12 +167,10 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
           )}
         />
       </svg>
-      {/* Credit count - format large numbers */}
+      {/* Minutes count */}
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="text-[9px] font-semibold text-foreground">
-          {totalAvailableCredits >= 1000
-            ? `${(totalAvailableCredits / 1000).toFixed(1)}k`
-            : totalAvailableCredits}
+          {Math.round(totalAvailableCredits / 60)}m
         </span>
       </div>
     </div>
@@ -193,14 +191,14 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
                 <CircularProgress />
                 {!collapsed && (
                   <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium truncate">{organizationName || 'My Workspace'}</p>
+                    <p className="text-sm font-medium truncate">{accountName || 'My Workspace'}</p>
                   </div>
                 )}
               </button>
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="right" className="text-xs">
-            {totalAvailableCredits.toLocaleString()} credits available
+            {Math.round(totalAvailableCredits / 60)} minutes available
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -222,9 +220,9 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
                   isCriticalBalance && "text-destructive",
                   isLowBalance && !isCriticalBalance && "text-warning"
                 )}>
-                  {totalAvailableCredits.toLocaleString()}
+                  {Math.round(totalAvailableCredits / 60)}
                 </span>
-                <span className="text-sm text-muted-foreground ml-1">credits</span>
+                <span className="text-sm text-muted-foreground ml-1">minutes</span>
               </div>
             </div>
             <Button
@@ -250,14 +248,14 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
             <div className="flex justify-between">
               <span className="text-muted-foreground">Monthly plan</span>
               <span>
-                <span className="font-medium">{planRemainingCredits.toLocaleString()}</span>
-                <span className="text-muted-foreground"> / {planTotalCredits.toLocaleString()}</span>
+                <span className="font-medium">{Math.round(planRemainingCredits / 60)}</span>
+                <span className="text-muted-foreground"> / {Math.round(planTotalCredits / 60)} min</span>
               </span>
             </div>
             {purchasedCredits > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Bonus credits</span>
-                <span className="font-medium text-success">+{purchasedCredits.toLocaleString()}</span>
+                <span className="text-muted-foreground">Bonus minutes</span>
+                <span className="font-medium text-success">+{Math.round(purchasedCredits / 60)}</span>
               </div>
             )}
           </div>
@@ -267,7 +265,7 @@ export function CreditsIndicator({ collapsed, organizationName, onClose }: Credi
               "text-xs",
               isCriticalBalance ? "text-destructive" : "text-warning"
             )}>
-              {isCriticalBalance ? "Credits running low!" : "Consider upgrading or topping up"}
+              {isCriticalBalance ? "Minutes running low!" : "Consider upgrading or topping up"}
             </p>
           )}
         </div>

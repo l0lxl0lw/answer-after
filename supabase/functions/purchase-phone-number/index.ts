@@ -57,28 +57,28 @@ serve(async (req) => {
 
     log.info('User authenticated', { userId: user.id });
 
-    // Get user's organization
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('institution_id')
+    // Get user's account
+    const { data: userRecord, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('account_id')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile?.institution_id) {
-      return errorResponse('No organization found', 404);
+    if (userError || !userRecord?.account_id) {
+      return errorResponse('No account found', 404);
     }
 
     const { data: org, error: orgError } = await supabaseAdmin
-      .from('institutions')
+      .from('accounts')
       .select('id, name, twilio_subaccount_sid, twilio_subaccount_auth_token')
-      .eq('id', profile.institution_id)
+      .eq('id', userRecord.account_id)
       .single();
 
     if (orgError || !org) {
-      return errorResponse('Institution not found', 404);
+      return errorResponse('Account not found', 404);
     }
 
-    log.info('Institution found', { orgId: org.id, orgName: org.name });
+    log.info('Account found', { orgId: org.id, orgName: org.name });
 
     // Parse request body
     const { businessPhoneNumber, areaCode } = await parseJsonBody<{
@@ -134,7 +134,7 @@ serve(async (req) => {
       // Save to org if not already saved
       if (org.twilio_subaccount_sid !== subaccount.sid) {
         await supabaseAdmin
-          .from('institutions')
+          .from('accounts')
           .update({
             twilio_subaccount_sid: subaccount.sid,
             twilio_subaccount_auth_token: subaccount.authToken,
@@ -150,7 +150,7 @@ serve(async (req) => {
 
       // Save subaccount to org
       await supabaseAdmin
-        .from('institutions')
+        .from('accounts')
         .update({
           twilio_subaccount_sid: subaccount.sid,
           twilio_subaccount_auth_token: subaccount.authToken,
@@ -224,7 +224,7 @@ serve(async (req) => {
 
     // Save business phone number to organization
     const { error: orgUpdateError } = await supabaseAdmin
-      .from('institutions')
+      .from('accounts')
       .update({ business_phone_number: businessPhoneNumber })
       .eq('id', org.id);
 
@@ -236,7 +236,7 @@ serve(async (req) => {
     const { error: insertError } = await supabaseAdmin
       .from('phone_numbers')
       .insert({
-        institution_id: org.id,
+        account_id: org.id,
         phone_number: purchasedNumber.phone_number,
         friendly_name: `Business Line (${validAreaCode})`,
         is_shared: false,

@@ -256,15 +256,15 @@ export function NewEventDialog({
             )}
           </div>
 
-          {/* Provider */}
+          {/* Member */}
           <div className="space-y-2">
-            <Label>Provider</Label>
+            <Label>Member</Label>
             <Select
               value={selectedProviderId}
               onValueChange={(value) => setValue("provider_id", value)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select provider..." />
+                <SelectValue placeholder="Select member..." />
               </SelectTrigger>
               <SelectContent>
                 {providers?.map((provider) => (

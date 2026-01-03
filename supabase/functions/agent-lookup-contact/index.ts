@@ -20,14 +20,14 @@ Deno.serve(async (req) => {
     const log = logger.withContext({ requestId: crypto.randomUUID() });
 
     const body = await req.json();
-    const { institution_id, phone } = body;
+    const { account_id, phone } = body;
 
-    log.info("Lookup contact request", { institution_id, phone });
+    log.info("Lookup contact request", { account_id, phone });
 
-    // SECURITY: institution_id comes from webhook config, not agent input
-    if (!institution_id) {
-      log.warn("Missing institution_id in request");
-      return errorResponse("Missing institution_id", 400);
+    // SECURITY: account_id comes from webhook config, not agent input
+    if (!account_id) {
+      log.warn("Missing account_id in request");
+      return errorResponse("Missing account_id", 400);
     }
 
     if (!phone) {
@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .select('id, name, phone, address, email, notes, status, created_at')
-      .eq('institution_id', institution_id)
+      .eq('account_id', account_id)
       .in('phone', phoneVariants)
       .single();
 

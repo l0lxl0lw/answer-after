@@ -20,14 +20,14 @@ Deno.serve(async (req) => {
     const log = logger.withContext({ requestId: crypto.randomUUID() });
 
     const body = await req.json();
-    const { institution_id, phone, name, address, email, notes } = body;
+    const { account_id, phone, name, address, email, notes } = body;
 
-    log.info("Save contact request", { institution_id, phone, hasName: !!name });
+    log.info("Save contact request", { account_id, phone, hasName: !!name });
 
-    // SECURITY: institution_id comes from webhook config, not agent input
-    if (!institution_id) {
-      log.warn("Missing institution_id in request");
-      return errorResponse("Missing institution_id", 400);
+    // SECURITY: account_id comes from webhook config, not agent input
+    if (!account_id) {
+      log.warn("Missing account_id in request");
+      return errorResponse("Missing account_id", 400);
     }
 
     if (!phone) {
@@ -39,24 +39,24 @@ Deno.serve(async (req) => {
 
     // Validate organization exists
     const { data: org, error: orgError } = await supabase
-      .from('institutions')
+      .from('accounts')
       .select('id, name')
-      .eq('id', institution_id)
+      .eq('id', account_id)
       .single();
 
     if (orgError || !org) {
-      log.warn("Invalid organization", { institution_id });
+      log.warn("Invalid organization", { account_id });
       return errorResponse("Invalid organization", 403);
     }
 
     // Normalize phone number (remove non-digits, ensure +1 prefix)
     const normalizedPhone = normalizePhone(phone);
 
-    // Upsert contact - ALWAYS filtered by institution_id
+    // Upsert contact - ALWAYS filtered by account_id
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .upsert({
-        institution_id,
+        account_id,
         phone: normalizedPhone,
         name: name || null,
         address: address || null,
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
         source: 'inbound_call',
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'institution_id,phone',
+        onConflict: 'account_id,phone',
         ignoreDuplicates: false
       })
       .select('id, name, phone')

@@ -18,7 +18,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 
-interface Institution {
+interface Account {
   id: string;
   name: string;
   slug: string;
@@ -31,61 +31,61 @@ interface Institution {
     status: string;
     stripe_subscription_id: string | null;
   }[];
-  institution_agents: { elevenlabs_agent_id: string | null }[];
-  profiles: { email: string; full_name: string | null }[];
+  account_agents: { elevenlabs_agent_id: string | null }[];
+  users: { email: string; full_name: string | null }[];
 }
 
 const REFRESH_INTERVAL = 10000; // 10 seconds
 
-const InstitutionsManagement = () => {
-  const [institutions, setInstitutions] = useState<Institution[]>([]);
+const AccountsManagement = () => {
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedOrg, setSelectedOrg] = useState<Institution | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const filteredInstitutions = useMemo(() => {
-    if (!searchQuery.trim()) return institutions;
+  const filteredAccounts = useMemo(() => {
+    if (!searchQuery.trim()) return accounts;
 
     const query = searchQuery.toLowerCase();
-    return institutions.filter((org) => {
-      const user = org.profiles?.[0];
-      const phoneNumber = org.phone_numbers?.[0];
+    return accounts.filter((account) => {
+      const user = account.users?.[0];
+      const phoneNumber = account.phone_numbers?.[0];
 
       return (
-        org.name.toLowerCase().includes(query) ||
-        org.slug.toLowerCase().includes(query) ||
-        org.id.toLowerCase().includes(query) ||
+        account.name.toLowerCase().includes(query) ||
+        account.slug.toLowerCase().includes(query) ||
+        account.id.toLowerCase().includes(query) ||
         user?.email?.toLowerCase().includes(query) ||
         user?.full_name?.toLowerCase().includes(query) ||
         phoneNumber?.phone_number?.includes(query)
       );
     });
-  }, [institutions, searchQuery]);
+  }, [accounts, searchQuery]);
 
-  const fetchInstitutions = useCallback(async (isRefresh = false) => {
+  const fetchAccounts = useCallback(async (isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
-      console.log('[InstitutionsManagement] Fetching institutions', { isRefresh });
+      console.log('[AccountsManagement] Fetching accounts', { isRefresh });
 
       // Call admin endpoint which uses service role to bypass RLS
-      const { data, error } = await supabase.functions.invoke('admin-list-institutions', {
+      const { data, error } = await supabase.functions.invoke('admin-list-accounts', {
         method: 'GET',
       });
 
       if (error) {
-        throw new Error(error.message || 'Failed to fetch institutions');
+        throw new Error(error.message || 'Failed to fetch accounts');
       }
 
-      setInstitutions(data?.data || []);
+      setAccounts(data?.data || []);
     } catch (error) {
-      console.error('Error fetching institutions:', error);
+      console.error('Error fetching accounts:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to fetch institutions',
+        description: error instanceof Error ? error.message : 'Failed to fetch accounts',
         variant: 'destructive',
       });
     } finally {
@@ -97,9 +97,9 @@ const InstitutionsManagement = () => {
   const startAutoRefresh = useCallback(() => {
     if (intervalRef.current) return; // Already running
     intervalRef.current = setInterval(() => {
-      fetchInstitutions(true);
+      fetchAccounts(true);
     }, REFRESH_INTERVAL);
-  }, [fetchInstitutions]);
+  }, [fetchAccounts]);
 
   const stopAutoRefresh = useCallback(() => {
     if (intervalRef.current) {
@@ -110,11 +110,11 @@ const InstitutionsManagement = () => {
 
   // Initial fetch and auto-refresh when tab is visible
   useEffect(() => {
-    fetchInstitutions();
+    fetchAccounts();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchInstitutions(true);
+        fetchAccounts(true);
         startAutoRefresh();
       } else {
         stopAutoRefresh();
@@ -132,44 +132,44 @@ const InstitutionsManagement = () => {
       stopAutoRefresh();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchInstitutions, startAutoRefresh, stopAutoRefresh]);
+  }, [fetchAccounts, startAutoRefresh, stopAutoRefresh]);
 
-  const handleDeleteClick = (org: Institution) => {
-    setSelectedOrg(org);
+  const handleDeleteClick = (account: Account) => {
+    setSelectedAccount(account);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!selectedOrg) return;
+    if (!selectedAccount) return;
 
     try {
       setDeleting(true);
 
       // Call the delete edge function
-      const { error } = await supabase.functions.invoke('admin-delete-institution', {
+      const { error } = await supabase.functions.invoke('admin-delete-account', {
         body: {
-          institutionId: selectedOrg.id,
+          accountId: selectedAccount.id,
         },
       });
 
       if (error) {
-        throw new Error(error.message || 'Failed to delete institution');
+        throw new Error(error.message || 'Failed to delete account');
       }
 
       toast({
         title: 'Success',
-        description: `Institution "${selectedOrg.name}" has been deleted`,
+        description: `Account "${selectedAccount.name}" has been deleted`,
       });
 
       // Refresh the list
-      await fetchInstitutions();
+      await fetchAccounts();
       setDeleteDialogOpen(false);
-      setSelectedOrg(null);
+      setSelectedAccount(null);
     } catch (error) {
-      console.error('Error deleting institution:', error);
+      console.error('Error deleting account:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to delete institution',
+        description: error instanceof Error ? error.message : 'Failed to delete account',
         variant: 'destructive',
       });
     } finally {
@@ -191,10 +191,10 @@ const InstitutionsManagement = () => {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Institutions</CardTitle>
+          <CardTitle>Accounts</CardTitle>
           <CardDescription>
-            Manage all institutions in the system. Total: {institutions.length}
-            {searchQuery && ` (showing ${filteredInstitutions.length})`}
+            Manage all accounts in the system. Total: {accounts.length}
+            {searchQuery && ` (showing ${filteredAccounts.length})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -210,34 +210,34 @@ const InstitutionsManagement = () => {
             </div>
           </div>
 
-          {filteredInstitutions.length === 0 ? (
+          {filteredAccounts.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>{searchQuery ? 'No institutions match your search' : 'No institutions found'}</p>
+              <p>{searchQuery ? 'No accounts match your search' : 'No accounts found'}</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredInstitutions.map((org) => {
-                const subscription = org.subscriptions?.[0];
-                const agent = org.institution_agents?.[0];
-                const phoneNumber = org.phone_numbers?.[0];
-                const user = org.profiles?.[0];
+              {filteredAccounts.map((account) => {
+                const subscription = account.subscriptions?.[0];
+                const agent = account.account_agents?.[0];
+                const phoneNumber = account.phone_numbers?.[0];
+                const user = account.users?.[0];
 
                 return (
-                  <Card key={org.id} className="border-slate-200">
+                  <Card key={account.id} className="border-slate-200">
                     <CardContent className="pt-6">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-lg">{org.name}</h3>
-                              {org.is_onboarding_complete ? (
+                              <h3 className="font-semibold text-lg">{account.name}</h3>
+                              {account.is_onboarding_complete ? (
                                 <Badge variant="default" className="bg-green-500">Active</Badge>
                               ) : (
                                 <Badge variant="secondary">Onboarding</Badge>
                               )}
                             </div>
-                            <p className="text-sm text-slate-500">/{org.slug}</p>
+                            <p className="text-sm text-slate-500">/{account.slug}</p>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -264,7 +264,7 @@ const InstitutionsManagement = () => {
 
                             <div className="flex items-center gap-2 text-slate-600">
                               <Calendar className="h-4 w-4" />
-                              <span>{new Date(org.created_at).toLocaleDateString()}</span>
+                              <span>{new Date(account.created_at).toLocaleDateString()}</span>
                             </div>
                           </div>
 
@@ -274,13 +274,13 @@ const InstitutionsManagement = () => {
                             </p>
                           )}
 
-                          <p className="text-xs text-slate-400 font-mono">{org.id}</p>
+                          <p className="text-xs text-slate-400 font-mono">{account.id}</p>
                         </div>
 
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => handleDeleteClick(org)}
+                          onClick={() => handleDeleteClick(account)}
                           className="flex-shrink-0"
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -301,11 +301,11 @@ const InstitutionsManagement = () => {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-red-500" />
-              Delete Institution
+              Delete Account
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>
-                Are you sure you want to delete <strong>{selectedOrg?.name}</strong>?
+                Are you sure you want to delete <strong>{selectedAccount?.name}</strong>?
               </p>
               <Alert variant="destructive" className="mt-3">
                 <AlertDescription>
@@ -338,7 +338,7 @@ const InstitutionsManagement = () => {
                   Deleting...
                 </>
               ) : (
-                'Delete Institution'
+                'Delete Account'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -348,4 +348,4 @@ const InstitutionsManagement = () => {
   );
 };
 
-export default InstitutionsManagement;
+export default AccountsManagement;

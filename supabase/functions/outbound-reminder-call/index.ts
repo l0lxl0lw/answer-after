@@ -51,9 +51,9 @@ serve(async (req) => {
 
     // Get organization details
     const { data: orgData, error: orgError } = await supabase
-      .from('institutions')
+      .from('accounts')
       .select('*')
-      .eq('id', reminder.institution_id)
+      .eq('id', reminder.account_id)
       .single();
 
     if (orgError || !orgData) {
@@ -65,7 +65,7 @@ serve(async (req) => {
     const { data: phoneData } = await supabase
       .from('phone_numbers')
       .select('phone_number')
-      .eq('institution_id', reminder.institution_id)
+      .eq('account_id', reminder.account_id)
       .eq('is_active', true)
       .limit(1)
       .single();
@@ -75,11 +75,11 @@ serve(async (req) => {
       return errorResponse('No phone number configured', 400);
     }
 
-    // Get ElevenLabs agent for this organization
+    // Get ElevenLabs agent for this account
     const { data: agentData } = await supabase
-      .from('institution_agents')
+      .from('account_agents')
       .select('elevenlabs_agent_id')
-      .eq('institution_id', reminder.institution_id)
+      .eq('account_id', reminder.account_id)
       .single();
 
     if (!agentData?.elevenlabs_agent_id) {

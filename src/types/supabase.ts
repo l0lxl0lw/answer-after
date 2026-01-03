@@ -1,3 +1,4 @@
+Connecting to db 5432
 export type Json =
   | string
   | number
@@ -34,13 +35,147 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_agents: {
+        Row: {
+          account_id: string
+          context: string | null
+          created_at: string
+          elevenlabs_agent_id: string | null
+          elevenlabs_calendar_tool_id: string | null
+          elevenlabs_lookup_contact_tool_id: string | null
+          elevenlabs_save_contact_tool_id: string | null
+          elevenlabs_workflow_id: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          context?: string | null
+          created_at?: string
+          elevenlabs_agent_id?: string | null
+          elevenlabs_calendar_tool_id?: string | null
+          elevenlabs_lookup_contact_tool_id?: string | null
+          elevenlabs_save_contact_tool_id?: string | null
+          elevenlabs_workflow_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          context?: string | null
+          created_at?: string
+          elevenlabs_agent_id?: string | null
+          elevenlabs_calendar_tool_id?: string | null
+          elevenlabs_lookup_contact_tool_id?: string | null
+          elevenlabs_save_contact_tool_id?: string | null
+          elevenlabs_workflow_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_agents_organization_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounts: {
+        Row: {
+          business_hours_end: string | null
+          business_hours_schedule: Json | null
+          business_hours_start: string | null
+          business_phone_number: string | null
+          created_at: string
+          emergency_keywords: string[] | null
+          id: string
+          is_onboarding_complete: boolean
+          name: string
+          nexhealth_enabled: boolean
+          nexhealth_location_id: string | null
+          nexhealth_subdomain: string | null
+          notification_email: string | null
+          notification_phone: string | null
+          onboarding_completed_at: string | null
+          slug: string
+          timezone: string
+          twilio_subaccount_auth_token: string | null
+          twilio_subaccount_sid: string | null
+          updated_at: string
+          webhook_enabled: boolean | null
+          webhook_secret: string | null
+          webhook_url: string | null
+          widget_config: Json | null
+          widget_enabled: boolean | null
+          workflow_config: Json | null
+        }
+        Insert: {
+          business_hours_end?: string | null
+          business_hours_schedule?: Json | null
+          business_hours_start?: string | null
+          business_phone_number?: string | null
+          created_at?: string
+          emergency_keywords?: string[] | null
+          id?: string
+          is_onboarding_complete?: boolean
+          name: string
+          nexhealth_enabled?: boolean
+          nexhealth_location_id?: string | null
+          nexhealth_subdomain?: string | null
+          notification_email?: string | null
+          notification_phone?: string | null
+          onboarding_completed_at?: string | null
+          slug: string
+          timezone?: string
+          twilio_subaccount_auth_token?: string | null
+          twilio_subaccount_sid?: string | null
+          updated_at?: string
+          webhook_enabled?: boolean | null
+          webhook_secret?: string | null
+          webhook_url?: string | null
+          widget_config?: Json | null
+          widget_enabled?: boolean | null
+          workflow_config?: Json | null
+        }
+        Update: {
+          business_hours_end?: string | null
+          business_hours_schedule?: Json | null
+          business_hours_start?: string | null
+          business_phone_number?: string | null
+          created_at?: string
+          emergency_keywords?: string[] | null
+          id?: string
+          is_onboarding_complete?: boolean
+          name?: string
+          nexhealth_enabled?: boolean
+          nexhealth_location_id?: string | null
+          nexhealth_subdomain?: string | null
+          notification_email?: string | null
+          notification_phone?: string | null
+          onboarding_completed_at?: string | null
+          slug?: string
+          timezone?: string
+          twilio_subaccount_auth_token?: string | null
+          twilio_subaccount_sid?: string | null
+          updated_at?: string
+          webhook_enabled?: boolean | null
+          webhook_secret?: string | null
+          webhook_url?: string | null
+          widget_config?: Json | null
+          widget_enabled?: boolean | null
+          workflow_config?: Json | null
+        }
+        Relationships: []
+      }
       appointment_reminders: {
         Row: {
+          account_id: string
           appointment_id: string
           call_duration_seconds: number | null
           created_at: string
           id: string
-          institution_id: string
           notes: string | null
           reminder_number: number
           reminder_type: string
@@ -51,11 +186,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           appointment_id: string
           call_duration_seconds?: number | null
           created_at?: string
           id?: string
-          institution_id: string
           notes?: string | null
           reminder_number: number
           reminder_type?: string
@@ -66,11 +201,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           appointment_id?: string
           call_duration_seconds?: number | null
           created_at?: string
           id?: string
-          institution_id?: string
           notes?: string | null
           reminder_number?: number
           reminder_type?: string
@@ -83,9 +218,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "appointment_reminders_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
           {
@@ -99,6 +234,7 @@ export type Database = {
       }
       appointments: {
         Row: {
+          account_id: string
           calendar_event_id: string | null
           call_id: string | null
           created_at: string
@@ -106,7 +242,6 @@ export type Database = {
           customer_name: string
           customer_phone: string
           id: string
-          institution_id: string
           is_emergency: boolean
           issue_description: string
           nexhealth_appointment_id: string | null
@@ -122,6 +257,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           calendar_event_id?: string | null
           call_id?: string | null
           created_at?: string
@@ -129,7 +265,6 @@ export type Database = {
           customer_name: string
           customer_phone: string
           id?: string
-          institution_id: string
           is_emergency?: boolean
           issue_description: string
           nexhealth_appointment_id?: string | null
@@ -145,6 +280,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           calendar_event_id?: string | null
           call_id?: string | null
           created_at?: string
@@ -152,7 +288,6 @@ export type Database = {
           customer_name?: string
           customer_phone?: string
           id?: string
-          institution_id?: string
           is_emergency?: boolean
           issue_description?: string
           nexhealth_appointment_id?: string | null
@@ -184,9 +319,9 @@ export type Database = {
           },
           {
             foreignKeyName: "appointments_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
           {
@@ -207,6 +342,7 @@ export type Database = {
       }
       calendar_events: {
         Row: {
+          account_id: string
           appointment_id: string | null
           color: string | null
           created_at: string
@@ -218,7 +354,6 @@ export type Database = {
           external_id: string | null
           external_updated_at: string | null
           id: string
-          institution_id: string
           last_synced_at: string | null
           provider_id: string | null
           source: string
@@ -229,6 +364,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           appointment_id?: string | null
           color?: string | null
           created_at?: string
@@ -240,7 +376,6 @@ export type Database = {
           external_id?: string | null
           external_updated_at?: string | null
           id?: string
-          institution_id: string
           last_synced_at?: string | null
           provider_id?: string | null
           source: string
@@ -251,6 +386,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           appointment_id?: string | null
           color?: string | null
           created_at?: string
@@ -262,7 +398,6 @@ export type Database = {
           external_id?: string | null
           external_updated_at?: string | null
           id?: string
-          institution_id?: string
           last_synced_at?: string | null
           provider_id?: string | null
           source?: string
@@ -282,9 +417,9 @@ export type Database = {
           },
           {
             foreignKeyName: "calendar_events_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
           {
@@ -298,30 +433,30 @@ export type Database = {
       }
       calendar_sync_log: {
         Row: {
+          account_id: string
           action: string
           created_at: string
           details: Json | null
           event_id: string | null
           id: string
-          institution_id: string
           source: string
         }
         Insert: {
+          account_id: string
           action: string
           created_at?: string
           details?: Json | null
           event_id?: string | null
           id?: string
-          institution_id: string
           source: string
         }
         Update: {
+          account_id?: string
           action?: string
           created_at?: string
           details?: Json | null
           event_id?: string | null
           id?: string
-          institution_id?: string
           source?: string
         }
         Relationships: [
@@ -334,9 +469,9 @@ export type Database = {
           },
           {
             foreignKeyName: "calendar_sync_log_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -375,6 +510,118 @@ export type Database = {
             columns: ["call_id"]
             isOneToOne: false
             referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_intakes: {
+        Row: {
+          account_id: string
+          call_id: string | null
+          callback_completed_at: string | null
+          callback_notes: string | null
+          callback_requested: boolean
+          callback_scheduled_for: string | null
+          caller_address: string | null
+          caller_name: string | null
+          caller_phone: string
+          caller_zip: string | null
+          contact_id: string | null
+          created_at: string | null
+          emergency_keywords: string[] | null
+          extraction_confidence: number | null
+          id: string
+          is_emergency: boolean
+          issue_description: string | null
+          raw_transcript: string | null
+          service_category:
+            | Database["public"]["Enums"]["intake_category"]
+            | null
+          transfer_accepted: boolean | null
+          transferred_to_name: string | null
+          transferred_to_phone: string | null
+          updated_at: string | null
+          urgency: Database["public"]["Enums"]["intake_urgency"]
+          was_transferred: boolean
+        }
+        Insert: {
+          account_id: string
+          call_id?: string | null
+          callback_completed_at?: string | null
+          callback_notes?: string | null
+          callback_requested?: boolean
+          callback_scheduled_for?: string | null
+          caller_address?: string | null
+          caller_name?: string | null
+          caller_phone: string
+          caller_zip?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          emergency_keywords?: string[] | null
+          extraction_confidence?: number | null
+          id?: string
+          is_emergency?: boolean
+          issue_description?: string | null
+          raw_transcript?: string | null
+          service_category?:
+            | Database["public"]["Enums"]["intake_category"]
+            | null
+          transfer_accepted?: boolean | null
+          transferred_to_name?: string | null
+          transferred_to_phone?: string | null
+          updated_at?: string | null
+          urgency?: Database["public"]["Enums"]["intake_urgency"]
+          was_transferred?: boolean
+        }
+        Update: {
+          account_id?: string
+          call_id?: string | null
+          callback_completed_at?: string | null
+          callback_notes?: string | null
+          callback_requested?: boolean
+          callback_scheduled_for?: string | null
+          caller_address?: string | null
+          caller_name?: string | null
+          caller_phone?: string
+          caller_zip?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          emergency_keywords?: string[] | null
+          extraction_confidence?: number | null
+          id?: string
+          is_emergency?: boolean
+          issue_description?: string | null
+          raw_transcript?: string | null
+          service_category?:
+            | Database["public"]["Enums"]["intake_category"]
+            | null
+          transfer_accepted?: boolean | null
+          transferred_to_name?: string | null
+          transferred_to_phone?: string | null
+          updated_at?: string | null
+          urgency?: Database["public"]["Enums"]["intake_urgency"]
+          was_transferred?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_intakes_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_intakes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_intakes_institution_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -419,6 +666,7 @@ export type Database = {
       }
       calls: {
         Row: {
+          account_id: string
           caller_name: string | null
           caller_phone: string
           contact_id: string | null
@@ -427,7 +675,7 @@ export type Database = {
           elevenlabs_conversation_id: string | null
           ended_at: string | null
           id: string
-          institution_id: string
+          intake_id: string | null
           interest_level: Database["public"]["Enums"]["interest_level"] | null
           is_emergency: boolean
           lead_notes: string | null
@@ -443,6 +691,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           caller_name?: string | null
           caller_phone: string
           contact_id?: string | null
@@ -451,7 +700,7 @@ export type Database = {
           elevenlabs_conversation_id?: string | null
           ended_at?: string | null
           id?: string
-          institution_id: string
+          intake_id?: string | null
           interest_level?: Database["public"]["Enums"]["interest_level"] | null
           is_emergency?: boolean
           lead_notes?: string | null
@@ -467,6 +716,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           caller_name?: string | null
           caller_phone?: string
           contact_id?: string | null
@@ -475,7 +725,7 @@ export type Database = {
           elevenlabs_conversation_id?: string | null
           ended_at?: string | null
           id?: string
-          institution_id?: string
+          intake_id?: string | null
           interest_level?: Database["public"]["Enums"]["interest_level"] | null
           is_emergency?: boolean
           lead_notes?: string | null
@@ -499,10 +749,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "calls_organization_id_fkey"
-            columns: ["institution_id"]
+            foreignKeyName: "calls_intake_id_fkey"
+            columns: ["intake_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "call_intakes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_organization_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
           {
@@ -514,13 +771,160 @@ export type Database = {
           },
         ]
       }
+      campaign_contacts: {
+        Row: {
+          attempts: number | null
+          campaign_id: string
+          contact_id: string
+          created_at: string | null
+          id: string
+          last_attempt_at: string | null
+          last_call_id: string | null
+          notes: string | null
+          outcome: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          campaign_id: string
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_call_id?: string | null
+          notes?: string | null
+          outcome?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          campaign_id?: string
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_call_id?: string | null
+          notes?: string | null
+          outcome?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_contacts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_contacts_last_call_id_fkey"
+            columns: ["last_call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          account_id: string
+          agent_prompt: string | null
+          calling_days: string[] | null
+          calling_hours_end: string | null
+          calling_hours_start: string | null
+          campaign_type: string | null
+          contacts_called: number | null
+          contacts_completed: number | null
+          contacts_connected: number | null
+          created_at: string | null
+          description: string | null
+          end_date: string | null
+          first_message: string | null
+          id: string
+          max_attempts: number | null
+          name: string
+          retry_delay_hours: number | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["campaign_status"] | null
+          timezone: string | null
+          total_contacts: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          agent_prompt?: string | null
+          calling_days?: string[] | null
+          calling_hours_end?: string | null
+          calling_hours_start?: string | null
+          campaign_type?: string | null
+          contacts_called?: number | null
+          contacts_completed?: number | null
+          contacts_connected?: number | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          first_message?: string | null
+          id?: string
+          max_attempts?: number | null
+          name: string
+          retry_delay_hours?: number | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["campaign_status"] | null
+          timezone?: string | null
+          total_contacts?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          agent_prompt?: string | null
+          calling_days?: string[] | null
+          calling_hours_end?: string | null
+          calling_hours_start?: string | null
+          campaign_type?: string | null
+          contacts_called?: number | null
+          contacts_completed?: number | null
+          contacts_connected?: number | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          first_message?: string | null
+          id?: string
+          max_attempts?: number | null
+          name?: string
+          retry_delay_hours?: number | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["campaign_status"] | null
+          timezone?: string | null
+          total_contacts?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
+          account_id: string
           address: string | null
           created_at: string | null
           email: string | null
           id: string
-          institution_id: string
           interest_level: Database["public"]["Enums"]["interest_level"] | null
           lead_notes: string | null
           lead_status: Database["public"]["Enums"]["lead_status"] | null
@@ -534,11 +938,11 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          account_id: string
           address?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
-          institution_id: string
           interest_level?: Database["public"]["Enums"]["interest_level"] | null
           lead_notes?: string | null
           lead_status?: Database["public"]["Enums"]["lead_status"] | null
@@ -552,11 +956,11 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          account_id?: string
           address?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
-          institution_id?: string
           interest_level?: Database["public"]["Enums"]["interest_level"] | null
           lead_notes?: string | null
           lead_status?: Database["public"]["Enums"]["lead_status"] | null
@@ -572,9 +976,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "contacts_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -630,126 +1034,48 @@ export type Database = {
         }
         Relationships: []
       }
-      institution_agents: {
+      knowledge_base_documents: {
         Row: {
-          context: string | null
-          created_at: string
-          elevenlabs_agent_id: string | null
-          elevenlabs_calendar_tool_id: string | null
-          elevenlabs_lookup_contact_tool_id: string | null
-          elevenlabs_save_contact_tool_id: string | null
+          account_id: string
+          created_at: string | null
+          elevenlabs_document_id: string
+          file_size_bytes: number | null
           id: string
-          institution_id: string
-          updated_at: string
+          name: string
         }
         Insert: {
-          context?: string | null
-          created_at?: string
-          elevenlabs_agent_id?: string | null
-          elevenlabs_calendar_tool_id?: string | null
-          elevenlabs_lookup_contact_tool_id?: string | null
-          elevenlabs_save_contact_tool_id?: string | null
+          account_id: string
+          created_at?: string | null
+          elevenlabs_document_id: string
+          file_size_bytes?: number | null
           id?: string
-          institution_id: string
-          updated_at?: string
+          name: string
         }
         Update: {
-          context?: string | null
-          created_at?: string
-          elevenlabs_agent_id?: string | null
-          elevenlabs_calendar_tool_id?: string | null
-          elevenlabs_lookup_contact_tool_id?: string | null
-          elevenlabs_save_contact_tool_id?: string | null
+          account_id?: string
+          created_at?: string | null
+          elevenlabs_document_id?: string
+          file_size_bytes?: number | null
           id?: string
-          institution_id?: string
-          updated_at?: string
+          name?: string
         }
         Relationships: [
           {
-            foreignKeyName: "organization_agents_organization_id_fkey"
-            columns: ["institution_id"]
-            isOneToOne: true
-            referencedRelation: "institutions"
+            foreignKeyName: "knowledge_base_documents_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
       }
-      institutions: {
-        Row: {
-          business_hours_end: string | null
-          business_hours_schedule: Json | null
-          business_hours_start: string | null
-          business_phone_number: string | null
-          created_at: string
-          emergency_keywords: string[] | null
-          id: string
-          is_onboarding_complete: boolean
-          name: string
-          nexhealth_enabled: boolean
-          nexhealth_location_id: string | null
-          nexhealth_subdomain: string | null
-          notification_email: string | null
-          notification_phone: string | null
-          onboarding_completed_at: string | null
-          slug: string
-          timezone: string
-          twilio_subaccount_auth_token: string | null
-          twilio_subaccount_sid: string | null
-          updated_at: string
-        }
-        Insert: {
-          business_hours_end?: string | null
-          business_hours_schedule?: Json | null
-          business_hours_start?: string | null
-          business_phone_number?: string | null
-          created_at?: string
-          emergency_keywords?: string[] | null
-          id?: string
-          is_onboarding_complete?: boolean
-          name: string
-          nexhealth_enabled?: boolean
-          nexhealth_location_id?: string | null
-          nexhealth_subdomain?: string | null
-          notification_email?: string | null
-          notification_phone?: string | null
-          onboarding_completed_at?: string | null
-          slug: string
-          timezone?: string
-          twilio_subaccount_auth_token?: string | null
-          twilio_subaccount_sid?: string | null
-          updated_at?: string
-        }
-        Update: {
-          business_hours_end?: string | null
-          business_hours_schedule?: Json | null
-          business_hours_start?: string | null
-          business_phone_number?: string | null
-          created_at?: string
-          emergency_keywords?: string[] | null
-          id?: string
-          is_onboarding_complete?: boolean
-          name?: string
-          nexhealth_enabled?: boolean
-          nexhealth_location_id?: string | null
-          nexhealth_subdomain?: string | null
-          notification_email?: string | null
-          notification_phone?: string | null
-          onboarding_completed_at?: string | null
-          slug?: string
-          timezone?: string
-          twilio_subaccount_auth_token?: string | null
-          twilio_subaccount_sid?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       phone_numbers: {
         Row: {
+          account_id: string
           created_at: string
           elevenlabs_phone_number_id: string | null
           friendly_name: string | null
           id: string
-          institution_id: string
           is_active: boolean
           is_after_hours_only: boolean
           is_shared: boolean
@@ -759,11 +1085,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           created_at?: string
           elevenlabs_phone_number_id?: string | null
           friendly_name?: string | null
           id?: string
-          institution_id: string
           is_active?: boolean
           is_after_hours_only?: boolean
           is_shared?: boolean
@@ -773,11 +1099,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           created_at?: string
           elevenlabs_phone_number_id?: string | null
           friendly_name?: string | null
           id?: string
-          institution_id?: string
           is_active?: boolean
           is_after_hours_only?: boolean
           is_shared?: boolean
@@ -789,59 +1115,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "phone_numbers_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string
-          email: string
-          email_verified: boolean
-          full_name: string
-          id: string
-          institution_id: string | null
-          is_active: boolean
-          phone: string | null
-          phone_verified: boolean
-          updated_at: string
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          email: string
-          email_verified?: boolean
-          full_name: string
-          id: string
-          institution_id?: string | null
-          is_active?: boolean
-          phone?: string | null
-          phone_verified?: boolean
-          updated_at?: string
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string
-          email_verified?: boolean
-          full_name?: string
-          id?: string
-          institution_id?: string | null
-          is_active?: boolean
-          phone?: string | null
-          phone_verified?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_organization_id_fkey"
-            columns: ["institution_id"]
-            isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -878,30 +1154,30 @@ export type Database = {
       }
       provider_roles: {
         Row: {
+          account_id: string
           created_at: string
           display_order: number
           id: string
-          institution_id: string
           is_default: boolean
           name: string
           slug: string
           updated_at: string
         }
         Insert: {
+          account_id: string
           created_at?: string
           display_order?: number
           id?: string
-          institution_id: string
           is_default?: boolean
           name: string
           slug: string
           updated_at?: string
         }
         Update: {
+          account_id?: string
           created_at?: string
           display_order?: number
           id?: string
-          institution_id?: string
           is_default?: boolean
           name?: string
           slug?: string
@@ -910,9 +1186,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "provider_roles_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -998,12 +1274,12 @@ export type Database = {
       }
       providers: {
         Row: {
+          account_id: string
           color: string | null
           created_at: string
           email: string | null
           external_id: string | null
           id: string
-          institution_id: string
           is_active: boolean
           name: string
           phone: string | null
@@ -1013,12 +1289,12 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          account_id: string
           color?: string | null
           created_at?: string
           email?: string | null
           external_id?: string | null
           id?: string
-          institution_id: string
           is_active?: boolean
           name: string
           phone?: string | null
@@ -1028,12 +1304,12 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          account_id?: string
           color?: string | null
           created_at?: string
           email?: string | null
           external_id?: string | null
           id?: string
-          institution_id?: string
           is_active?: boolean
           name?: string
           phone?: string | null
@@ -1045,9 +1321,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "providers_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
           {
@@ -1061,38 +1337,38 @@ export type Database = {
             foreignKeyName: "providers_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
       }
       purchased_credits: {
         Row: {
+          account_id: string
           created_at: string
           credits_purchased: number
           credits_remaining: number
           id: string
-          institution_id: string
           price_cents: number
           purchased_at: string
           stripe_payment_intent_id: string | null
         }
         Insert: {
+          account_id: string
           created_at?: string
           credits_purchased: number
           credits_remaining: number
           id?: string
-          institution_id: string
           price_cents: number
           purchased_at?: string
           stripe_payment_intent_id?: string | null
         }
         Update: {
+          account_id?: string
           created_at?: string
           credits_purchased?: number
           credits_remaining?: number
           id?: string
-          institution_id?: string
           price_cents?: number
           purchased_at?: string
           stripe_payment_intent_id?: string | null
@@ -1100,21 +1376,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "purchased_credits_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_user_roles_user"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
       }
       services: {
         Row: {
+          account_id: string
           category: string
           created_at: string
           description: string | null
           duration_minutes: number
           id: string
-          institution_id: string
           is_active: boolean
           name: string
           price_cents: number
@@ -1122,12 +1424,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           category?: string
           created_at?: string
           description?: string | null
           duration_minutes?: number
           id?: string
-          institution_id: string
           is_active?: boolean
           name: string
           price_cents?: number
@@ -1135,12 +1437,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           category?: string
           created_at?: string
           description?: string | null
           duration_minutes?: number
           id?: string
-          institution_id?: string
           is_active?: boolean
           name?: string
           price_cents?: number
@@ -1150,9 +1452,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "services_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1181,8 +1483,10 @@ export type Database = {
           is_visible: boolean
           name: string
           period: string
+          phone_lines: number | null
           plan_id: string
           price_cents: number
+          sms_limit: number | null
           stripe_monthly_price_id: string | null
           support_level: string
           updated_at: string
@@ -1210,8 +1514,10 @@ export type Database = {
           is_visible?: boolean
           name: string
           period?: string
+          phone_lines?: number | null
           plan_id: string
           price_cents?: number
+          sms_limit?: number | null
           stripe_monthly_price_id?: string | null
           support_level?: string
           updated_at?: string
@@ -1239,8 +1545,10 @@ export type Database = {
           is_visible?: boolean
           name?: string
           period?: string
+          phone_lines?: number | null
           plan_id?: string
           price_cents?: number
+          sms_limit?: number | null
           stripe_monthly_price_id?: string | null
           support_level?: string
           updated_at?: string
@@ -1249,12 +1557,12 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          account_id: string
           cancel_at_period_end: boolean
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
           id: string
-          institution_id: string
           plan: string
           status: string
           stripe_customer_id: string | null
@@ -1264,12 +1572,12 @@ export type Database = {
           used_credits: number
         }
         Insert: {
+          account_id: string
           cancel_at_period_end?: boolean
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
-          institution_id: string
           plan?: string
           status?: string
           stripe_customer_id?: string | null
@@ -1279,12 +1587,12 @@ export type Database = {
           used_credits?: number
         }
         Update: {
+          account_id?: string
           cancel_at_period_end?: boolean
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
-          institution_id?: string
           plan?: string
           status?: string
           stripe_customer_id?: string | null
@@ -1296,9 +1604,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "subscriptions_organization_id_fkey"
-            columns: ["institution_id"]
+            columns: ["account_id"]
             isOneToOne: true
-            referencedRelation: "institutions"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
           {
@@ -1310,28 +1618,52 @@ export type Database = {
           },
         ]
       }
-      user_roles: {
+      users: {
         Row: {
+          account_id: string | null
+          avatar_url: string | null
+          created_at: string
+          email: string
+          email_verified: boolean
+          full_name: string
           id: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
+          is_active: boolean
+          phone: string | null
+          phone_verified: boolean
+          updated_at: string
         }
         Insert: {
-          id?: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
+          account_id?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          email_verified?: boolean
+          full_name: string
+          id: string
+          is_active?: boolean
+          phone?: string | null
+          phone_verified?: boolean
+          updated_at?: string
         }
         Update: {
+          account_id?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          email_verified?: boolean
+          full_name?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
+          is_active?: boolean
+          phone?: string | null
+          phone_verified?: boolean
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "fk_user_roles_user"
-            columns: ["user_id"]
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["account_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1375,7 +1707,7 @@ export type Database = {
             foreignKeyName: "fk_verification_codes_user"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1387,16 +1719,18 @@ export type Database = {
     Functions: {
       cleanup_old_idempotency_keys: { Args: never; Returns: undefined }
       get_role_usage_count: { Args: { role_uuid: string }; Returns: number }
-      get_user_institution_id: { Args: { _user_id: string }; Returns: string }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
+      get_user_account_id: { Args: { _user_id: string }; Returns: string }
+      has_role:
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["app_role"]
+              _user_id: string
+            }
+            Returns: boolean
+          }
+        | { Args: { _role: string; _user_id: string }; Returns: boolean }
       seed_default_provider_roles: {
-        Args: { org_id: string }
+        Args: { p_account_id: string }
         Returns: undefined
       }
     }
@@ -1417,8 +1751,19 @@ export type Database = {
         | "no_action"
         | "voicemail"
       call_status: "active" | "completed" | "failed" | "voicemail"
+      campaign_status: "draft" | "active" | "paused" | "completed"
       contact_source: "inbound_call" | "manual" | "import"
       contact_status: "lead" | "customer"
+      intake_category:
+        | "hvac"
+        | "plumbing"
+        | "electrical"
+        | "roofing"
+        | "appliance"
+        | "locksmith"
+        | "pest_control"
+        | "general"
+      intake_urgency: "low" | "normal" | "high" | "emergency"
       interest_level: "hot" | "warm" | "cold"
       lead_status: "new" | "contacted" | "converted" | "lost"
     }
@@ -1569,8 +1914,20 @@ export const Constants = {
         "voicemail",
       ],
       call_status: ["active", "completed", "failed", "voicemail"],
+      campaign_status: ["draft", "active", "paused", "completed"],
       contact_source: ["inbound_call", "manual", "import"],
       contact_status: ["lead", "customer"],
+      intake_category: [
+        "hvac",
+        "plumbing",
+        "electrical",
+        "roofing",
+        "appliance",
+        "locksmith",
+        "pest_control",
+        "general",
+      ],
+      intake_urgency: ["low", "normal", "high", "emergency"],
       interest_level: ["hot", "warm", "cold"],
       lead_status: ["new", "contacted", "converted", "lost"],
     },

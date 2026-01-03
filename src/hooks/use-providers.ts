@@ -10,7 +10,7 @@ import type { ProviderRole } from "./use-roles";
 
 export interface Provider {
   id: string;
-  institution_id: string;
+  account_id: string;
   user_id: string | null;
   name: string;
   email: string | null;
@@ -94,7 +94,7 @@ export function useProviders() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["providers", user?.institution_id],
+    queryKey: ["providers", user?.account_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("providers")
@@ -107,7 +107,7 @@ export function useProviders() {
       if (error) throw error;
       return data as Provider[];
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -118,7 +118,7 @@ export function useActiveProviders() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["providers", "active", user?.institution_id],
+    queryKey: ["providers", "active", user?.account_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("providers")
@@ -132,7 +132,7 @@ export function useActiveProviders() {
       if (error) throw error;
       return data as Provider[];
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -170,12 +170,12 @@ export function useCreateProvider() {
 
   return useMutation({
     mutationFn: async (data: CreateProviderRequest) => {
-      if (!user?.institution_id) throw new Error("No organization");
+      if (!user?.account_id) throw new Error("No organization");
 
       const { data: provider, error } = await supabase
         .from("providers")
         .insert({
-          institution_id: user.institution_id,
+          account_id: user.account_id,
           ...data,
         })
         .select()
@@ -186,10 +186,10 @@ export function useCreateProvider() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
-      toast.success("Provider added");
+      toast.success("Member added");
     },
     onError: (error) => {
-      toast.error("Failed to add provider", { description: error.message });
+      toast.error("Failed to add member", { description: error.message });
     },
   });
 }
@@ -215,10 +215,10 @@ export function useUpdateProvider() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
       queryClient.invalidateQueries({ queryKey: ["provider", data.id] });
-      toast.success("Provider updated");
+      toast.success("Member updated");
     },
     onError: (error) => {
-      toast.error("Failed to update provider", { description: error.message });
+      toast.error("Failed to update member", { description: error.message });
     },
   });
 }
@@ -240,10 +240,10 @@ export function useDeleteProvider() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
-      toast.success("Provider removed");
+      toast.success("Member removed");
     },
     onError: (error) => {
-      toast.error("Failed to remove provider", { description: error.message });
+      toast.error("Failed to remove member", { description: error.message });
     },
   });
 }

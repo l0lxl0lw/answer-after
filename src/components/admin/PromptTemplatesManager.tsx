@@ -51,7 +51,7 @@ interface PromptTemplate {
   updated_at: string;
 }
 
-interface Organization {
+interface Account {
   id: string;
   name: string;
 }
@@ -73,7 +73,7 @@ interface PreviewResult {
 const TEMPLATE_INFO: Record<string, { title: string; purpose: string }> = {
   agent_base_prompt: {
     title: 'Base System Prompt',
-    purpose: 'The main instructions that define how the AI agent behaves. This is the core personality and behavior of your receptionist.',
+    purpose: 'The main instructions that define how the AI agent behaves. This is the core personality and behavior of the AI agent.',
   },
   agent_first_message: {
     title: 'First Message / Greeting',
@@ -88,8 +88,8 @@ const TEMPLATE_INFO: Record<string, { title: string; purpose: string }> = {
 const PromptTemplatesManager = () => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [placeholderDefs, setPlaceholderDefs] = useState<PlaceholderDefinition[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [editedTemplates, setEditedTemplates] = useState<Record<string, string>>({});
@@ -104,7 +104,7 @@ const PromptTemplatesManager = () => {
   useEffect(() => {
     fetchTemplates();
     fetchPlaceholders();
-    fetchOrganizations();
+    fetchAccounts();
   }, []);
 
   const fetchTemplates = async () => {
@@ -148,30 +148,30 @@ const PromptTemplatesManager = () => {
     }
   };
 
-  const fetchOrganizations = async () => {
+  const fetchAccounts = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('admin-list-organizations', {
+      const { data, error } = await supabase.functions.invoke('admin-list-accounts', {
         method: 'GET',
       });
 
       if (error) {
-        console.error('Error fetching organizations:', error);
+        console.error('Error fetching accounts:', error);
         return;
       }
 
-      const orgs = data?.organizations || [];
-      setOrganizations(orgs);
-      if (orgs.length > 0 && !selectedOrgId) {
-        setSelectedOrgId(orgs[0].id);
+      const accts = data?.data || [];
+      setAccounts(accts);
+      if (accts.length > 0 && !selectedAccountId) {
+        setSelectedAccountId(accts[0].id);
       }
     } catch (error) {
-      console.error('Error fetching organizations:', error);
+      console.error('Error fetching accounts:', error);
     }
   };
 
   // Debounced preview fetching
   const fetchPreview = useCallback(async (templateId: string, templateContent: string) => {
-    if (!selectedOrgId || !templateContent) return;
+    if (!selectedAccountId || !templateContent) return;
 
     setPreviewLoading((prev) => ({ ...prev, [templateId]: true }));
 
@@ -180,7 +180,7 @@ const PromptTemplatesManager = () => {
         body: {
           action: 'preview',
           template: templateContent,
-          institutionId: selectedOrgId,
+          accountId: selectedAccountId,
         },
       });
 
@@ -195,17 +195,17 @@ const PromptTemplatesManager = () => {
     } finally {
       setPreviewLoading((prev) => ({ ...prev, [templateId]: false }));
     }
-  }, [selectedOrgId]);
+  }, [selectedAccountId]);
 
-  // Fetch preview when org changes
+  // Fetch preview when account changes
   useEffect(() => {
-    if (selectedOrgId) {
+    if (selectedAccountId) {
       templates.forEach((template) => {
         const currentValue = editedTemplates[template.id] ?? template.template;
         fetchPreview(template.id, currentValue);
       });
     }
-  }, [selectedOrgId, templates]);
+  }, [selectedAccountId, templates]);
 
   const handleTemplateChange = (id: string, value: string) => {
     setEditedTemplates((prev) => ({ ...prev, [id]: value }));
@@ -433,21 +433,21 @@ const PromptTemplatesManager = () => {
             </div>
           </div>
 
-          {/* Organization Selector */}
+          {/* Account Selector */}
           <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border">
             <Building2 className="h-5 w-5 text-slate-600" />
             <div className="flex-1">
-              <Label className="text-sm font-medium">Preview with Organization</Label>
-              <p className="text-xs text-slate-500">Select an organization to see how templates render with real data</p>
+              <Label className="text-sm font-medium">Preview with Account</Label>
+              <p className="text-xs text-slate-500">Select an account to see how templates render with real data</p>
             </div>
-            <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+            <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
               <SelectTrigger className="w-[280px]">
-                <SelectValue placeholder="Select organization" />
+                <SelectValue placeholder="Select account" />
               </SelectTrigger>
               <SelectContent>
-                {organizations.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
+                {accounts.map((acct) => (
+                  <SelectItem key={acct.id} value={acct.id}>
+                    {acct.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -552,7 +552,7 @@ const PromptTemplatesManager = () => {
                     </div>
                   ) : (
                     <div className="bg-slate-100 p-4 rounded-lg min-h-[300px] flex items-center justify-center text-slate-500">
-                      {selectedOrgId ? 'Loading preview...' : 'Select an organization to preview'}
+                      {selectedAccountId ? 'Loading preview...' : 'Select an account to preview'}
                     </div>
                   )}
 

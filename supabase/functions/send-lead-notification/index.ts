@@ -1,9 +1,7 @@
 /**
  * Send Lead Notification
  *
- * Sends SMS notification to escalation contacts when a new lead intake is logged.
- * For emergencies, sends immediately to all active contacts.
- * For non-emergencies, sends to the primary contact only.
+ * Sends SMS notification to account notification_phone when a new lead intake is logged.
  */
 
 import { createServiceClient } from "../_shared/db.ts";
@@ -14,7 +12,7 @@ import { makeTwilioRequest, getTwilioCredentials } from "../_shared/twilio.ts";
 const logger = createLogger('send-lead-notification');
 
 interface SendNotificationRequest {
-  institution_id: string;
+  account_id: string;
   intake_id: string;
   is_emergency?: boolean;
 }
@@ -28,11 +26,11 @@ Deno.serve(async (req) => {
     const log = logger.withContext({ requestId: crypto.randomUUID() });
 
     const body: SendNotificationRequest = await req.json();
-    const { institution_id, intake_id, is_emergency = false } = body;
+    const { account_id, intake_id, is_emergency = false } = body;
 
-    log.info("Send notification request", { institution_id, intake_id, is_emergency });
+    log.info("Send notification request", { account_id, intake_id, is_emergency });
 
-    if (!institution_id || !intake_id) {
+    if (!account_id || !intake_id) {
       return errorResponse("Missing required parameters", 400);
     }
 
@@ -43,13 +41,13 @@ Deno.serve(async (req) => {
       .from('call_intakes')
       .select(`
         *,
-        institutions:institution_id (
+        institutions:account_id (
           name,
           notification_phone
         )
       `)
       .eq('id', intake_id)
-      .eq('institution_id', institution_id)
+      .eq('account_id', account_id)
       .single();
 
     if (intakeError || !intake) {
@@ -57,24 +55,11 @@ Deno.serve(async (req) => {
       return errorResponse("Intake not found", 404);
     }
 
-    // Get escalation contacts
-    const { data: contacts, error: contactsError } = await supabase
-      .from('escalation_contacts')
-      .select('id, name, phone, role, priority')
-      .eq('institution_id', institution_id)
-      .eq('is_active', true)
-      .order('priority', { ascending: true });
-
-    if (contactsError) {
-      log.error("Failed to fetch escalation contacts", contactsError);
-      return errorResponse("Failed to fetch contacts", 500);
-    }
-
     // Get institution's phone number for sending SMS
     const { data: phoneNumber } = await supabase
       .from('phone_numbers')
       .select('phone_number')
-      .eq('institution_id', institution_id)
+      .eq('account_id', account_id)
       .eq('is_active', true)
       .maybeSingle();
 
@@ -87,19 +72,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Determine recipients
-    // Emergency: all active contacts
-    // Non-emergency: primary contact (priority 1) or fallback to notification_phone
+    // Determine recipient - use institution notification phone
     let recipients: { phone: string; name: string }[] = [];
 
-    if (is_emergency && contacts && contacts.length > 0) {
-      // Send to all active contacts for emergencies
-      recipients = contacts.map(c => ({ phone: c.phone, name: c.name }));
-    } else if (contacts && contacts.length > 0) {
-      // Send to primary contact only for non-emergencies
-      recipients = [{ phone: contacts[0].phone, name: contacts[0].name }];
-    } else if (intake.institutions?.notification_phone) {
-      // Fallback to institution notification phone
+    if (intake.institutions?.notification_phone) {
       recipients = [{ phone: intake.institutions.notification_phone, name: 'Office' }];
     }
 
@@ -107,7 +83,7 @@ Deno.serve(async (req) => {
       log.warn("No recipients available for notification");
       return successResponse({
         success: false,
-        message: "No recipients configured",
+        message: "No notification phone configured",
         notifications_sent: 0,
       });
     }
@@ -118,7 +94,7 @@ Deno.serve(async (req) => {
     // Send SMS to each recipient
     const results = await Promise.allSettled(
       recipients.map(recipient =>
-        sendSms(phoneNumber.phone_number, recipient.phone, message, institution_id, supabase)
+        sendSms(phoneNumber.phone_number, recipient.phone, message, account_id, supabase)
       )
     );
 
@@ -189,7 +165,7 @@ async function sendSms(
   try {
     // Get institution's Twilio subaccount credentials
     const { data: institution } = await supabase
-      .from('institutions')
+      .from('accounts')
       .select('twilio_subaccount_sid, twilio_subaccount_auth_token')
       .eq('id', institutionId)
       .single();

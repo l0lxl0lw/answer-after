@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Shield, AlertTriangle } from 'lucide-react';
-import InstitutionsManagement from '@/components/admin/InstitutionsManagement';
+import AccountsManagement from '@/components/admin/AccountsManagement';
 import PromptTemplatesManager from '@/components/admin/PromptTemplatesManager';
 
 const AdminAccess = () => {
@@ -101,17 +101,17 @@ const AdminAccess = () => {
             <Shield className="h-8 w-8 text-indigo-600" />
             <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           </div>
-          <p className="text-slate-600">Manage organizations and view system configuration</p>
+          <p className="text-slate-600">Manage accounts and view system configuration</p>
         </div>
 
-        <Tabs defaultValue="organizations" className="space-y-4">
+        <Tabs defaultValue="accounts" className="space-y-4">
           <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="organizations">Organizations</TabsTrigger>
+            <TabsTrigger value="accounts">Accounts</TabsTrigger>
             <TabsTrigger value="prompts">Prompt Templates</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="organizations" className="space-y-4">
-            <InstitutionsManagement />
+          <TabsContent value="accounts" className="space-y-4">
+            <AccountsManagement />
           </TabsContent>
 
           <TabsContent value="prompts" className="space-y-4">

@@ -12,7 +12,7 @@ import { createLogger } from "../_shared/logger.ts";
 const logger = createLogger('agent-log-intake');
 
 interface LogIntakeRequest {
-  institution_id: string;
+  account_id: string;
   caller_name?: string;
   caller_phone: string;
   caller_address?: string;
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
     const body: LogIntakeRequest = await req.json();
     const {
-      institution_id,
+      account_id,
       caller_name,
       caller_phone,
       caller_address,
@@ -49,17 +49,17 @@ Deno.serve(async (req) => {
     } = body;
 
     log.info("Log intake request", {
-      institution_id,
+      account_id,
       caller_phone,
       service_category,
       urgency,
       is_emergency,
     });
 
-    // SECURITY: institution_id comes from webhook config, not agent input
-    if (!institution_id) {
-      log.warn("Missing institution_id in request");
-      return errorResponse("Missing institution_id", 400);
+    // SECURITY: account_id comes from webhook config, not agent input
+    if (!account_id) {
+      log.warn("Missing account_id in request");
+      return errorResponse("Missing account_id", 400);
     }
 
     if (!caller_phone) {
@@ -76,13 +76,13 @@ Deno.serve(async (req) => {
 
     // Validate institution exists
     const { data: org, error: orgError } = await supabase
-      .from('institutions')
+      .from('accounts')
       .select('id, name, workflow_config')
-      .eq('id', institution_id)
+      .eq('id', account_id)
       .single();
 
     if (orgError || !org) {
-      log.warn("Invalid institution", { institution_id });
+      log.warn("Invalid institution", { account_id });
       return errorResponse("Invalid institution", 403);
     }
 
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .upsert({
-        institution_id,
+        account_id,
         phone: normalizedPhone,
         name: caller_name || null,
         address: caller_address || null,
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
         lead_status: 'new',
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'institution_id,phone',
+        onConflict: 'account_id,phone',
         ignoreDuplicates: false
       })
       .select('id')
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     const { data: intake, error: intakeError } = await supabase
       .from('call_intakes')
       .insert({
-        institution_id,
+        account_id,
         call_id: callId,
         contact_id: contact?.id || null,
         caller_name: caller_name || null,
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
     });
 
     // Trigger lead notification (async, don't wait)
-    triggerLeadNotification(supabase, institution_id, intake.id, is_emergency).catch(err => {
+    triggerLeadNotification(supabase, account_id, intake.id, is_emergency).catch(err => {
       log.error("Failed to trigger notification", err as Error);
     });
 
@@ -253,7 +253,7 @@ async function triggerLeadNotification(
     // Call send-lead-notification function
     const { error } = await supabase.functions.invoke('send-lead-notification', {
       body: {
-        institution_id: institutionId,
+        account_id: institutionId,
         intake_id: intakeId,
         is_emergency: isEmergency
       }

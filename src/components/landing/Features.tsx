@@ -13,33 +13,33 @@ import {
 const features = [
   {
     icon: Brain,
-    title: "AI Call Handling",
-    description: "Intelligent AI answers calls naturally, understands customer needs, and responds like a trained receptionist.",
+    title: "Instant Lead Response",
+    description: "Every call answered in seconds. Respond within the critical 5-minute window when leads are 10x more likely to convert.",
   },
   {
     icon: Calendar,
     title: "Smart Scheduling",
-    description: "Automatically schedules appointments based on your custom rules, availability, and service requirements.",
+    description: "Book appointments automatically while prospects are engaged — before they call your competitor.",
   },
   {
     icon: Settings,
-    title: "Business Rules Engine",
-    description: "Define pricing, duration, and scheduling constraints for each service you offer.",
+    title: "Persistent Follow-Up",
+    description: "Multi-touch sequences via call and text ensure no lead falls through the cracks. 78% of customers choose the first to respond.",
   },
   {
     icon: Bell,
-    title: "Instant Notifications",
-    description: "Get daily summaries, new booking alerts, and call transcripts delivered to your phone or email.",
+    title: "Real-Time Alerts",
+    description: "Get instant notifications for hot leads so you can jump in when it matters most.",
   },
   {
     icon: Zap,
-    title: "Smart Prioritization",
-    description: "AI categorizes requests and routes them appropriately based on your business rules.",
+    title: "Speed to Lead",
+    description: "Waiting 30 minutes drops conversion by 25%. Our AI responds instantly, 24/7, so you never lose the timing advantage.",
   },
   {
     icon: BarChart3,
-    title: "Revenue Analytics",
-    description: "Track conversion rates, revenue captured, and call volume to measure your ROI.",
+    title: "Conversion Analytics",
+    description: "See exactly how many leads you're capturing vs. losing. Track your marketing ROI in real-time.",
   },
   {
     icon: Shield,
@@ -48,8 +48,8 @@ const features = [
   },
   {
     icon: Phone,
-    title: "Twilio Integration",
-    description: "Seamless integration with your existing phone system through Twilio's reliable infrastructure.",
+    title: "Works With Your Number",
+    description: "Seamless integration with your existing phone system. No complicated setup required.",
   },
 ];
 
@@ -71,12 +71,12 @@ export function Features() {
             Features
           </span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold mb-6">
-            Everything You Need to{" "}
-            <span className="text-gradient">Capture Revenue</span>
+            Stop Wasting Your{" "}
+            <span className="text-gradient">Marketing Budget</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            A complete AI receptionist that answers calls, books appointments, and sends 
-            automated reminders — so you never miss an opportunity.
+            You're spending thousands to make the phone ring. Answer After ensures every lead
+            gets an instant response — so your ad spend actually converts to revenue.
           </p>
         </motion.div>
 

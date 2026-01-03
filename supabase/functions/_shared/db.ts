@@ -103,33 +103,33 @@ export async function recordExists(
 }
 
 /**
- * Get organization by ID with error handling
+ * Get account by ID with error handling
  */
-export async function getOrganization(
+export async function getAccount(
   client: SupabaseClient,
-  institutionId: string
+  accountId: string
 ) {
   const { data, error } = await client
-    .from('institutions')
+    .from('accounts')
     .select('*')
-    .eq('id', institutionId)
+    .eq('id', accountId)
     .maybeSingle();
 
   if (error) {
     throw new EdgeFunctionError(
-      `Failed to fetch organization: ${error.message}`,
+      `Failed to fetch account: ${error.message}`,
       'DATABASE_ERROR',
       500,
-      { institutionId, error: error.message }
+      { accountId, error: error.message }
     );
   }
 
   if (!data) {
     throw new EdgeFunctionError(
-      'Organization not found',
+      'Account not found',
       'NOT_FOUND',
       404,
-      { institutionId }
+      { accountId }
     );
   }
 
@@ -165,9 +165,10 @@ export async function retryOperation<T>(
 // ============= Query Helpers =============
 
 /**
- * Alias for getOrganization - get institution by ID
+ * Backward compatibility aliases
  */
-export const getInstitution = getOrganization;
+export const getOrganization = getAccount;
+export const getInstitution = getAccount;
 
 /**
  * Get user profile by user ID
@@ -177,14 +178,14 @@ export async function getProfile(
   userId: string
 ) {
   const { data, error } = await client
-    .from('profiles')
+    .from('users')
     .select('*')
     .eq('id', userId)
     .maybeSingle();
 
   if (error) {
     throw new EdgeFunctionError(
-      `Failed to fetch profile: ${error.message}`,
+      `Failed to fetch user: ${error.message}`,
       'DATABASE_ERROR',
       500,
       { userId, error: error.message }
@@ -195,16 +196,21 @@ export async function getProfile(
 }
 
 /**
- * Get subscription for an institution
+ * Alias for getProfile
+ */
+export const getUser = getProfile;
+
+/**
+ * Get subscription for an account
  */
 export async function getSubscription(
   client: SupabaseClient,
-  institutionId: string
+  accountId: string
 ) {
   const { data, error } = await client
     .from('subscriptions')
     .select('*')
-    .eq('institution_id', institutionId)
+    .eq('account_id', accountId)
     .maybeSingle();
 
   if (error) {
@@ -212,7 +218,7 @@ export async function getSubscription(
       `Failed to fetch subscription: ${error.message}`,
       'DATABASE_ERROR',
       500,
-      { institutionId, error: error.message }
+      { accountId, error: error.message }
     );
   }
 
@@ -220,16 +226,16 @@ export async function getSubscription(
 }
 
 /**
- * Get phone numbers for an institution
+ * Get phone numbers for an account
  */
 export async function getPhoneNumbers(
   client: SupabaseClient,
-  institutionId: string
+  accountId: string
 ) {
   const { data, error } = await client
     .from('phone_numbers')
     .select('*')
-    .eq('institution_id', institutionId)
+    .eq('account_id', accountId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -237,7 +243,7 @@ export async function getPhoneNumbers(
       `Failed to fetch phone numbers: ${error.message}`,
       'DATABASE_ERROR',
       500,
-      { institutionId, error: error.message }
+      { accountId, error: error.message }
     );
   }
 
@@ -245,26 +251,31 @@ export async function getPhoneNumbers(
 }
 
 /**
- * Get institution agent configuration
+ * Get account agent configuration
  */
-export async function getInstitutionAgent(
+export async function getAccountAgent(
   client: SupabaseClient,
-  institutionId: string
+  accountId: string
 ) {
   const { data, error } = await client
-    .from('institution_agents')
+    .from('account_agents')
     .select('*')
-    .eq('institution_id', institutionId)
+    .eq('account_id', accountId)
     .maybeSingle();
 
   if (error) {
     throw new EdgeFunctionError(
-      `Failed to fetch institution agent: ${error.message}`,
+      `Failed to fetch account agent: ${error.message}`,
       'DATABASE_ERROR',
       500,
-      { institutionId, error: error.message }
+      { accountId, error: error.message }
     );
   }
 
   return data;
 }
+
+/**
+ * Backward compatibility alias
+ */
+export const getInstitutionAgent = getAccountAgent;

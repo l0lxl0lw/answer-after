@@ -5,16 +5,16 @@ import type { User, Session } from '@supabase/supabase-js';
 
 const log = createLogger('AuthContext');
 
-interface Profile {
+interface UserProfile {
   id: string;
   email: string;
   full_name: string;
-  institution_id: string | null;
+  account_id: string | null;
   phone: string | null;
   avatar_url: string | null;
 }
 
-interface Institution {
+interface Account {
   id: string;
   name: string;
   slug: string;
@@ -30,8 +30,8 @@ interface AuthUser {
   email: string;
   full_name: string;
   role: UserRole;
-  institution_id: string | null;
-  institution: Institution | null;
+  account_id: string | null;
+  account: Account | null;
 }
 
 interface AuthContextType {
@@ -40,7 +40,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
-  signup: (email: string, password: string, name: string, orgName: string) => Promise<{ error?: string }>;
+  signup: (email: string, password: string, name: string, accountName: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -55,28 +55,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       log.debug('Fetching user data for:', userId);
 
-      // Fetch profile
+      // Fetch user profile
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
       if (profileError) {
-        log.error('Error fetching profile:', profileError);
+        log.error('Error fetching user profile:', profileError);
         return null;
       }
 
       if (!profile) {
-        log.error('No profile found for user:', userId);
+        log.error('No user profile found for user:', userId);
         return null;
       }
 
-      log.trace('Profile fetched:', profile);
+      log.trace('User profile fetched:', profile);
 
       // Fetch role
       const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
+        .from('roles')
         .select('role')
         .eq('user_id', userId)
         .maybeSingle();
@@ -88,19 +88,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const role: UserRole = (roleData?.role as UserRole) || 'staff';
       log.trace('User role:', role);
 
-      // Fetch institution if exists
-      let institution: Institution | null = null;
-      if (profile.institution_id) {
-        const { data: instData } = await supabase
-          .from('institutions')
+      // Fetch account if exists
+      let account: Account | null = null;
+      if (profile.account_id) {
+        const { data: accountData } = await supabase
+          .from('accounts')
           .select('*')
-          .eq('id', profile.institution_id)
+          .eq('id', profile.account_id)
           .maybeSingle();
 
-        institution = instData;
-        log.trace('Institution:', institution);
+        account = accountData;
+        log.trace('Account:', account);
       } else {
-        log.trace('No institution_id in profile');
+        log.trace('No account_id in user profile');
       }
 
       const userData = {
@@ -108,8 +108,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: profile.email,
         full_name: profile.full_name,
         role,
-        institution_id: profile.institution_id,
-        institution,
+        account_id: profile.account_id,
+        account,
       };
 
       log.debug('User data assembled:', userData);
@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signup = useCallback(async (email: string, password: string, name: string, instName: string) => {
+  const signup = useCallback(async (email: string, password: string, name: string, accountName: string) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
 
@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           emailRedirectTo: redirectUrl,
           data: {
             full_name: name,
-            institution_name: instName,
+            account_name: accountName,
           },
         },
       });

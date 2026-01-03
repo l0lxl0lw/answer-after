@@ -55,20 +55,20 @@ Deno.serve(async (req) => {
 
     // Get user's organization
     const { data: profile } = await supabase
-      .from("profiles")
-      .select("institution_id")
+      .from("users")
+      .select("account_id")
       .eq("id", user.id)
       .single();
 
-    if (!profile?.institution_id) {
+    if (!profile?.account_id) {
       return errorResponse("Institution not found", 404);
     }
 
-    // Get organization's ElevenLabs agent ID
+    // Get account's ElevenLabs agent ID
     const { data: agentData } = await supabase
-      .from("organization_agents")
+      .from("account_agents")
       .select("elevenlabs_agent_id")
-      .eq("institution_id", profile.institution_id)
+      .eq("account_id", profile.account_id)
       .single();
 
     if (!agentData?.elevenlabs_agent_id) {

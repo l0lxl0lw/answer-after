@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardStats, type DashboardPeriod } from "@/hooks/use-dashboard";
 import { useRecentCalls } from "@/hooks/use-calls";
-import { useInstitution } from "@/hooks/use-institution";
+import { useAccount } from "@/hooks/use-account";
 import { useContactsByPhone } from "@/hooks/use-contacts";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDistanceToNow } from "date-fns";
@@ -168,12 +168,12 @@ const Dashboard = () => {
   const [period, setPeriod] = useState<DashboardPeriod>('7d');
   const { data: stats, isLoading: statsLoading } = useDashboardStats(period);
   const { data: recentCalls, isLoading: callsLoading } = useRecentCalls(5);
-  const { data: institution, isLoading: instLoading } = useInstitution();
+  const { data: account, isLoading: accountLoading } = useAccount();
 
   const periodLabel = period === '7d' ? '7 days' : period === '30d' ? '30 days' : period === '3m' ? '3 months' : '6 months';
 
   // Fetch local contacts for name mapping
-  const { data: contactsByPhone } = useContactsByPhone(institution?.id);
+  const { data: contactsByPhone } = useContactsByPhone(account?.id);
 
   // Get contact name for a call
   const getContactName = (call: Call): string | undefined => {
@@ -182,10 +182,10 @@ const Dashboard = () => {
     return contact?.name || undefined;
   };
 
-  const organizationName = institution?.name || "Your Business";
+  const accountName = account?.name || "Your Business";
 
-  // Show loading while checking institution
-  if (instLoading) {
+  // Show loading while checking account
+  if (accountLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
@@ -208,7 +208,7 @@ const Dashboard = () => {
           <div>
             <h1 className="text-2xl font-bold mb-1">System Dashboard</h1>
             <p className="text-muted-foreground text-sm">
-              Live operational data for {organizationName}.
+              Live operational data for {accountName}.
             </p>
           </div>
           <div className="flex items-center gap-3">

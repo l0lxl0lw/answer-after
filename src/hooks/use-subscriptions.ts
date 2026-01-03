@@ -8,20 +8,20 @@ export function useSubscription() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['subscription', user?.institution_id],
+    queryKey: ['subscription', user?.account_id],
     queryFn: async () => {
-      if (!user?.institution_id) return null;
+      if (!user?.account_id) return null;
 
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('institution_id', user.institution_id)
+        .eq('account_id', user.account_id)
         .maybeSingle();
 
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.institution_id,
+    enabled: !!user?.account_id,
   });
 }
 
@@ -32,6 +32,8 @@ export interface SubscriptionTier {
   description: string;
   price_cents: number;
   credits: number;
+  sms_limit: number;
+  phone_lines: number;
   features: string[];
   has_custom_agent: boolean;
   has_outbound_reminders: boolean;
@@ -41,7 +43,6 @@ export interface SubscriptionTier {
   has_sla_guarantee: boolean;
   has_hipaa_compliance: boolean;
   has_custom_ai_training: boolean;
-  has_voice_selection: boolean;
   has_multi_language: boolean;
   support_level: string;
   is_popular: boolean;
@@ -96,7 +97,6 @@ export function useCurrentSubscriptionTier() {
       hasCustomAiTraining: currentTier?.has_custom_ai_training ?? false,
       hasSlaGuarantee: currentTier?.has_sla_guarantee ?? false,
       hasHipaaCompliance: currentTier?.has_hipaa_compliance ?? false,
-      hasVoiceSelection: currentTier?.has_voice_selection ?? false,
       hasMultiLanguage: currentTier?.has_multi_language ?? false,
       credits: currentTier?.credits ?? 250,
     },

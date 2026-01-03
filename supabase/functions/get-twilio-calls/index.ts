@@ -62,14 +62,14 @@ Deno.serve(async (req) => {
 
     // Get user's profile to find organization and signup time
     const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("institution_id, created_at")
+      .from("users")
+      .select("account_id, created_at")
       .eq("id", user.id)
       .single();
 
     log.info("Profile lookup", { profile, error: profileError?.message });
 
-    if (!profile?.institution_id) {
+    if (!profile?.account_id) {
       log.warn("User not in organization", { userId: user.id, profile });
       return errorResponse("User not in organization", 400);
     }
@@ -77,9 +77,9 @@ Deno.serve(async (req) => {
     // Get institution details including subaccount
     const supabaseAdmin = createServiceClient();
     const { data: org, error: orgError } = await supabaseAdmin
-      .from("institutions")
+      .from("accounts")
       .select("twilio_subaccount_sid")
-      .eq("id", profile.institution_id)
+      .eq("id", profile.account_id)
       .single();
 
     if (orgError) {
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
     const { data: phoneNumbers, error: phoneError } = await supabase
       .from("phone_numbers")
       .select("phone_number")
-      .eq("institution_id", profile.institution_id);
+      .eq("account_id", profile.account_id);
 
     if (phoneError) {
       return errorResponse("Failed to get phone numbers", 500);
