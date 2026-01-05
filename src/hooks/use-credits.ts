@@ -1,18 +1,23 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { isDemoMode } from "@/lib/demo/config";
 
 // Fetch credit configuration
 export function useCreditConfig() {
   return useQuery({
     queryKey: ['credit-config'],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return { inbound_call: 10, outbound_call: 15, sms: 1 };
+      }
+
       const { data, error } = await supabase
         .from('credit_config')
         .select('config_key, config_value, description');
-      
+
       if (error) throw error;
-      
+
       // Convert to a map for easy access
       return Object.fromEntries(
         data.map(c => [c.config_key, Number(c.config_value)])
@@ -27,12 +32,16 @@ export function usePurchasedCredits() {
   return useQuery({
     queryKey: ['purchased-credits'],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return [{ id: 'demo', credits_remaining: 500, purchased_at: new Date().toISOString() }];
+      }
+
       const { data, error } = await supabase
         .from('purchased_credits')
         .select('*')
         .gt('credits_remaining', 0)
         .order('purchased_at', { ascending: true });
-      
+
       if (error) throw error;
       return data;
     },

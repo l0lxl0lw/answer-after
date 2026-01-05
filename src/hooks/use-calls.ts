@@ -138,6 +138,17 @@ export function useCallDetail(callId: string) {
     queryFn: async () => {
       if (!callId) return null;
 
+      // Demo mode: return mock call
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const call = mockCalls.find(c => c.id === callId);
+        if (call) {
+          const contact = call.contact_id ? mockContacts.find(ct => ct.id === call.contact_id) : null;
+          return { ...call, contact: contact ? { id: contact.id, name: contact.name } : null };
+        }
+        return null;
+      }
+
       // Get call from database
       const { data: call, error } = await supabase
         .from('calls')
@@ -165,7 +176,7 @@ export function useCallDetail(callId: string) {
 
       return call as CallRecord;
     },
-    enabled: !!callId && !!user?.account_id,
+    enabled: (!!callId && !!user?.account_id) || isDemoMode(),
   });
 }
 
@@ -175,6 +186,12 @@ export function useConversations(params?: { search?: string; page?: number; per_
   return useQuery({
     queryKey: ['conversations', user?.account_id, params],
     queryFn: async () => {
+      // Demo mode: return empty (conversations come from ElevenLabs API)
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return { conversations: [], meta: { page: 1, per_page: 20, total: 0, has_more: false } };
+      }
+
       if (!user?.account_id) return { conversations: [], meta: { page: 1, per_page: 20, total: 0, has_more: false } };
 
       const session = await supabase.auth.getSession();
@@ -207,7 +224,7 @@ export function useConversations(params?: { search?: string; page?: number; per_
         meta: data.meta,
       };
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
@@ -217,6 +234,27 @@ export function useCalls(params?: CallListParams) {
   return useQuery({
     queryKey: ['calls', 'twilio', user?.account_id, params],
     queryFn: async () => {
+      // Demo mode: return mock calls
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        let calls = [...mockCalls];
+
+        if (params?.outcome) {
+          calls = calls.filter(c => c.outcome === params.outcome);
+        }
+        if (params?.start_date) {
+          calls = calls.filter(c => new Date(c.started_at) >= new Date(params.start_date!));
+        }
+        if (params?.end_date) {
+          calls = calls.filter(c => new Date(c.started_at) <= new Date(params.end_date!));
+        }
+
+        return {
+          calls,
+          meta: { page: 1, per_page: 20, total: calls.length, total_pages: 1 },
+        };
+      }
+
       if (!user?.account_id) return { calls: [], meta: { page: 1, per_page: 20, total: 0, total_pages: 0 } };
 
       // Build query params for edge function
@@ -255,7 +293,7 @@ export function useCalls(params?: CallListParams) {
         meta: data?.meta || { page: 1, per_page: 20, total: 0, total_pages: 0 },
       };
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
@@ -265,6 +303,13 @@ export function useCall(id: string) {
   return useQuery({
     queryKey: ['calls', 'conversation', id],
     queryFn: async () => {
+      // Demo mode: return mock call
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const call = mockCalls.find(c => c.id === id || c.elevenlabs_conversation_id === id);
+        return call || null;
+      }
+
       // Fetch conversation details from ElevenLabs via edge function
       const session = await supabase.auth.getSession();
       const response = await fetch(
@@ -285,7 +330,7 @@ export function useCall(id: string) {
       const callData = await response.json();
       return callData;
     },
-    enabled: !!id && !!user?.account_id,
+    enabled: (!!id && !!user?.account_id) || isDemoMode(),
   });
 }
 
