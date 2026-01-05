@@ -2,6 +2,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { isDemoMode } from '@/lib/demo/config';
+import { mockAppointments } from '@/lib/demo/mockData';
 import type { CreateAppointmentRequest, UpdateAppointmentRequest } from '@/types/api';
 
 export function useAppointments(page = 1, perPage = 10) {
@@ -10,6 +12,20 @@ export function useAppointments(page = 1, perPage = 10) {
   return useQuery({
     queryKey: ['appointments', user?.account_id, page, perPage],
     queryFn: async () => {
+      if (isDemoMode()) {
+        const from = (page - 1) * perPage;
+        const to = from + perPage;
+        return {
+          appointments: mockAppointments.slice(from, to),
+          meta: {
+            page,
+            per_page: perPage,
+            total: mockAppointments.length,
+            total_pages: Math.ceil(mockAppointments.length / perPage),
+          },
+        };
+      }
+
       if (!user?.account_id) return { appointments: [], meta: { page: 1, per_page: 10, total: 0, total_pages: 0 } };
 
       const from = (page - 1) * perPage;
@@ -34,7 +50,7 @@ export function useAppointments(page = 1, perPage = 10) {
         },
       };
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 

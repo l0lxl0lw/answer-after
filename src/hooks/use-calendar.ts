@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, startOfDay, endOfDay, addDays } from "date-fns";
+import { isDemoMode } from "@/lib/demo/config";
 
 // ============================================
 // TYPES
@@ -97,6 +98,30 @@ export function useCalendarEvents(filters: CalendarFilters) {
       filters.status,
     ],
     queryFn: async () => {
+      if (isDemoMode()) {
+        // Return mock calendar events
+        return [
+          {
+            id: 'event-1',
+            title: 'HVAC Diagnostic - Sarah Johnson',
+            start_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            end_time: new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(),
+            status: 'confirmed',
+            customer_name: 'Sarah Johnson',
+            customer_phone: '+15553334444',
+          },
+          {
+            id: 'event-2',
+            title: 'AC Tune-Up - John Smith',
+            start_time: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+            end_time: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 90 * 60 * 1000).toISOString(),
+            status: 'confirmed',
+            customer_name: 'John Smith',
+            customer_phone: '+15552223333',
+          },
+        ] as CalendarEvent[];
+      }
+
       let query = supabase
         .from("calendar_events")
         .select(
@@ -122,7 +147,7 @@ export function useCalendarEvents(filters: CalendarFilters) {
       if (error) throw error;
       return data as CalendarEvent[];
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 

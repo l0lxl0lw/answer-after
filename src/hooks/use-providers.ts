@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { isDemoMode } from "@/lib/demo/config";
 import type { ProviderRole } from "./use-roles";
 
 // ============================================
@@ -96,6 +97,13 @@ export function useProviders() {
   return useQuery({
     queryKey: ["providers", user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return [
+          { id: 'provider-1', name: 'Dr. Sarah Smith', role: 'dentist', color: '#3b82f6', is_active: true },
+          { id: 'provider-2', name: 'Mike Johnson', role: 'technician', color: '#10b981', is_active: true },
+        ] as Provider[];
+      }
+
       const { data, error } = await supabase
         .from("providers")
         .select(`
@@ -107,7 +115,7 @@ export function useProviders() {
       if (error) throw error;
       return data as Provider[];
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 

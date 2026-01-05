@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DEFAULT_PLAN } from '@/lib/constants';
+import { isDemoMode } from '@/lib/demo/config';
+import { mockSubscription } from '@/lib/demo/mockData';
 
 export function useSubscription() {
   const { user } = useAuth();
@@ -10,6 +12,10 @@ export function useSubscription() {
   return useQuery({
     queryKey: ['subscription', user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return mockSubscription;
+      }
+
       if (!user?.account_id) return null;
 
       const { data, error } = await supabase
@@ -21,7 +27,7 @@ export function useSubscription() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
@@ -56,6 +62,14 @@ export function useSubscriptionTiers() {
   return useQuery({
     queryKey: ['subscription-tiers'],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return [
+          { id: '1', plan_id: 'starter', name: 'Starter', price_cents: 4900, credits: 250, is_popular: false },
+          { id: '2', plan_id: 'pro', name: 'Pro', price_cents: 9900, credits: 500, is_popular: true },
+          { id: '3', plan_id: 'business', name: 'Business', price_cents: 19900, credits: 1000, is_popular: false },
+        ] as SubscriptionTier[];
+      }
+
       const { data, error } = await supabase
         .from('subscription_tiers')
         .select('*')

@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { isDemoMode } from '@/lib/demo/config';
+import { mockServices } from '@/lib/demo/mockData';
 
 // ============================================
 // TYPES
@@ -63,6 +65,10 @@ export function useServices() {
   return useQuery({
     queryKey: ['services', user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return mockServices as Service[];
+      }
+
       if (!user?.account_id) return [];
 
       const { data, error } = await supabase
@@ -75,7 +81,7 @@ export function useServices() {
       if (error) throw error;
       return data as Service[];
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
@@ -88,6 +94,10 @@ export function useActiveServices() {
   return useQuery({
     queryKey: ['services', 'active', user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return mockServices.filter(s => s.is_active) as Service[];
+      }
+
       if (!user?.account_id) return [];
 
       const { data, error } = await supabase
@@ -100,7 +110,7 @@ export function useActiveServices() {
       if (error) throw error;
       return data as Service[];
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
