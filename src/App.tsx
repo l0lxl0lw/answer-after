@@ -54,7 +54,7 @@ const App = () => (
         <Sonner />
         {isDemoMode() && <DemoBanner />}
         {!isDemoMode() && <EnvironmentBadge />}
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.VITE_BASE_PATH || '/'}>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
