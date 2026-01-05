@@ -2,6 +2,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { isDemoMode } from '@/lib/demo/config';
+import { generateMockDashboardStats } from '@/lib/demo/mockData';
 
 export type DashboardPeriod = '7d' | '30d' | '3m' | '6m';
 
@@ -35,6 +37,12 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
   return useQuery({
     queryKey: ['dashboard', 'stats', user?.account_id, period],
     queryFn: async () => {
+      // Demo mode: return mock data
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return generateMockDashboardStats(period);
+      }
+
       if (!user?.account_id) return null;
 
       const periodDays = getPeriodDays(period);
@@ -218,7 +226,7 @@ export function useDashboardStats(period: DashboardPeriod = '7d') {
         chart_data: chartData,
       } as DashboardStats;
     },
-    enabled: !!user?.account_id,
-    refetchInterval: 30000,
+    enabled: !!user?.account_id || isDemoMode(),
+    refetchInterval: isDemoMode() ? false : 30000,
   });
 }

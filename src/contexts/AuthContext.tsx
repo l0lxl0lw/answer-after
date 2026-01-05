@@ -25,7 +25,7 @@ interface Account {
 
 type UserRole = 'owner' | 'admin' | 'staff';
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   email: string;
   full_name: string;
@@ -34,7 +34,7 @@ interface AuthUser {
   account: Account | null;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   user: AuthUser | null;
   session: Session | null;
   isLoading: boolean;
@@ -44,7 +44,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Export the context so DemoAuthProvider can use the same context
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -254,6 +255,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Internal hook for real auth
+function useRealAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+// Export useAuth - in demo mode, this will be overridden by the DemoAuthContext
+// The App.tsx chooses which provider to use, so this just returns the context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

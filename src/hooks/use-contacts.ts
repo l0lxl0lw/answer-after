@@ -2,6 +2,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { isDemoMode } from '@/lib/demo/config';
+import { mockContacts, mockAccount } from '@/lib/demo/mockData';
 import type { InterestLevel, LeadStatus, ContactStatus, ContactSource, Contact } from '@/types/database';
 
 export interface ContactFilters {
@@ -29,6 +31,51 @@ export function useContacts(filters: ContactFilters = {}, page = 1, perPage = 20
   return useQuery({
     queryKey: ['contacts', user?.account_id, filters, page, perPage],
     queryFn: async () => {
+      // Demo mode: return mock data
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        let filteredContacts = [...mockContacts];
+
+        if (filters.status && filters.status !== 'all') {
+          filteredContacts = filteredContacts.filter(c => c.status === filters.status);
+        }
+        if (filters.interest_level && filters.interest_level !== 'all') {
+          filteredContacts = filteredContacts.filter(c => c.interest_level === filters.interest_level);
+        }
+        if (filters.lead_status && filters.lead_status !== 'all') {
+          filteredContacts = filteredContacts.filter(c => c.lead_status === filters.lead_status);
+        }
+        if (filters.search) {
+          const search = filters.search.toLowerCase();
+          filteredContacts = filteredContacts.filter(c =>
+            c.name?.toLowerCase().includes(search) ||
+            c.phone.includes(search) ||
+            c.email?.toLowerCase().includes(search)
+          );
+        }
+
+        const from = (page - 1) * perPage;
+        const to = from + perPage;
+
+        const stats = {
+          total: filteredContacts.length,
+          hot: filteredContacts.filter(c => c.interest_level === 'hot').length,
+          warm: filteredContacts.filter(c => c.interest_level === 'warm').length,
+          cold: filteredContacts.filter(c => c.interest_level === 'cold').length,
+        };
+
+        return {
+          contacts: filteredContacts.slice(from, to),
+          meta: {
+            page,
+            per_page: perPage,
+            total: filteredContacts.length,
+            total_pages: Math.ceil(filteredContacts.length / perPage),
+          },
+          stats,
+        };
+      }
+
       if (!user?.account_id) {
         return { contacts: [], meta: { page: 1, per_page: 20, total: 0, total_pages: 0 }, stats: { total: 0, hot: 0, warm: 0, cold: 0 } };
       }
@@ -105,7 +152,7 @@ export function useContacts(filters: ContactFilters = {}, page = 1, perPage = 20
         stats,
       };
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
@@ -124,6 +171,12 @@ export function useContact(id: string) {
   return useQuery({
     queryKey: ['contacts', id],
     queryFn: async () => {
+      // Demo mode: return mock data
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return mockContacts.find(c => c.id === id) || null;
+      }
+
       const { data, error } = await supabase
         .from('contacts')
         .select('*')
@@ -196,6 +249,30 @@ export function useCreateContact() {
       status?: ContactStatus;
       source?: ContactSource;
     }) => {
+      // Demo mode: create mock contact
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const newContact: Contact = {
+          id: `contact-${Date.now()}`,
+          account_id: mockAccount.id,
+          phone: data.phone,
+          name: data.name || null,
+          email: data.email || null,
+          address: data.address || null,
+          notes: data.notes || null,
+          status: data.status || 'customer',
+          source: data.source || 'manual',
+          interest_level: null,
+          lead_status: 'new',
+          lead_notes: null,
+          lead_updated_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        mockContacts.unshift(newContact);
+        return newContact;
+      }
+
       if (!user?.account_id) throw new Error('No account');
 
       const { data: contact, error } = await supabase
@@ -241,6 +318,17 @@ export function useUpdateContact() {
       lead_status?: LeadStatus;
       lead_notes?: string;
     }) => {
+      // Demo mode: update mock contact
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const index = mockContacts.findIndex(c => c.id === id);
+        if (index === -1) throw new Error('Contact not found');
+
+        const updated = { ...mockContacts[index], ...data, updated_at: new Date().toISOString() };
+        mockContacts[index] = updated;
+        return updated;
+      }
+
       const updateData: Record<string, unknown> = {
         updated_at: new Date().toISOString(),
       };
@@ -280,6 +368,16 @@ export function useDeleteContact() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // Demo mode: delete mock contact
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const index = mockContacts.findIndex(c => c.id === id);
+        if (index !== -1) {
+          mockContacts.splice(index, 1);
+        }
+        return;
+      }
+
       const { error } = await supabase
         .from('contacts')
         .delete()

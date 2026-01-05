@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "dev:local": "echo 'Starting local development...' && supabase start && supabase functions serve & vite",
+    "dev:demo": "VITE_DEMO_MODE=true vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:demo": "VITE_DEMO_MODE=true vite build",
+    "build:gh-pages": "VITE_DEMO_MODE=true VITE_BASE_PATH=/answer-after/ vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

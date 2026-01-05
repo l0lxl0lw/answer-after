@@ -2,6 +2,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { isDemoMode } from '@/lib/demo/config';
+import { mockCalls, mockContacts } from '@/lib/demo/mockData';
 import type { CallListParams } from '@/types/api';
 
 export interface Conversation {
@@ -46,6 +48,35 @@ export function useCallHistory(params?: { search?: string; page?: number; per_pa
   return useQuery({
     queryKey: ['call-history', user?.account_id, params],
     queryFn: async () => {
+      // Demo mode: return mock data
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        let filteredCalls = [...mockCalls];
+
+        if (params?.search) {
+          const search = params.search.toLowerCase();
+          filteredCalls = filteredCalls.filter(c =>
+            c.caller_phone.includes(search) ||
+            c.caller_name?.toLowerCase().includes(search) ||
+            c.summary?.toLowerCase().includes(search)
+          );
+        }
+
+        filteredCalls.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+        const from = (page - 1) * perPage;
+        const to = from + perPage;
+
+        return {
+          calls: filteredCalls.slice(from, to).map(c => ({
+            ...c,
+            contact: c.contact_id ? mockContacts.find(ct => ct.id === c.contact_id) : null,
+          })),
+          total: filteredCalls.length,
+          page,
+          per_page: perPage,
+        };
+      }
+
       if (!user?.account_id) return { calls: [], total: 0, page, per_page: perPage };
 
       // Build query
@@ -92,7 +123,7 @@ export function useCallHistory(params?: { search?: string; page?: number; per_pa
         per_page: perPage,
       };
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
@@ -264,6 +295,15 @@ export function useRecentCalls(limit = 5) {
   return useQuery({
     queryKey: ['calls', 'twilio', 'recent', user?.account_id, limit],
     queryFn: async () => {
+      // Demo mode: return mock data
+      if (isDemoMode()) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const sorted = [...mockCalls].sort(
+          (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+        );
+        return sorted.slice(0, limit);
+      }
+
       if (!user?.account_id) return [];
 
       const { data, error } = await supabase.functions.invoke('get-twilio-calls', {
@@ -281,7 +321,7 @@ export function useRecentCalls(limit = 5) {
       // Return only the first 'limit' calls
       return (data?.calls || []).slice(0, limit);
     },
-    enabled: !!user?.account_id,
-    refetchInterval: 15000,
+    enabled: !!user?.account_id || isDemoMode(),
+    refetchInterval: isDemoMode() ? false : 15000,
   });
 }

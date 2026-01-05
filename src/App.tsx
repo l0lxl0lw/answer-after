@@ -4,8 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { DemoAuthProvider } from "@/lib/demo/DemoAuthContext";
+import { isDemoMode } from "@/lib/demo/config";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
+import { DemoBanner } from "@/components/DemoBanner";
 import { getEnvironment } from "@/lib/logger";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
@@ -40,13 +43,17 @@ const queryClient = new QueryClient();
 // Admin portal only available in non-production environments
 const isProduction = getEnvironment() === 'prod';
 
+// Choose auth provider based on demo mode
+const AppAuthProvider = isDemoMode() ? DemoAuthProvider : AuthProvider;
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
+    <AppAuthProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <EnvironmentBadge />
+        {isDemoMode() && <DemoBanner />}
+        {!isDemoMode() && <EnvironmentBadge />}
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -82,7 +89,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
-    </AuthProvider>
+    </AppAuthProvider>
   </QueryClientProvider>
 );
 
