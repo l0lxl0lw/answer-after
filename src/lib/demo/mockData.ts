@@ -298,10 +298,81 @@ export const mockCalls: Call[] = [
 ];
 
 // Generate more calls for better chart data
-for (let i = 6; i <= 30; i++) {
+const callerNames = [
+  'Jennifer Lee', 'David Martinez', 'Amanda Wilson', 'Chris Taylor',
+  'Lisa Anderson', 'Kevin Thompson', 'Maria Garcia', 'James Rodriguez',
+  'Patricia White', 'Michael Brown', 'Linda Davis', 'Richard Miller',
+  'Barbara Wilson', 'William Moore', 'Elizabeth Taylor', 'Joseph Anderson',
+  'Susan Thomas', 'Charles Jackson', 'Jessica Harris', 'Daniel Martin',
+  'Nancy Robinson', 'Matthew Clark', 'Karen Lewis', 'Anthony Walker',
+  'Betty Hall', 'Mark Allen', 'Dorothy Young', 'Steven King',
+  'Helen Wright', 'Paul Scott', 'Sandra Green', 'Andrew Adams',
+];
+
+const callSummaries: Record<string, string[]> = {
+  booked: [
+    'Customer scheduled AC tune-up for next week. Confirmed address and contact details.',
+    'Booked furnace inspection appointment. Customer mentioned unusual noise when starting.',
+    'Scheduled emergency repair visit for tomorrow morning. AC unit not cooling.',
+    'Customer booked annual maintenance service. Returning customer from last year.',
+    'Appointment set for duct cleaning service. Customer has allergy concerns.',
+    'Scheduled heat pump installation consultation. Customer interested in energy savings.',
+    'Booked thermostat replacement appointment. Old unit not responding properly.',
+    'Customer scheduled HVAC diagnostic. System running but not heating efficiently.',
+  ],
+  callback_requested: [
+    'Customer requested callback to discuss pricing options for new system.',
+    'Caller wants to speak with a manager about service warranty. Scheduled callback.',
+    'Customer needs time to check schedule. Will call back within 24 hours.',
+    'Requested callback after consulting with spouse about repair vs replace decision.',
+    'Customer at work, requested evening callback to discuss service options.',
+    'Caller wants detailed quote for multi-zone system. Callback scheduled.',
+  ],
+  information_provided: [
+    'Provided pricing information for AC installation. Customer will consider options.',
+    'Explained maintenance plan benefits. Customer interested but needs more time.',
+    'Answered questions about energy-efficient systems and available rebates.',
+    'Provided service area information. Customer location confirmed within range.',
+    'Explained emergency service availability and after-hours pricing.',
+    'Discussed financing options for new HVAC system installation.',
+  ],
+  escalated: [
+    'Emergency - No heat with infant in home. Transferred to on-call technician.',
+    'Gas smell reported. Immediately transferred to emergency line.',
+    'Customer reported smoke from vents. Escalated to emergency dispatch.',
+    'Elderly resident with no AC during heat wave. Priority transfer completed.',
+    'Commercial client with server room cooling failure. Urgent dispatch arranged.',
+  ],
+  no_action: [
+    'Caller hung up before providing details.',
+    'Wrong number - caller was looking for different business.',
+    'Spam call detected and ended.',
+    'Customer decided to handle issue themselves.',
+    'Caller was inquiring about services we do not offer.',
+  ],
+};
+
+// Generate 60 more calls with realistic data
+for (let i = 6; i <= 65; i++) {
   const day = Math.floor(Math.random() * 30);
+  const hour = Math.floor(Math.random() * 12) + 6; // Between 6am and 6pm
   const outcomes: Call['outcome'][] = ['booked', 'callback_requested', 'information_provided', 'escalated', 'no_action'];
-  const outcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+  // Weight outcomes: more bookings and info, fewer escalations
+  const weightedOutcomes: Call['outcome'][] = [
+    'booked', 'booked', 'booked',
+    'callback_requested', 'callback_requested',
+    'information_provided', 'information_provided',
+    'escalated',
+    'no_action',
+  ];
+  const outcome = weightedOutcomes[Math.floor(Math.random() * weightedOutcomes.length)];
+  const callerName = callerNames[Math.floor(Math.random() * callerNames.length)];
+  const summaryOptions = callSummaries[outcome];
+  const summary = summaryOptions[Math.floor(Math.random() * summaryOptions.length)];
+
+  const callDate = new Date();
+  callDate.setDate(callDate.getDate() - day);
+  callDate.setHours(hour, Math.floor(Math.random() * 60), 0, 0);
 
   mockCalls.push({
     id: `call-${String(i).padStart(3, '0')}`,
@@ -312,19 +383,21 @@ for (let i = 6; i <= 30; i++) {
     twilio_call_sid: `CA${Math.random().toString(36).substr(2, 9)}`,
     elevenlabs_conversation_id: `conv-${String(i).padStart(3, '0')}`,
     caller_phone: `+1555${Math.floor(Math.random() * 9000000 + 1000000)}`,
-    caller_name: null,
+    caller_name: Math.random() > 0.2 ? callerName : null, // 80% have names
     status: 'completed',
     outcome,
-    duration_seconds: Math.floor(Math.random() * 300) + 60,
+    duration_seconds: outcome === 'no_action'
+      ? Math.floor(Math.random() * 30) + 5
+      : Math.floor(Math.random() * 300) + 60,
     recording_url: null,
-    summary: 'Customer inquiry handled by AI agent.',
-    is_emergency: Math.random() > 0.95,
-    started_at: daysAgo(day),
-    ended_at: daysAgo(day),
-    created_at: daysAgo(day),
-    updated_at: daysAgo(day),
-    interest_level: ['hot', 'warm', 'cold'][Math.floor(Math.random() * 3)] as Call['interest_level'],
-    lead_status: 'new',
+    summary,
+    is_emergency: outcome === 'escalated',
+    started_at: callDate.toISOString(),
+    ended_at: callDate.toISOString(),
+    created_at: callDate.toISOString(),
+    updated_at: callDate.toISOString(),
+    interest_level: outcome === 'booked' ? 'hot' : outcome === 'callback_requested' ? 'warm' : ['hot', 'warm', 'cold'][Math.floor(Math.random() * 3)] as Call['interest_level'],
+    lead_status: outcome === 'booked' ? 'converted' : 'new',
     lead_notes: null,
     lead_updated_at: null,
   });

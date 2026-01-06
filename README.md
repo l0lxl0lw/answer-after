@@ -6,7 +6,7 @@
 
 ## Live Demo
 
-**[View Demo](https://azulee.github.io/answer-after/)** - Interactive demo with mock data (no backend required)
+**[View Demo](https://l0lxl0lw.github.io/answer-after/)** - Interactive demo with mock data (no backend required)
 
 ## Screenshots
 

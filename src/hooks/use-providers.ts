@@ -91,6 +91,58 @@ export interface CreateOverrideRequest {
 /**
  * Fetch all providers for the current organization
  */
+// Mock providers for demo mode
+const MOCK_PROVIDERS: Provider[] = [
+  {
+    id: 'provider-1',
+    account_id: 'demo-account-001',
+    user_id: null,
+    name: 'Tom Wilson',
+    email: 'tom@acmehvac.com',
+    phone: '+15551234567',
+    role: 'senior_tech',
+    role_id: null,
+    color: '#3b82f6',
+    is_active: true,
+    external_id: null,
+    google_calendar_id: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'provider-2',
+    account_id: 'demo-account-001',
+    user_id: null,
+    name: 'Mike Chen',
+    email: 'mike@acmehvac.com',
+    phone: '+15552345678',
+    role: 'technician',
+    role_id: null,
+    color: '#10b981',
+    is_active: true,
+    external_id: null,
+    google_calendar_id: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'provider-3',
+    account_id: 'demo-account-001',
+    user_id: null,
+    name: 'Lisa Martinez',
+    email: 'lisa@acmehvac.com',
+    phone: '+15553456789',
+    role: 'technician',
+    role_id: null,
+    color: '#f59e0b',
+    is_active: true,
+    external_id: null,
+    google_calendar_id: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
 export function useProviders() {
   const { user } = useAuth();
 
@@ -98,10 +150,7 @@ export function useProviders() {
     queryKey: ["providers", user?.account_id],
     queryFn: async () => {
       if (isDemoMode()) {
-        return [
-          { id: 'provider-1', name: 'Dr. Sarah Smith', role: 'dentist', color: '#3b82f6', is_active: true },
-          { id: 'provider-2', name: 'Mike Johnson', role: 'technician', color: '#10b981', is_active: true },
-        ] as Provider[];
+        return MOCK_PROVIDERS;
       }
 
       const { data, error } = await supabase
@@ -128,6 +177,10 @@ export function useActiveProviders() {
   return useQuery({
     queryKey: ["providers", "active", user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return MOCK_PROVIDERS.filter(p => p.is_active);
+      }
+
       const { data, error } = await supabase
         .from("providers")
         .select(`
@@ -140,7 +193,7 @@ export function useActiveProviders() {
       if (error) throw error;
       return data as Provider[];
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 

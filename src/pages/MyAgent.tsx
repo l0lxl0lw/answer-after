@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { KnowledgeBaseDocument } from '@/types/database';
+import { isDemoMode } from '@/lib/demo/config';
 
 const MAX_GREETING_WORDS = 100;
 const MAX_CONTENT_WORDS = 4000;
@@ -35,13 +36,21 @@ export default function MyAgent() {
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
-  const [hasCustomAgentAccess, setHasCustomAgentAccess] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasCustomAgentAccess, setHasCustomAgentAccess] = useState(isDemoMode());
+  const [isLoading, setIsLoading] = useState(!isDemoMode());
 
   // Check tier for feature access
   const { data: tierData } = useQuery({
     queryKey: ['subscription-tier-agent', subscription?.plan],
     queryFn: async () => {
+      if (isDemoMode()) {
+        // Pro plan features for demo
+        return {
+          has_custom_agent: true,
+          has_outbound_reminders: true,
+          has_custom_ai_training: true,
+        };
+      }
       if (!subscription?.plan) return null;
       const { data } = await supabase
         .from('subscription_tiers')
@@ -50,18 +59,41 @@ export default function MyAgent() {
         .single();
       return data;
     },
-    enabled: !!subscription?.plan,
+    enabled: !!subscription?.plan || isDemoMode(),
   });
 
   // Context editing requires Pro+ (has_outbound_reminders is true for Pro+)
-  const hasContextAccess = tierData?.has_outbound_reminders === true;
+  const hasContextAccess = isDemoMode() || tierData?.has_outbound_reminders === true;
   // Knowledge base requires Pro+ (has_custom_ai_training is true for Pro+)
-  const hasKnowledgeBaseAccess = tierData?.has_custom_ai_training === true;
+  const hasKnowledgeBaseAccess = isDemoMode() || tierData?.has_custom_ai_training === true;
 
   // Fetch knowledge base documents
   const { data: kbDocuments = [], isLoading: isLoadingDocs } = useQuery({
     queryKey: ['knowledge-base-documents', user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        // Mock knowledge base documents for demo
+        return [
+          {
+            id: 'kb-001',
+            account_id: 'demo-account-001',
+            name: 'Service Price List 2024.pdf',
+            file_path: 'knowledge/service-prices.pdf',
+            file_size_bytes: 245000,
+            elevenlabs_kb_id: 'el-kb-001',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 'kb-002',
+            account_id: 'demo-account-001',
+            name: 'HVAC Maintenance Guide.pdf',
+            file_path: 'knowledge/maintenance-guide.pdf',
+            file_size_bytes: 1250000,
+            elevenlabs_kb_id: 'el-kb-002',
+            created_at: new Date().toISOString(),
+          },
+        ] as KnowledgeBaseDocument[];
+      }
       if (!user?.account_id) return [];
       const { data } = await supabase
         .from('knowledge_base_documents')
@@ -70,42 +102,70 @@ export default function MyAgent() {
         .order('created_at', { ascending: false });
       return (data || []) as KnowledgeBaseDocument[];
     },
-    enabled: !!user?.account_id && hasKnowledgeBaseAccess,
+    enabled: (!!user?.account_id && hasKnowledgeBaseAccess) || isDemoMode(),
   });
 
   // Check if user has custom agent access based on subscription tier
   useEffect(() => {
     const checkCustomAgentAccess = async () => {
+      if (isDemoMode()) {
+        // Demo mode: Pro plan has custom agent access
+        setHasCustomAgentAccess(true);
+        setIsLoading(false);
+        return;
+      }
+
       if (!subscription?.plan) {
         setHasCustomAgentAccess(false);
         setIsLoading(false);
         return;
       }
-      
+
       const { data: tier } = await supabase
         .from('subscription_tiers')
         .select('has_custom_agent')
         .eq('plan_id', subscription.plan)
         .maybeSingle();
-      
+
       setHasCustomAgentAccess(tier?.has_custom_agent ?? false);
       setIsLoading(false);
     };
-    
+
     checkCustomAgentAccess();
   }, [subscription?.plan]);
 
   // Fetch existing agent data
   useEffect(() => {
     const fetchAgentData = async () => {
+      if (isDemoMode()) {
+        // Mock agent data for demo
+        setCustomGreeting('Hello! Thank you for calling Acme HVAC Services. How can I help you today?');
+        setAgentContent(`About Acme HVAC Services:
+We are a family-owned HVAC company serving the greater Boston area since 1995.
+
+Services we offer:
+- AC repair and installation
+- Furnace maintenance and repair
+- Duct cleaning and inspection
+- Emergency 24/7 service
+
+Call handling instructions:
+- Always be friendly and professional
+- For emergencies (no heat, gas smell, flooding), transfer to on-call technician
+- Offer same-day appointments when available
+- Collect caller's name, phone, and address`);
+        setHidePricesFromCustomers(false);
+        return;
+      }
+
       if (!user?.account_id) return;
-      
+
       const { data, error } = await supabase
         .from('account_agents')
         .select('context')
         .eq('account_id', user.account_id)
         .maybeSingle();
-      
+
       if (!error && data) {
         if (data.context) {
           try {
@@ -119,7 +179,7 @@ export default function MyAgent() {
         }
       }
     };
-    
+
     fetchAgentData();
   }, [user?.account_id]);
 
@@ -397,7 +457,8 @@ export default function MyAgent() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  if (isLoading) {
+  // Skip loading/upgrade screens in demo mode
+  if (isLoading && !isDemoMode()) {
     return (
       <DashboardLayout>
         <div className="p-6 flex items-center justify-center">
@@ -407,7 +468,7 @@ export default function MyAgent() {
     );
   }
 
-  if (!hasCustomAgentAccess) {
+  if (!hasCustomAgentAccess && !isDemoMode()) {
     return (
       <DashboardLayout>
         <div className="p-6 max-w-5xl mx-auto space-y-6">

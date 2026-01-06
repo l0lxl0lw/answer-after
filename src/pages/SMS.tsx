@@ -18,11 +18,12 @@ import {
   RefreshCw,
   Send,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, subHours, subDays, subMinutes } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAccount } from "@/hooks/use-account";
 import { useContactsByPhone } from "@/hooks/use-contacts";
+import { isDemoMode } from "@/lib/demo/config";
 
 interface SMSMessage {
   id: string;
@@ -106,15 +107,142 @@ const SMS = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const { data: account } = useAccount();
 
+  // Mock SMS messages for demo mode
+  const mockSmsMessages: SMSMessage[] = useMemo(() => [
+    {
+      id: 'sms-001',
+      direction: 'outbound',
+      from: '+15551234567',
+      to: '+15553334444',
+      body: 'Hi Sarah! This is Acme HVAC confirming your appointment tomorrow at 9:00 AM. Reply YES to confirm or call us to reschedule.',
+      status: 'delivered',
+      created_at: subHours(new Date(), 2).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Sarah Johnson',
+    },
+    {
+      id: 'sms-002',
+      direction: 'inbound',
+      from: '+15553334444',
+      to: '+15551234567',
+      body: 'YES',
+      status: 'received',
+      created_at: subHours(new Date(), 1.5).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Sarah Johnson',
+    },
+    {
+      id: 'sms-003',
+      direction: 'outbound',
+      from: '+15551234567',
+      to: '+15553334444',
+      body: 'Great! Your appointment is confirmed. See you tomorrow at 456 Maple Ave. Our technician Tom will arrive between 9-10 AM.',
+      status: 'delivered',
+      created_at: subHours(new Date(), 1).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Sarah Johnson',
+    },
+    {
+      id: 'sms-004',
+      direction: 'outbound',
+      from: '+15551234567',
+      to: '+15552223333',
+      body: 'Hi John! Just a reminder about your annual HVAC maintenance scheduled for Friday at 2:00 PM. Reply YES to confirm.',
+      status: 'delivered',
+      created_at: subHours(new Date(), 5).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'John Smith',
+    },
+    {
+      id: 'sms-005',
+      direction: 'inbound',
+      from: '+15552223333',
+      to: '+15551234567',
+      body: 'YES sounds good!',
+      status: 'received',
+      created_at: subHours(new Date(), 4).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'John Smith',
+    },
+    {
+      id: 'sms-006',
+      direction: 'outbound',
+      from: '+15551234567',
+      to: '+15554445555',
+      body: 'Hi Mike! We received your callback request. One of our representatives will call you within 2 hours. Thank you for choosing Acme HVAC!',
+      status: 'delivered',
+      created_at: subDays(new Date(), 1).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Mike Williams',
+    },
+    {
+      id: 'sms-007',
+      direction: 'inbound',
+      from: '+15556667777',
+      to: '+15551234567',
+      body: 'Hi, I received a quote for a new furnace. Can someone call me to discuss payment options?',
+      status: 'received',
+      created_at: subDays(new Date(), 1).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Robert Brown',
+    },
+    {
+      id: 'sms-008',
+      direction: 'outbound',
+      from: '+15551234567',
+      to: '+15556667777',
+      body: 'Hi Robert! Thanks for your interest. We offer flexible financing options. A team member will call you shortly to discuss.',
+      status: 'delivered',
+      created_at: subDays(new Date(), 1).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Robert Brown',
+    },
+    {
+      id: 'sms-009',
+      direction: 'outbound',
+      from: '+15551234567',
+      to: '+15555556666',
+      body: 'Hi Emily! Your commercial HVAC inspection is complete. All systems are operating normally. Invoice has been emailed.',
+      status: 'delivered',
+      created_at: subDays(new Date(), 2).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Emily Davis',
+    },
+    {
+      id: 'sms-010',
+      direction: 'inbound',
+      from: '+15555556666',
+      to: '+15551234567',
+      body: 'Thank you! Great service as always.',
+      status: 'received',
+      created_at: subDays(new Date(), 2).toISOString(),
+      error_code: null,
+      error_message: null,
+      contact_name: 'Emily Davis',
+    },
+  ], []);
+
   // Fetch SMS messages from Twilio
   const { data: smsData, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sms-messages', account?.id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return { messages: mockSmsMessages, meta: { total: mockSmsMessages.length } };
+      }
       const { data, error } = await supabase.functions.invoke('get-twilio-sms');
       if (error) throw error;
       return data as { messages: SMSMessage[]; meta: { total: number } };
     },
-    enabled: !!account?.id,
+    enabled: !!account?.id || isDemoMode(),
     staleTime: 30000, // Cache for 30 seconds
   });
 

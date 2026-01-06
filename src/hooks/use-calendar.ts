@@ -85,6 +85,131 @@ export interface TimeSlot {
 /**
  * Fetch calendar events for a date range
  */
+// Generate mock calendar events for demo mode
+function generateMockCalendarEvents(startDate: Date, endDate: Date): CalendarEvent[] {
+  const events: CalendarEvent[] = [];
+  const serviceTypes = [
+    { title: 'HVAC Diagnostic', duration: 60 },
+    { title: 'AC Tune-Up', duration: 90 },
+    { title: 'Furnace Repair', duration: 120 },
+    { title: 'Duct Cleaning', duration: 180 },
+    { title: 'Emergency Service', duration: 60 },
+    { title: 'Maintenance Check', duration: 45 },
+    { title: 'System Installation Consult', duration: 60 },
+  ];
+  const customerNames = [
+    'Sarah Johnson', 'John Smith', 'Mike Williams', 'Emily Davis',
+    'Robert Brown', 'Jennifer Lee', 'David Martinez', 'Amanda Wilson',
+    'Chris Taylor', 'Lisa Anderson', 'Kevin Thompson', 'Maria Garcia'
+  ];
+  const providers = [
+    { id: 'provider-1', name: 'Tom Wilson', color: '#3b82f6', role: 'senior_tech' },
+    { id: 'provider-2', name: 'Mike Chen', color: '#10b981', role: 'technician' },
+    { id: 'provider-3', name: 'Lisa Martinez', color: '#f59e0b', role: 'technician' },
+  ];
+
+  let eventId = 1;
+  const current = new Date(startDate);
+
+  while (current <= endDate) {
+    const dayOfWeek = current.getDay();
+    // Skip weekends for most events
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // Generate 3-6 events per weekday
+      const eventsToday = Math.floor(Math.random() * 4) + 3;
+      const usedSlots: number[] = [];
+
+      for (let i = 0; i < eventsToday; i++) {
+        const service = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
+        const customer = customerNames[Math.floor(Math.random() * customerNames.length)];
+        const provider = providers[Math.floor(Math.random() * providers.length)];
+
+        // Generate time between 8am and 5pm, avoiding used slots
+        let startHour: number;
+        let attempts = 0;
+        do {
+          startHour = Math.floor(Math.random() * 8) + 8; // 8am to 4pm
+          attempts++;
+        } while (usedSlots.includes(startHour) && attempts < 10);
+        usedSlots.push(startHour);
+
+        const eventStart = new Date(current);
+        eventStart.setHours(startHour, Math.random() > 0.5 ? 0 : 30, 0, 0);
+
+        const eventEnd = new Date(eventStart);
+        eventEnd.setMinutes(eventEnd.getMinutes() + service.duration);
+
+        events.push({
+          id: `event-${eventId++}`,
+          account_id: 'demo-account-001',
+          provider_id: provider.id,
+          appointment_id: null,
+          title: `${service.title} - ${customer}`,
+          description: null,
+          start_time: eventStart.toISOString(),
+          end_time: eventEnd.toISOString(),
+          status: Math.random() > 0.1 ? 'confirmed' : 'tentative',
+          color: provider.color,
+          customer_name: customer,
+          customer_phone: `+1555${Math.floor(Math.random() * 9000000 + 1000000)}`,
+          source: 'native',
+          external_id: null,
+          external_calendar_id: null,
+          sync_status: 'synced',
+          last_synced_at: null,
+          external_updated_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          provider: provider,
+        });
+      }
+    } else if (dayOfWeek === 6) {
+      // Saturday: 1-2 events
+      const eventsToday = Math.floor(Math.random() * 2) + 1;
+      for (let i = 0; i < eventsToday; i++) {
+        const service = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
+        const customer = customerNames[Math.floor(Math.random() * customerNames.length)];
+        const provider = providers[Math.floor(Math.random() * providers.length)];
+
+        const startHour = Math.floor(Math.random() * 4) + 9; // 9am to 1pm
+        const eventStart = new Date(current);
+        eventStart.setHours(startHour, 0, 0, 0);
+
+        const eventEnd = new Date(eventStart);
+        eventEnd.setMinutes(eventEnd.getMinutes() + service.duration);
+
+        events.push({
+          id: `event-${eventId++}`,
+          account_id: 'demo-account-001',
+          provider_id: provider.id,
+          appointment_id: null,
+          title: `${service.title} - ${customer}`,
+          description: null,
+          start_time: eventStart.toISOString(),
+          end_time: eventEnd.toISOString(),
+          status: 'confirmed',
+          color: provider.color,
+          customer_name: customer,
+          customer_phone: `+1555${Math.floor(Math.random() * 9000000 + 1000000)}`,
+          source: 'native',
+          external_id: null,
+          external_calendar_id: null,
+          sync_status: 'synced',
+          last_synced_at: null,
+          external_updated_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          provider: provider,
+        });
+      }
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return events;
+}
+
 export function useCalendarEvents(filters: CalendarFilters) {
   const { user } = useAuth();
 
@@ -99,27 +224,18 @@ export function useCalendarEvents(filters: CalendarFilters) {
     ],
     queryFn: async () => {
       if (isDemoMode()) {
-        // Return mock calendar events
-        return [
-          {
-            id: 'event-1',
-            title: 'HVAC Diagnostic - Sarah Johnson',
-            start_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            end_time: new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(),
-            status: 'confirmed',
-            customer_name: 'Sarah Johnson',
-            customer_phone: '+15553334444',
-          },
-          {
-            id: 'event-2',
-            title: 'AC Tune-Up - John Smith',
-            start_time: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-            end_time: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 90 * 60 * 1000).toISOString(),
-            status: 'confirmed',
-            customer_name: 'John Smith',
-            customer_phone: '+15552223333',
-          },
-        ] as CalendarEvent[];
+        // Return mock calendar events for the requested date range
+        let events = generateMockCalendarEvents(filters.startDate, filters.endDate);
+
+        // Apply filters
+        if (filters.providerIds && filters.providerIds.length > 0) {
+          events = events.filter(e => e.provider_id && filters.providerIds!.includes(e.provider_id));
+        }
+        if (filters.status && filters.status.length > 0) {
+          events = events.filter(e => filters.status!.includes(e.status));
+        }
+
+        return events;
       }
 
       let query = supabase

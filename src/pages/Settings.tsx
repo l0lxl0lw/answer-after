@@ -434,6 +434,7 @@ export default function Settings() {
   const getPlanPrice = (plan: string) => {
     switch (plan) {
       case 'starter': return '$49';
+      case 'growth': return '$99';
       case 'pro': return '$199';
       case 'business': return '$499';
       case 'enterprise': return 'Custom';

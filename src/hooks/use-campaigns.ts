@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { isDemoMode } from '@/lib/demo/config';
+import { DEMO_ACCOUNT_ID } from '@/lib/demo/config';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed';
 
@@ -56,12 +58,129 @@ export interface UpdateCampaignInput {
   calling_days?: string[];
 }
 
+// Helper to generate dates relative to now
+const daysAgo = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+};
+
+const daysFromNow = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+};
+
+// Mock campaigns for demo mode
+const MOCK_CAMPAIGNS: Campaign[] = [
+  {
+    id: 'campaign-001',
+    account_id: DEMO_ACCOUNT_ID,
+    name: 'Appointment Reminder Campaign',
+    description: 'Automated appointment reminders for scheduled services',
+    status: 'active',
+    campaign_type: 'reminder',
+    agent_prompt: 'Remind customers about their upcoming appointment and confirm attendance.',
+    first_message: 'Hi, this is Acme HVAC calling to remind you about your scheduled service appointment.',
+    max_attempts: 3,
+    retry_delay_hours: 24,
+    start_date: daysAgo(14),
+    end_date: null,
+    calling_hours_start: '09:00',
+    calling_hours_end: '18:00',
+    calling_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    timezone: 'America/New_York',
+    total_contacts: 48,
+    contacts_called: 42,
+    contacts_connected: 38,
+    contacts_completed: 35,
+    created_at: daysAgo(14),
+    updated_at: daysAgo(1),
+  },
+  {
+    id: 'campaign-002',
+    account_id: DEMO_ACCOUNT_ID,
+    name: 'Seasonal Maintenance Outreach',
+    description: 'Reach out to past customers about seasonal HVAC maintenance',
+    status: 'active',
+    campaign_type: 'outreach',
+    agent_prompt: 'Offer seasonal HVAC maintenance services to past customers.',
+    first_message: 'Hi, this is Acme HVAC. We wanted to check in about scheduling your seasonal maintenance.',
+    max_attempts: 2,
+    retry_delay_hours: 48,
+    start_date: daysAgo(7),
+    end_date: daysFromNow(14),
+    calling_hours_start: '10:00',
+    calling_hours_end: '17:00',
+    calling_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    timezone: 'America/New_York',
+    total_contacts: 125,
+    contacts_called: 67,
+    contacts_connected: 52,
+    contacts_completed: 45,
+    created_at: daysAgo(7),
+    updated_at: daysAgo(1),
+  },
+  {
+    id: 'campaign-003',
+    account_id: DEMO_ACCOUNT_ID,
+    name: 'Service Follow-Up',
+    description: 'Follow up with customers after service completion',
+    status: 'paused',
+    campaign_type: 'follow_up',
+    agent_prompt: 'Thank customers for their business and ask about their satisfaction.',
+    first_message: 'Hi, this is Acme HVAC following up on your recent service.',
+    max_attempts: 2,
+    retry_delay_hours: 72,
+    start_date: daysAgo(21),
+    end_date: null,
+    calling_hours_start: '11:00',
+    calling_hours_end: '16:00',
+    calling_days: ['tuesday', 'wednesday', 'thursday'],
+    timezone: 'America/New_York',
+    total_contacts: 35,
+    contacts_called: 35,
+    contacts_connected: 28,
+    contacts_completed: 28,
+    created_at: daysAgo(21),
+    updated_at: daysAgo(5),
+  },
+  {
+    id: 'campaign-004',
+    account_id: DEMO_ACCOUNT_ID,
+    name: 'New Customer Welcome',
+    description: 'Welcome new customers and introduce services',
+    status: 'draft',
+    campaign_type: 'welcome',
+    agent_prompt: 'Welcome new customers and explain available services.',
+    first_message: 'Hi, this is Acme HVAC. Thank you for choosing us!',
+    max_attempts: 2,
+    retry_delay_hours: 24,
+    start_date: null,
+    end_date: null,
+    calling_hours_start: '09:00',
+    calling_hours_end: '17:00',
+    calling_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    timezone: 'America/New_York',
+    total_contacts: 0,
+    contacts_called: 0,
+    contacts_connected: 0,
+    contacts_completed: 0,
+    created_at: daysAgo(2),
+    updated_at: daysAgo(2),
+  },
+];
+
 export function useCampaigns() {
   const { user } = useAuth();
 
   return useQuery({
     queryKey: ['campaigns', user?.account_id],
     queryFn: async () => {
+      if (isDemoMode()) {
+        return MOCK_CAMPAIGNS;
+      }
+
       if (!user?.account_id) return [];
 
       const { data, error } = await supabase
@@ -73,7 +192,7 @@ export function useCampaigns() {
       if (error) throw error;
       return data as Campaign[];
     },
-    enabled: !!user?.account_id,
+    enabled: !!user?.account_id || isDemoMode(),
   });
 }
 
